@@ -1,0 +1,35 @@
+ chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
+┌ Settings ──────┐╔ Media ═════════════════════════════════════════════════════╗
+│Appearance      │║Cache size          0                                       ║
+│Layout          │║Keep files          30 days                                 ║
+│Notifications   │║Largest file        25 MB                                   ║
+│Media           │║Inline images       on                                      ║
+│Teams           │║Image protocol      auto                                    ║
+│WhatsApp        │║                                                            ║
+│Keys            │║                                                            ║
+│About           │║                                                            ║
+│                │║                                                            ║
+│                │║                                                            ║
+│                │║                                                            ║
+│                │║                                                            ║
+│                │║                                                            ║
+│                │║                                                            ║
+│                │║                                                            ║
+│                │║                                                            ║
+│                │║                                                            ║
+│                │║                                                            ║
+│                │║                                                            ║
+│                │║NOT A VALID SIZE - use a whole number from 1 to 100000      ║
+└────────────────┘╚════════════════════════════════════════════════════════════╝
+Enter save  Esc cancel  Type a value
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 69-79: fg=Reset bg=Reset DIM
+row 1 cols 19-25: fg=Reset bg=Reset BOLD
+row 2 cols 19-78: fg=Reset bg=Reset BOLD | REVERSED
+row 5 cols 1-16: fg=Reset bg=Reset BOLD
+row 21 cols 19-72: fg=Red bg=Reset NONE
+row 23 cols 0-35: fg=Reset bg=Reset DIM

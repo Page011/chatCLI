@@ -2,15 +2,27 @@
 //!
 //! - `model`: chats, messages, per-network status, and the Event / Command enums that flow
 //!   between the network backends and the TUI.
-//! - `store`: the local SQLite copy of chats and messages (instant start, offline reading).
-//! - `secrets`: Windows Credential Manager, chunked past its 2560-byte limit.
-//! - `paths`, `log`: where data lives and the rolling log file.
+//! - `store`: the local SQLite copy of chats, messages, reactions, attachments metadata, chat
+//!   flags and the full-text index (instant start, offline reading, search).
+//! - `settings`: the `settings.toml` loader with per-section fallback, and its comment-preserving writer.
+//! - `media`, `limits`, `open`: the capped media cache, size limits and opening links/files.
+//! - `runtime`: what `main` hands to each backend and the TUI.
+//! - `doctor`: result types for `chatcli doctor`.
+//! - `secrets`: the OS credential store (Windows Credential Manager, macOS Keychain, Linux Secret Service), chunked past its 2560-byte limit.
+//! - `config`, `paths`, `log`: `config.json`, where data lives, and the rolling log file.
 
 pub mod config;
+pub mod doctor;
+pub mod limits;
+pub mod lock;
 pub mod log;
+pub mod media;
 pub mod model;
+pub mod open;
 pub mod paths;
+pub mod runtime;
 pub mod secrets;
+pub mod settings;
 pub mod store;
 
 /// Every error the user sees is one sentence that says what to do next.

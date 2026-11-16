@@ -6,6 +6,73 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `settings.toml`: one hand-edited file for key bindings, theme, layout, notifications, media limits, optional Teams scopes and WhatsApp privacy options. A broken section falls back to its defaults with one notice naming the line and key. `chatcli settings path` and `chatcli settings check`.
+- Keys are named actions in a keymap. Rebind them in `settings.toml` (`[keys.<context>]`), with a notice for every mistake and a suggested name. `?` opens a help screen generated from the active keys.
+- Vim key preset (`[keys] preset = "vim"`, `--keys vim`, or `/keys vim` live): Normal, Insert and Select modes, `gg` `gt` `gT`, and a `:` command box.
+- Message selection (`Ctrl+Up`, `v` in vim): reply with a quote, react, edit and delete your own messages, open links, open attachments.
+- Replies with a quote on Teams and WhatsApp. Teams needs the new `ChatMessage.Send` permission: log out of Teams and sign in again after upgrading.
+- Reactions on Teams and WhatsApp, shown as counts under each message, with an emoji picker (`Ctrl+E`, Recent first) and `:shortcode` completion.
+- Edit and delete your own messages on Teams and WhatsApp. Edits and deletes from other people update in place.
+- `@mention` completion in group chats on both networks. Chats where you were mentioned show `@` after the unread count.
+- Message box editing: cursor movement, word jumps, whole-emoji delete, multi-line drafts (`Alt+Enter`, `Shift+Enter`, `Ctrl+J`), safe paste that never sends, and a length check before sending.
+- Media: attachments show as chips; `o` downloads on demand into a capped cache and opens the file in the default app; `v` shows image thumbnails with half-block characters, or Sixel, Kitty or iTerm2 graphics where the terminal supports them. `chatcli media clear`.
+- Send pictures and files on both networks: `Ctrl+O` path prompt with Tab completion, dropped paths, and clipboard pictures (`Alt+V`). Pictures are re-encoded, which drops EXIF data. Teams files go through your OneDrive and need the optional `files_write` setting.
+- Optional Teams file downloads (`[teams] files_read`).
+- Open links from messages in the browser (`u`), after an `Open <host>? y/n` line that shows the real host.
+- Colour themes with named roles (`[theme]`, `high-contrast`, `light`, `dark`) and `NO_COLOR` support.
+- Layout options: sidebar width, 12-hour time, date order, compact rows, hidden previews.
+- Windows toast notifications for new messages, off by default for message text (`[notifications] preview`), folded per chat.
+- Scroll past the top to load older messages on Teams (one page per scroll) and WhatsApp (asks your phone).
+- `n` and `N` jump to the next and previous unread chat; `M` marks every chat read.
+- Pin, mute and hide chats (`p`, `m`, `x`, `H`). WhatsApp syncs them with the phone.
+- Local full-text search across both networks (`Ctrl+F`, `chatcli search <text>`).
+- WhatsApp typing indicator, and your own typing only with `[whatsapp] send_typing`.
+- `chatcli doctor [--online] [--json]` checks the setup and prints fixes.
+- `chatcli relay url <url>` and `chatcli relay setup <url> --rotate`.
+- `chatcli --help`.
+- `--demo` shows every feature above on fake data, with its media in a temporary folder.
+- Portability groundwork for Linux and macOS: data folder, file lock, browser launch, keychains, best-effort CI jobs.
+- Winget and Scoop manifests (not yet submitted), a code-signing write-up, a memory benchmark script, a relay end-to-end test, WhatsApp fake-transport tests, and release notes built from this file.
+- Sidebar preview: moving through the chat list (arrow keys, j/k, page keys, a click) shows each chat in the message pane at once. Enter replies, Esc goes back. A previewed chat counts as read after 2 s on screen, never while its pane is hidden.
+- `/` command bar (chat list, sign-in panel, message selection): lists every command and your chats. Commands also work as `/command` in the message box (`//` sends a message that starts with a slash) and as `:command` in the vim box: `/help` `/settings` `/keys` `/theme` `/layout` `/notifications` `/search` `/refresh` `/signin` `/signout` `/about` `/tour` `/quit`.
+- Settings screen (`F2`, `/settings`): theme and the 14 colour roles with a live preview, layout, notifications, media limits, Teams file permissions and WhatsApp privacy options. Every change applies at once and is saved to `settings.toml`, one key at a time, with comments kept. A `settings.toml` that does not parse is never written: the change applies for the session and `NOT SAVED` says why.
+- Key bindings page (`/keys`): change any key by pressing the new one, swap on a clash, remove, reset one or all, and switch the key preset. Saved to `[keys]` in `settings.toml`.
+- Guided tour: `chatcli --demo --tour` (or `/tour` in the demo) plays 26 captioned steps over the demo data. `Space` pauses, `n` skips a step, `Esc` ends it. The demo and the tour run on a temporary copy of the settings and never write your real `settings.toml`.
+
+### Changed
+
+- `F2` opens the settings screen instead of switching the key preset (use `/keys vim` or `:keys vim`). `/` opens the command bar instead of the plain chat filter; bind a key to `filter_start` to keep the filter. A message that starts with `/` is a command: type `//` to send it as text.
+- `settings.toml` is no longer read-only to chatcli: the settings screen writes it (see Added).
+- WhatsApp read receipts are now off by default (`[whatsapp] send_read_receipts`). Before, they were always sent.
+- An edited WhatsApp message no longer gets an `(edited)` text suffix: the message carries an edited flag. A deleted message has empty text and shows `[message deleted]`.
+- Teams chats you hid in Teams are kept in the list as hidden (`H` shows them) instead of being dropped.
+- `chatcli relay setup` stops with a message when the secrets already exist, instead of replacing them.
+- Key matching is exact on modifiers (`Shift+Up` no longer acts as `Up`).
+- Emoji, flags and CJK text are measured, cut and wrapped by grapheme cluster, so they are no longer split.
+- `teams ...`, `relay setup`, `relay url` and `media clear` refuse to run while the full client is open, so a logout cannot race a token refresh.
+- The store moves to schema version 2 (search index, reactions, attachments, chat flags) in one transaction. Back up `store.db` before the first start of this version if you want to be able to go back.
+
+### Fixed
+
+- Running `relay setup` twice no longer silently breaks live Teams with a 401.
+- A Teams subscription that needs reauthorization is renewed with one request, never reauthorize plus renew.
+- Teams catch-up sees messages that were edited or deleted while chatcli was off.
+- Pending sends are kept when history arrives, and a chat is not marked read while it is not on screen.
+- The sidebar keeps its wheel scroll when live updates arrive, and a send fails visibly when a backend is gone.
+- Linking a different Teams or WhatsApp account no longer shows the previous account's cached chats.
+- WhatsApp: messages dated years in the future no longer float a chat to the top of the list. Stored rows are repaired once at start, history sync re-times them from receipts, and a chat with no believable time sinks instead of taking the current time.
+- WhatsApp: chats shown as "Unknown contact" get their contact name (saved from the address book, push names and history), and a chat known under both a LID and a phone number is one chat, not two.
+- WhatsApp: a revoke or edit only applies when the sender wrote the message. Before, any group member could blank or rewrite anyone's message.
+- WhatsApp downloads stop at the size limit while they run, whatever size the sender declared.
+- Windows: a paste arrives as key presses, so several keys that arrive together are now one paste (it never sends). AltGr characters (`@`, euro sign, braces) type. `Ctrl+C` and every Ctrl shortcut work with Caps Lock on.
+- Cached downloads carry the Windows Mark of the Web (Office opens them in Protected View). Linux and macOS: the data folder is mode 0700.
+- `chatcli doctor` and `chatcli search` never upgrade the store. A pasted network path is text and is never probed.
+- Teams: an edit keeps the @mentions of the message, and `@Al` no longer matches inside `@Alex Example`.
+- Footer: a y/n question is bold, the footer keeps whole items (never `P...`), the newline hint is `Ctrl+J`, and the chat list and message box show `?` help and `Ctrl+Up` select.
+- A skipped WhatsApp contact sync is logged as an error instead of "nothing failed".
+
 ## [0.1.0] - 2026-11-16
 
 First release. Early: it works day to day, with rough edges.

@@ -1,0 +1,51 @@
+ chatcli  Teams 103 LIVE   WhatsApp CONNECTING                                           Ctrl+C quit
+╔ Search ══════════════════════════════════════════════════════════════════════════════════════════╗
+║/budget                                                                                           ║
+║Teams    Project Team           08:02    budget review moved to Thursday                          ║
+║Teams    Alex Example           Sun      The budget notes: the summary page needs a shorter intro…║
+║WhatsApp Riley Sample           Sat      did you see the BUDGET figures?                          ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║2 of 3 hits                                                                                       ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
+Type to search  Up/Down choose  Enter open chat  Esc close
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 89-99: fg=Reset bg=Reset DIM
+row 1 cols 1-8: fg=Reset bg=Reset BOLD
+row 2 cols 1-1: fg=Reset bg=Reset BOLD
+row 3 cols 10-31: fg=Reset bg=Reset BOLD
+row 3 cols 33-40: fg=DarkGray bg=Reset NONE
+row 3 cols 42-47: fg=Reset bg=Reset BOLD
+row 4 cols 1-32: fg=Reset bg=Reset BOLD | REVERSED
+row 4 cols 33-40: fg=DarkGray bg=Reset BOLD | REVERSED
+row 4 cols 41-45: fg=Reset bg=Reset BOLD | REVERSED
+row 4 cols 46-51: fg=Reset bg=Reset BOLD | UNDERLINED | REVERSED
+row 4 cols 52-98: fg=Reset bg=Reset BOLD | REVERSED
+row 5 cols 10-31: fg=Reset bg=Reset BOLD
+row 5 cols 33-40: fg=DarkGray bg=Reset NONE
+row 5 cols 58-63: fg=Reset bg=Reset BOLD
+row 27 cols 1-11: fg=Reset bg=Reset DIM
+row 29 cols 0-57: fg=Reset bg=Reset DIM

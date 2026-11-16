@@ -18,3 +18,7 @@ serde_json.workspace = true
 sha2.workspace = true
 tokio.workspace = true
 tokio-tungstenite.workspace = true
+
+[dev-dependencies]
+# Builds real PNG files for the send-image tests (same spec as chatcli-core's, built once).
+image.workspace = true

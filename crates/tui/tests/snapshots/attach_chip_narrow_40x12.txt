@@ -1,0 +1,28 @@
+ Teams 101 LIVE   WhatsApp CONN…
+┌ Alex Example ────────────────────────┐
+│09:08 Alex Example  [file setup.exe 8…│
+│09:10 You           two at once       │
+│                    [image a.png 2 KB]│
+│                    [image b.png 3.0 …│
+└──────────────────────────────────────┘
+╔ Message ═════════════════════════════╗
+║[photo.png 1 B]  Esc remove           ║
+║> look at this                        ║
+╚══════════════════════════════════════╝
+Enter send  F1 help  Esc remove file
+--- styled runs (everything else is default style) ---
+row 0 cols 0-15: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 18-25: fg=Reset bg=Reset BOLD
+row 0 cols 27-31: fg=Reset bg=Reset BOLD | DIM
+row 2 cols 1-5: fg=DarkGray bg=Reset NONE
+row 2 cols 7-18: fg=Reset bg=Reset BOLD
+row 2 cols 21-38: fg=Reset bg=Reset BOLD
+row 3 cols 1-5: fg=DarkGray bg=Reset NONE
+row 3 cols 7-18: fg=Cyan bg=Reset BOLD
+row 4 cols 21-38: fg=Reset bg=Reset BOLD
+row 5 cols 21-38: fg=Reset bg=Reset BOLD
+row 7 cols 1-9: fg=Reset bg=Reset BOLD
+row 8 cols 1-15: fg=Reset bg=Reset BOLD
+row 8 cols 16-27: fg=Reset bg=Reset DIM
+row 9 cols 1-2: fg=Reset bg=Reset BOLD
+row 11 cols 0-35: fg=Reset bg=Reset DIM

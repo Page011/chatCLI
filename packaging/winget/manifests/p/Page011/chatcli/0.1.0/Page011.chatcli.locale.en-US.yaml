@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: Page011.chatcli
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: Page011
+PublisherUrl: https://github.com/Page011
+PublisherSupportUrl: https://github.com/Page011/chatCLI/issues
+PackageName: chatcli
+PackageUrl: https://github.com/Page011/chatCLI
+License: Apache-2.0
+LicenseUrl: https://github.com/Page011/chatCLI/blob/main/LICENSE
+ShortDescription: Terminal chat client for WhatsApp and Microsoft Teams
+Description: One full-screen terminal app with a tab per network. Uses your own Microsoft Entra app registration and your own optional relay; nothing is hosted for you. WhatsApp support is unofficial and can get an account suspended.
+Moniker: chatcli
+Tags:
+  - chat
+  - teams
+  - terminal
+  - tui
+  - whatsapp
+ReleaseNotesUrl: https://github.com/Page011/chatCLI/releases/tag/v0.1.0
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

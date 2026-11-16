@@ -46,12 +46,43 @@ pub fn load_from(path: &Path) -> Result<Config> {
     }
 }
 
-/// Writes a temp file then renames it, so a crash mid-write cannot leave half a file.
 pub fn save_to(path: &Path, config: &Config) -> Result<()> {
     let text = serde_json::to_string_pretty(config).map_err(|e| format!("settings: {e}"))?;
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, text).map_err(|e| format!("cannot write {}: {e}", tmp.display()))?;
-    std::fs::rename(&tmp, path).map_err(|e| format!("cannot replace {}: {e}", path.display()))
+    write_atomic(path, &text)
+}
+
+/// Writes a temp file then renames it, so a crash mid-write cannot leave half a file. The temp
+/// file is this save's own (process id + counter, created exclusively): CLI setup commands run
+/// without the instance lock, so two saves at once must never share one temp file, or one would
+/// rename the other's content and the second rename would fail. The temp file is removed if
+/// writing or renaming fails, and the old file is then untouched.
+pub fn write_atomic(path: &Path, text: &str) -> Result<()> {
+    use std::io::Write;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SAVES: AtomicU64 = AtomicU64::new(0);
+
+    let ext = path
+        .extension()
+        .map(|e| e.to_string_lossy())
+        .unwrap_or_default();
+    let tmp = path.with_extension(format!(
+        "{ext}.{}.{}.tmp",
+        std::process::id(),
+        SAVES.fetch_add(1, Ordering::Relaxed)
+    ));
+    let written = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp)
+        .and_then(|mut f| f.write_all(text.as_bytes()).and_then(|()| f.sync_all()));
+    if let Err(e) = written {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("cannot write {}: {e}", tmp.display()));
+    }
+    std::fs::rename(&tmp, path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("cannot replace {}: {e}", path.display())
+    })
 }
 
 /// 8-4-4-4-12 hex digits, the shape of every Entra id.
@@ -139,6 +170,60 @@ mod tests {
         assert!(load_from(&path)
             .unwrap_err()
             .contains("not valid settings JSON"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn concurrent_saves_never_share_a_temp_file_and_leave_none_behind() {
+        let dir = std::env::temp_dir().join(format!("chatcli-config-race-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        let handles: Vec<_> = (0..8)
+            .map(|i| {
+                let path = path.clone();
+                std::thread::spawn(move || {
+                    let config = Config {
+                        relay_url: Some(format!("https://relay{i}.example.invalid")),
+                        ..Config::default()
+                    };
+                    for _ in 0..20 {
+                        save_to(&path, &config)?;
+                    }
+                    Ok::<(), String>(())
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap().expect("every save succeeds");
+        }
+        // The file is one whole config (the last writer's), never a mix.
+        let loaded = load_from(&path).unwrap();
+        assert!(loaded.relay_url.unwrap().starts_with("https://relay"));
+        let leftovers: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().ends_with(".tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "temp files left: {leftovers:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_failed_rename_removes_its_temp_file() {
+        let dir = std::env::temp_dir().join(format!("chatcli-config-fail-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // The target is a non-empty folder, so the rename cannot replace it.
+        let path = dir.join("config.json");
+        std::fs::create_dir_all(path.join("inner")).unwrap();
+        assert!(save_to(&path, &Config::default()).is_err());
+        let tmps = std::fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().ends_with(".tmp"))
+            .count();
+        assert_eq!(tmps, 0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

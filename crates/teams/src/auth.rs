@@ -16,11 +16,20 @@ use rand::RngCore;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
-use chatcli_core::{chain, config, log, secrets, Result};
+use chatcli_core::settings::TeamsSettings;
+use chatcli_core::{chain, config, log, secrets, settings, Result};
 
-/// Delegated Graph scopes. Chat.ReadWrite covers reading, sending and mark-as-read in
-/// 1:1 and group chats. offline_access returns the refresh token.
-const SCOPES: &str = "offline_access User.Read Chat.ReadWrite";
+/// Delegated Graph scopes every sign-in asks for. Chat.ReadWrite covers reading, sending,
+/// reactions, edits, deletes and mark-as-read in 1:1 and group chats. ChatMessage.Send is the
+/// only permission `replyWithQuote` accepts. offline_access returns the refresh token.
+const BASE_SCOPES: &str = "offline_access User.Read Chat.ReadWrite ChatMessage.Send";
+/// What chatcli 0.1 asked for. A refresh falls back to it for a user who has not signed in
+/// again since ChatMessage.Send was added: replies then say so, everything else keeps working.
+const LEGACY_SCOPES: &str = "offline_access User.Read Chat.ReadWrite";
+/// Optional: download files linked in messages (`[teams] files_read`).
+const FILES_READ_SCOPE: &str = "Files.Read.All";
+/// Optional: upload files to the user's OneDrive to send them (`[teams] files_write`).
+const FILES_WRITE_SCOPE: &str = "Files.ReadWrite";
 const REFRESH_TOKEN_NAME: &str = "teams-refresh-token";
 /// How long the browser sign-in may take before the listener gives up.
 const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(300);
@@ -92,6 +101,82 @@ struct TokenError {
 pub struct Token {
     pub access: String,
     pub expires_in_secs: u64,
+    /// The delegated scopes this token really carries (from the token's own `scp` claim, else
+    /// Microsoft's `scope` field). Empty = unknown, which counts as nothing granted.
+    pub granted: Vec<String>,
+}
+
+/// Which optional scopes the user's settings ask for, on top of the base ones.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ScopeSet {
+    pub files_read: bool,
+    pub files_write: bool,
+}
+
+impl ScopeSet {
+    pub fn from_settings(s: &TeamsSettings) -> ScopeSet {
+        ScopeSet {
+            files_read: s.files_read,
+            files_write: s.files_write,
+        }
+    }
+
+    fn optional(&self) -> bool {
+        self.files_read || self.files_write
+    }
+
+    /// The scope string of a sign-in or a refresh that wants everything the settings ask for.
+    pub fn scope_string(&self) -> String {
+        let mut s = BASE_SCOPES.to_string();
+        if self.files_read {
+            s.push(' ');
+            s.push_str(FILES_READ_SCOPE);
+        }
+        if self.files_write {
+            s.push(' ');
+            s.push_str(FILES_WRITE_SCOPE);
+        }
+        s
+    }
+
+    /// Scope strings for a refresh, most wanted first: everything, then without the optional
+    /// ones, then what 0.1 asked for. A refresh for scopes the user never consented to fails
+    /// with a rejection, and the next, smaller set still gets a working token.
+    pub fn refresh_attempts(&self) -> Vec<String> {
+        let mut all = vec![self.scope_string()];
+        if self.optional() {
+            all.push(BASE_SCOPES.to_string());
+        }
+        all.push(LEGACY_SCOPES.to_string());
+        all
+    }
+}
+
+/// The scopes a token carries: its `scp` claim, else Microsoft's `scope` field.
+fn granted_scopes(access_token: &str, reported: Option<&str>) -> Vec<String> {
+    crate::map::scopes_from_jwt(access_token).unwrap_or_else(|| {
+        reported
+            .unwrap_or_default()
+            .split_whitespace()
+            .map(str::to_string)
+            .collect()
+    })
+}
+
+/// A sign-in that failed while asking for file scopes may need an admin: say how to back out.
+fn add_scope_hint(error: String, scopes: &ScopeSet) -> String {
+    let needs_admin = error.contains("AADSTS65001")
+        || error.contains("AADSTS90094")
+        || error.to_ascii_lowercase().contains("admin");
+    if scopes.optional() && needs_admin {
+        format!("{error} If an admin must approve file access, set files_read and files_write to false in settings.toml and sign in again.")
+    } else {
+        error
+    }
+}
+
+fn settings_scopes() -> ScopeSet {
+    ScopeSet::from_settings(&settings::load().settings.teams)
 }
 
 /// Why a token request failed. `Rejected` means Microsoft refused the stored sign-in, so only
@@ -171,8 +256,21 @@ pub async fn access_token(http: &reqwest::Client) -> Result<String> {
     refresh(http).await.map(|t| t.access).map_err(String::from)
 }
 
-/// Same as `access_token`, with the expiry and the reason class of a failure.
+/// Same as `access_token`, with the expiry and the reason class of a failure. Asks for the
+/// scopes `settings.toml` wants (read from the file).
 pub async fn refresh(http: &reqwest::Client) -> std::result::Result<Token, AuthFailure> {
+    refresh_with(http, &settings_scopes()).await
+}
+
+/// A fresh token for the stored sign-in. When Microsoft refuses the scopes asked for (a new
+/// scope the user never consented to), it tries the smaller sets in `refresh_attempts` and
+/// returns the first that works: a new optional scope never signs the user out. If every set is
+/// refused, the sign-in itself is dead and the last answer is the reason. `Token::granted` says
+/// what the token can do.
+pub async fn refresh_with(
+    http: &reqwest::Client,
+    scopes: &ScopeSet,
+) -> std::result::Result<Token, AuthFailure> {
     let app = app().map_err(AuthFailure::Other)?;
     let stored = secrets::read(secrets::SERVICE, REFRESH_TOKEN_NAME).map_err(AuthFailure::Other)?;
     let Some(refresh) = stored else {
@@ -180,13 +278,29 @@ pub async fn refresh(http: &reqwest::Client) -> std::result::Result<Token, AuthF
             "Not signed in to Teams. Sign in first.".into(),
         ));
     };
-    let form = [
-        ("client_id", app.client_id.as_str()),
-        ("grant_type", "refresh_token"),
-        ("refresh_token", refresh.as_str()),
-        ("scope", SCOPES),
-    ];
-    exchange(http, &app, &form).await
+    let mut last = None;
+    for (i, scope) in scopes.refresh_attempts().iter().enumerate() {
+        let form = [
+            ("client_id", app.client_id.as_str()),
+            ("grant_type", "refresh_token"),
+            ("refresh_token", refresh.as_str()),
+            ("scope", scope.as_str()),
+        ];
+        match exchange(http, &app, &form).await {
+            Ok(token) => {
+                if i > 0 {
+                    log::info(
+                        "teams-auth",
+                        "refreshed with fewer scopes: sign in again to get the new ones",
+                    );
+                }
+                return Ok(token);
+            }
+            Err(AuthFailure::Rejected(reason)) => last = Some(AuthFailure::Rejected(reason)),
+            Err(other) => return Err(other),
+        }
+    }
+    Err(last.unwrap_or_else(|| AuthFailure::Other("Microsoft sign-in: no scope to ask for".into())))
 }
 
 async fn exchange(
@@ -290,9 +404,11 @@ async fn exchange(
             "token refresh ok, no new refresh token issued",
         ),
     }
+    let granted = granted_scopes(&parsed.access_token, parsed.scope.as_deref());
     Ok(Token {
         access: parsed.access_token,
         expires_in_secs,
+        granted,
     })
 }
 
@@ -304,8 +420,29 @@ pub async fn sign_in(http: &reqwest::Client, show_link: impl FnOnce(&str)) -> Re
     sign_in_token(http, show_link).await.map(|t| t.access)
 }
 
-/// Same as `sign_in`, with the token's lifetime.
+/// Same as `sign_in`, with the token's lifetime and scopes. Asks for the scopes
+/// `settings.toml` wants (read from the file).
 pub async fn sign_in_token(http: &reqwest::Client, show_link: impl FnOnce(&str)) -> Result<Token> {
+    sign_in_token_with(http, &settings_scopes(), show_link).await
+}
+
+/// The browser sign-in for exactly these scopes. A failure while file scopes were asked for
+/// says how to back out when the organisation needs an admin to approve them.
+pub async fn sign_in_token_with(
+    http: &reqwest::Client,
+    scopes: &ScopeSet,
+    show_link: impl FnOnce(&str),
+) -> Result<Token> {
+    browser_sign_in(http, &scopes.scope_string(), show_link)
+        .await
+        .map_err(|e| add_scope_hint(e, scopes))
+}
+
+async fn browser_sign_in(
+    http: &reqwest::Client,
+    scope: &str,
+    show_link: impl FnOnce(&str),
+) -> Result<Token> {
     let app = app()?;
     let verifier = random_token();
     let challenge = b64url(&Sha256::digest(verifier.as_bytes()));
@@ -327,7 +464,7 @@ pub async fn sign_in_token(http: &reqwest::Client, show_link: impl FnOnce(&str))
         .append_pair("response_type", "code")
         .append_pair("redirect_uri", &redirect)
         .append_pair("response_mode", "query")
-        .append_pair("scope", SCOPES)
+        .append_pair("scope", scope)
         .append_pair("state", &state)
         .append_pair("code_challenge", &challenge)
         .append_pair("code_challenge_method", "S256")
@@ -357,7 +494,7 @@ pub async fn sign_in_token(http: &reqwest::Client, show_link: impl FnOnce(&str))
         ("code", code.as_str()),
         ("redirect_uri", redirect.as_str()),
         ("code_verifier", verifier.as_str()),
-        ("scope", SCOPES),
+        ("scope", scope),
     ];
     let result = exchange(http, &app, &form).await.map_err(String::from);
     let page = match &result {
@@ -392,15 +529,14 @@ fn result_page(status: &str, heading: &str, text: &str) -> Vec<u8> {
     )
 }
 
-/// rundll32 hands the URL to the default browser without a shell, so the `&` in the query
-/// is never parsed by cmd. Failure is fine: the link is also printed.
+/// Opens the sign-in page through `chatcli_core::open`: the `opener` crate calls ShellExecuteW on
+/// Windows (xdg-open / open elsewhere) with the URL as one argument, so the `&` in the query is
+/// never parsed by cmd, the same guarantee the old rundll32 call gave. Failure is fine: the link
+/// is also printed. The error text holds no URL, so it is safe to log.
 fn open_browser(url: &str) {
-    #[cfg(windows)]
-    let _ = std::process::Command::new("rundll32")
-        .args(["url.dll,FileProtocolHandler", url])
-        .spawn();
-    #[cfg(not(windows))]
-    let _ = url;
+    if let Err(e) = chatcli_core::open::open_url(url) {
+        log::error("teams-auth", &e);
+    }
 }
 
 /// Accepts connections on the loopback listener until one carries the authorization code.
@@ -450,7 +586,7 @@ fn wait_for_code(
                 }
                 if Instant::now() > deadline {
                     return Err(
-                        "Sign-in timed out after 5 minutes. Run: chatcli teams login".into(),
+                        "Sign-in timed out after 5 minutes. Quit chatcli, then run: chatcli teams login".into(),
                     );
                 }
                 std::thread::sleep(Duration::from_millis(100));
@@ -607,6 +743,100 @@ mod tests {
     }
 
     #[test]
+    fn scopes_add_the_optional_ones_only_when_the_settings_ask() {
+        let none = ScopeSet::default();
+        assert_eq!(
+            none.scope_string(),
+            "offline_access User.Read Chat.ReadWrite ChatMessage.Send"
+        );
+        let read = ScopeSet {
+            files_read: true,
+            files_write: false,
+        };
+        assert!(read.scope_string().ends_with(" Files.Read.All"));
+        assert!(!read.scope_string().contains("Files.ReadWrite"));
+        let both = ScopeSet {
+            files_read: true,
+            files_write: true,
+        };
+        assert!(both
+            .scope_string()
+            .ends_with(" Files.Read.All Files.ReadWrite"));
+        let from = ScopeSet::from_settings(&TeamsSettings {
+            files_read: false,
+            files_write: true,
+        });
+        assert_eq!(
+            from,
+            ScopeSet {
+                files_read: false,
+                files_write: true
+            }
+        );
+    }
+
+    /// A refresh for a scope the user never consented to must fall back, never end the sign-in.
+    #[test]
+    fn refresh_falls_back_to_fewer_scopes_down_to_what_0_1_asked_for() {
+        let none = ScopeSet::default().refresh_attempts();
+        assert_eq!(
+            none,
+            [
+                "offline_access User.Read Chat.ReadWrite ChatMessage.Send",
+                "offline_access User.Read Chat.ReadWrite"
+            ]
+        );
+        let both = ScopeSet {
+            files_read: true,
+            files_write: true,
+        }
+        .refresh_attempts();
+        assert_eq!(both.len(), 3);
+        assert!(both[0].contains("Files.ReadWrite"));
+        assert_eq!(
+            both[1],
+            "offline_access User.Read Chat.ReadWrite ChatMessage.Send"
+        );
+        assert_eq!(both[2], "offline_access User.Read Chat.ReadWrite");
+    }
+
+    #[test]
+    fn granted_scopes_come_from_the_token_then_the_scope_field() {
+        let enc = |s: &str| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(s);
+        let jwt = format!(
+            "{}.{}.sig",
+            enc("{}"),
+            enc(r#"{"scp":"Chat.ReadWrite User.Read"}"#)
+        );
+        assert_eq!(
+            granted_scopes(&jwt, Some("ignored")),
+            ["Chat.ReadWrite", "User.Read"]
+        );
+        assert_eq!(granted_scopes("opaque", Some("A B")), ["A", "B"]);
+        assert!(granted_scopes("opaque", None).is_empty());
+    }
+
+    #[test]
+    fn a_failed_sign_in_with_file_scopes_says_how_to_back_out() {
+        let files = ScopeSet {
+            files_read: true,
+            files_write: false,
+        };
+        let hint = add_scope_hint("Need admin approval (AADSTS90094)".into(), &files);
+        assert!(
+            hint.contains("set files_read and files_write to false"),
+            "{hint}"
+        );
+        // No hint when no optional scope was asked for, or for an unrelated failure.
+        let plain = add_scope_hint(
+            "Need admin approval (AADSTS90094)".into(),
+            &ScopeSet::default(),
+        );
+        assert!(!plain.contains("settings.toml"));
+        assert_eq!(add_scope_hint("timed out".into(), &files), "timed out");
+    }
+
+    #[test]
     fn auth_failure_text_is_the_message() {
         assert_eq!(String::from(AuthFailure::Rejected("a".into())), "a");
         assert_eq!(String::from(AuthFailure::Other("b".into())), "b");
@@ -633,7 +863,7 @@ mod tests {
             ("client_id", "00000000-0000-0000-0000-000000000000"),
             ("grant_type", "refresh_token"),
             ("refresh_token", "definitely-not-a-token"),
-            ("scope", SCOPES),
+            ("scope", BASE_SCOPES),
         ];
         let response = http
             .post(token_url("contoso.onmicrosoft.com"))

@@ -2,6 +2,7 @@
 //! notifications (ids only, never message text) to the laptop, and the secrets that tie the
 //! Worker, Graph and chatcli together. Protocol: docs/DESIGN.md, "Relay protocol".
 
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use base64::Engine;
@@ -41,25 +42,121 @@ fn random_secret() -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
 }
 
-/// Generates the two relay secrets, keeps them in Credential Manager and saves the URL to
-/// `config.json`. The caller prints the two `wrangler secret put` steps with the result.
-pub fn relay_setup(url: &str) -> Result<RelaySecrets> {
-    setup_in(secrets::SERVICE, url)
+/// Said when setup is run again over working secrets. The Worker holds the same two values, so
+/// new ones on this side alone would silently break the relay (the Teams tab then shows
+/// `NOT LIVE`, HTTP 401).
+pub const SECRETS_EXIST: &str =
+    "Stored relay secrets exist. Use --rotate to make new ones, then redo both wrangler secret put steps.";
+
+/// Where the relay secrets are kept: the Windows credential store in the app, a map in tests.
+trait SecretIo {
+    fn read(&self, name: &str) -> Result<Option<String>>;
+    fn store(&self, name: &str, secret: &str) -> Result<()>;
+    fn clear(&self, name: &str) -> Result<()>;
 }
 
-fn setup_in(service: &str, url: &str) -> Result<RelaySecrets> {
+/// The credential store under one service name.
+struct OsSecrets<'a>(&'a str);
+
+impl SecretIo for OsSecrets<'_> {
+    fn read(&self, name: &str) -> Result<Option<String>> {
+        secrets::read(self.0, name)
+    }
+    fn store(&self, name: &str, secret: &str) -> Result<()> {
+        secrets::store(self.0, name, secret)
+    }
+    fn clear(&self, name: &str) -> Result<()> {
+        secrets::clear(self.0, name)
+    }
+}
+
+/// Generates the two relay secrets, keeps them in Credential Manager and saves the URL to
+/// `config.json`. The caller prints the two `wrangler secret put` steps with the result.
+///
+/// With working secrets already stored this changes nothing and fails with `SECRETS_EXIST`,
+/// unless `rotate` is set. `relay_set_url` is the way to change only the URL.
+pub fn relay_setup(url: &str, rotate: bool) -> Result<RelaySecrets> {
+    setup_with(
+        &OsSecrets(secrets::SERVICE),
+        &chatcli_core::paths::config_file()?,
+        url,
+        rotate,
+        &config::save_to,
+    )
+}
+
+/// Changes only the relay URL; the stored secrets stay. Use it when the Worker moved.
+pub fn relay_set_url(url: &str) -> Result<()> {
+    set_url_at(&chatcli_core::paths::config_file()?, url)
+}
+
+fn set_url_at(cfg_path: &Path, url: &str) -> Result<()> {
     let url = config::normalize_relay_url(url)?;
+    let mut cfg = config::load_from(cfg_path)?;
+    cfg.relay_url = Some(url);
+    config::save_to(cfg_path, &cfg)?;
+    log::info("relay", "relay URL changed, secrets kept");
+    Ok(())
+}
+
+/// Writes the secrets that were there before back (or removes them when there were none).
+/// True when every step worked.
+fn put_back(io: &dyn SecretIo, old: &(Option<String>, Option<String>)) -> bool {
+    let mut all_ok = true;
+    for (name, value) in [(TOKEN_NAME, &old.0), (CLIENT_STATE_NAME, &old.1)] {
+        let done = match value {
+            Some(v) => io.store(name, v),
+            None => io.clear(name),
+        };
+        // Both are tried even if the first fails.
+        all_ok &= done.is_ok();
+    }
+    all_ok
+}
+
+fn setup_with(
+    io: &dyn SecretIo,
+    cfg_path: &Path,
+    url: &str,
+    rotate: bool,
+    save: &dyn Fn(&Path, &config::Config) -> Result<()>,
+) -> Result<RelaySecrets> {
+    let url = config::normalize_relay_url(url)?;
+    // Everything that can fail without side effects comes first: a broken config.json must not
+    // leave new secrets behind that no URL goes with.
+    let mut cfg = config::load_from(cfg_path)?;
+    let old = (io.read(TOKEN_NAME)?, io.read(CLIENT_STATE_NAME)?);
+    if old.0.is_some() && old.1.is_some() && !rotate {
+        return Err(SECRETS_EXIST.into());
+    }
     let made = RelaySecrets {
         token: random_secret(),
         client_state: random_secret(),
     };
-    secrets::store(service, TOKEN_NAME, &made.token)?;
-    secrets::store(service, CLIENT_STATE_NAME, &made.client_state)?;
-    let mut cfg = config::load()?;
+    if let Err(e) = io
+        .store(TOKEN_NAME, &made.token)
+        .and_then(|()| io.store(CLIENT_STATE_NAME, &made.client_state))
+    {
+        let back = put_back(io, &old);
+        return Err(failed_setup(&e, back));
+    }
     cfg.relay_url = Some(url);
-    config::save(&cfg)?;
+    if let Err(e) = save(cfg_path, &cfg) {
+        let back = put_back(io, &old);
+        return Err(failed_setup(&e, back));
+    }
     log::info("relay", "relay secrets generated and URL saved");
     Ok(made)
+}
+
+fn failed_setup(error: &str, secrets_put_back: bool) -> String {
+    if secrets_put_back {
+        format!(
+            "Relay setup failed ({error}). Nothing changed: the earlier secrets are still stored."
+        )
+    } else {
+        format!("Relay setup failed ({error}), and the earlier secrets could not be put back. Run: chatcli relay setup <url> --rotate, then redo both wrangler secret put steps.")
+    }
 }
 
 /// The stored secrets, or None when `chatcli relay setup` has not been run.
@@ -263,7 +360,7 @@ async fn session(url: &str, token: &str, tx: &UnboundedSender<RelayEvent>) -> En
         }
         Err(_) => {
             return End::Stop(
-                "relay token has characters a header cannot hold: run chatcli relay setup again"
+                "relay token has characters a header cannot hold: quit chatcli, then run chatcli relay setup again"
                     .into(),
             )
         }
@@ -272,7 +369,7 @@ async fn session(url: &str, token: &str, tx: &UnboundedSender<RelayEvent>) -> En
         Err(_) => return retry("relay connection timed out", None),
         Ok(Err(WsError::Http(response))) if response.status().as_u16() == 401 => {
             return End::Stop(
-                "relay rejected the token (HTTP 401): run chatcli relay setup again and put both secrets on the Worker".into(),
+                "relay rejected the token (HTTP 401): quit chatcli, run chatcli relay setup again and put both secrets on the Worker".into(),
             )
         }
         Ok(Err(WsError::Http(response))) => {
@@ -460,37 +557,266 @@ mod tests {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
     }
 
-    /// Real Windows credential store (own service name) and a temp data folder.
-    /// Run with: cargo test -p chatcli-teams relay_setup -- --ignored
+    /// Secrets in a map, with a switch that makes the nth store fail.
+    #[derive(Default)]
+    struct Mem {
+        map: std::cell::RefCell<std::collections::HashMap<String, String>>,
+        stores: std::cell::Cell<usize>,
+        fail_store_number: std::cell::Cell<Option<usize>>,
+    }
+
+    impl Mem {
+        fn with(token: Option<&str>, state: Option<&str>) -> Mem {
+            let m = Mem::default();
+            if let Some(t) = token {
+                m.map.borrow_mut().insert(TOKEN_NAME.into(), t.into());
+            }
+            if let Some(s) = state {
+                m.map
+                    .borrow_mut()
+                    .insert(CLIENT_STATE_NAME.into(), s.into());
+            }
+            m
+        }
+
+        fn get(&self, name: &str) -> Option<String> {
+            self.map.borrow().get(name).cloned()
+        }
+    }
+
+    impl SecretIo for Mem {
+        fn read(&self, name: &str) -> Result<Option<String>> {
+            Ok(self.get(name))
+        }
+        fn store(&self, name: &str, secret: &str) -> Result<()> {
+            let n = self.stores.get() + 1;
+            self.stores.set(n);
+            if self.fail_store_number.get() == Some(n) {
+                return Err("credential store: disk full".into());
+            }
+            self.map.borrow_mut().insert(name.into(), secret.into());
+            Ok(())
+        }
+        fn clear(&self, name: &str) -> Result<()> {
+            self.map.borrow_mut().remove(name);
+            Ok(())
+        }
+    }
+
+    const URL: &str = "https://chatcli-relay.example.workers.dev";
+
+    fn temp_config(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "chatcli-relay-{tag}-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.join("config.json")
+    }
+
+    fn url_in(path: &Path) -> Option<String> {
+        config::load_from(path).unwrap().relay_url
+    }
+
+    fn setup(io: &Mem, cfg: &Path, rotate: bool) -> Result<RelaySecrets> {
+        setup_with(io, cfg, URL, rotate, &config::save_to)
+    }
+
+    #[test]
+    fn first_setup_makes_both_secrets_and_saves_the_url() {
+        let (io, cfg) = (Mem::default(), temp_config("first"));
+        let made = setup_with(
+            &io,
+            &cfg,
+            " https://chatcli-relay.example.workers.dev/ ",
+            false,
+            &config::save_to,
+        )
+        .unwrap();
+        assert_eq!(io.get(TOKEN_NAME).as_deref(), Some(made.token.as_str()));
+        assert_eq!(
+            io.get(CLIENT_STATE_NAME).as_deref(),
+            Some(made.client_state.as_str())
+        );
+        assert_eq!(url_in(&cfg).as_deref(), Some(URL));
+    }
+
+    /// Issue 26: running setup again used to overwrite working secrets without a word.
+    #[test]
+    fn a_second_setup_without_rotate_changes_nothing() {
+        let (io, cfg) = (Mem::default(), temp_config("again"));
+        let first = setup(&io, &cfg, false).unwrap();
+        let before = std::fs::read(&cfg).unwrap();
+        let err = setup_with(
+            &io,
+            &cfg,
+            "https://other.example.workers.dev",
+            false,
+            &config::save_to,
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            "Stored relay secrets exist. Use --rotate to make new ones, then redo both wrangler secret put steps."
+        );
+        assert_eq!(io.get(TOKEN_NAME).as_deref(), Some(first.token.as_str()));
+        assert_eq!(
+            io.get(CLIENT_STATE_NAME).as_deref(),
+            Some(first.client_state.as_str())
+        );
+        assert_eq!(
+            std::fs::read(&cfg).unwrap(),
+            before,
+            "not even the URL changed"
+        );
+    }
+
+    #[test]
+    fn rotate_makes_new_secrets_and_keeps_the_two_step_reminder_possible() {
+        let (io, cfg) = (Mem::default(), temp_config("rotate"));
+        let first = setup(&io, &cfg, false).unwrap();
+        let second = setup(&io, &cfg, true).unwrap();
+        assert_ne!(first.token, second.token);
+        assert_ne!(first.client_state, second.client_state);
+        assert_eq!(io.get(TOKEN_NAME).as_deref(), Some(second.token.as_str()));
+        assert_eq!(
+            io.get(CLIENT_STATE_NAME).as_deref(),
+            Some(second.client_state.as_str())
+        );
+    }
+
+    #[test]
+    fn half_stored_secrets_are_repaired_without_rotate() {
+        let (io, cfg) = (Mem::with(Some("only-the-token"), None), temp_config("half"));
+        let made = setup(&io, &cfg, false).unwrap();
+        assert_eq!(
+            io.get(CLIENT_STATE_NAME).as_deref(),
+            Some(made.client_state.as_str())
+        );
+        assert_eq!(io.get(TOKEN_NAME).as_deref(), Some(made.token.as_str()));
+    }
+
+    /// CodeRabbit 5: a broken config.json used to be found only after the secrets were replaced.
+    #[test]
+    fn a_broken_config_leaves_the_working_secrets_alone() {
+        let (io, cfg) = (
+            Mem::with(Some("old-token"), Some("old-state")),
+            temp_config("broken"),
+        );
+        std::fs::write(&cfg, "{ not json").unwrap();
+        let err = setup(&io, &cfg, true).unwrap_err();
+        assert!(err.contains("not valid settings JSON"), "{err}");
+        assert_eq!(io.get(TOKEN_NAME).as_deref(), Some("old-token"));
+        assert_eq!(io.get(CLIENT_STATE_NAME).as_deref(), Some("old-state"));
+        assert_eq!(io.stores.get(), 0, "no secret was written");
+    }
+
+    #[test]
+    fn a_failed_second_write_puts_the_old_secrets_back() {
+        let (io, cfg) = (
+            Mem::with(Some("old-token"), Some("old-state")),
+            temp_config("midway"),
+        );
+        io.fail_store_number.set(Some(2));
+        let err = setup(&io, &cfg, true).unwrap_err();
+        assert!(err.contains("Nothing changed"), "{err}");
+        assert_eq!(io.get(TOKEN_NAME).as_deref(), Some("old-token"));
+        assert_eq!(io.get(CLIENT_STATE_NAME).as_deref(), Some("old-state"));
+        assert_eq!(url_in(&cfg), None, "no URL was saved either");
+    }
+
+    #[test]
+    fn a_failed_first_ever_setup_leaves_no_secrets_behind() {
+        let (io, cfg) = (Mem::default(), temp_config("fresh-fail"));
+        io.fail_store_number.set(Some(2));
+        assert!(setup(&io, &cfg, false).is_err());
+        assert_eq!(
+            (io.get(TOKEN_NAME), io.get(CLIENT_STATE_NAME)),
+            (None, None)
+        );
+    }
+
+    #[test]
+    fn a_failed_config_save_puts_the_old_secrets_back() {
+        let (io, cfg) = (
+            Mem::with(Some("old-token"), Some("old-state")),
+            temp_config("save"),
+        );
+        let failing = |_: &Path, _: &config::Config| -> Result<()> { Err("disk full".into()) };
+        let err = setup_with(&io, &cfg, URL, true, &failing).unwrap_err();
+        assert!(
+            err.contains("disk full") && err.contains("Nothing changed"),
+            "{err}"
+        );
+        assert_eq!(io.get(TOKEN_NAME).as_deref(), Some("old-token"));
+        assert_eq!(io.get(CLIENT_STATE_NAME).as_deref(), Some("old-state"));
+    }
+
+    #[test]
+    fn a_bad_url_is_refused_before_any_secret_is_made() {
+        let (io, cfg) = (Mem::default(), temp_config("badurl"));
+        assert!(setup_with(&io, &cfg, "http://bad.example", false, &config::save_to).is_err());
+        assert_eq!(io.stores.get(), 0);
+        assert!(!cfg.exists());
+    }
+
+    #[test]
+    fn relay_url_changes_only_the_url() {
+        let (io, cfg) = (Mem::default(), temp_config("url"));
+        let made = setup(&io, &cfg, false).unwrap();
+        set_url_at(&cfg, " https://moved.example.workers.dev/ ").unwrap();
+        assert_eq!(
+            url_in(&cfg).as_deref(),
+            Some("https://moved.example.workers.dev")
+        );
+        assert_eq!(io.get(TOKEN_NAME).as_deref(), Some(made.token.as_str()));
+        assert_eq!(
+            io.get(CLIENT_STATE_NAME).as_deref(),
+            Some(made.client_state.as_str())
+        );
+        // Other settings in config.json survive.
+        let mut c = config::load_from(&cfg).unwrap();
+        c.teams_client_id = Some("00000000-0000-0000-0000-000000000000".into());
+        config::save_to(&cfg, &c).unwrap();
+        set_url_at(&cfg, URL).unwrap();
+        assert!(config::load_from(&cfg).unwrap().teams_client_id.is_some());
+    }
+
+    #[test]
+    fn relay_url_refuses_a_bad_url_and_a_broken_config() {
+        let cfg = temp_config("url-bad");
+        set_url_at(&cfg, URL).unwrap();
+        assert!(set_url_at(&cfg, "http://bad.example").is_err());
+        assert_eq!(url_in(&cfg).as_deref(), Some(URL));
+        std::fs::write(&cfg, "{ not json").unwrap();
+        assert!(set_url_at(&cfg, URL).is_err());
+        assert_eq!(
+            std::fs::read_to_string(&cfg).unwrap(),
+            "{ not json",
+            "the file is not replaced"
+        );
+    }
+
+    /// The real Windows credential store under its own test service name, and a temp config.
+    /// Run with: cargo test -p chatcli-teams relay_setup_in_the_real -- --ignored
     #[test]
     #[ignore = "writes to the Windows credential store"]
-    fn relay_setup_stores_secrets_and_url() {
+    fn relay_setup_in_the_real_credential_store() {
         const TEST_SERVICE: &str = "chatcli (test relay setup)";
-        let dir = std::env::temp_dir().join(format!("chatcli-relay-test-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        std::env::set_var("CHATCLI_DATA_DIR", &dir);
-        assert!(
-            setup_in(TEST_SERVICE, "http://bad.example").is_err(),
-            "http is refused before any secret is made"
-        );
-        assert_eq!(secrets::read(TEST_SERVICE, TOKEN_NAME).unwrap(), None);
-        let made = setup_in(TEST_SERVICE, " https://chatcli-relay.example.workers.dev/ ").unwrap();
+        let cfg = temp_config("os");
+        let os = OsSecrets(TEST_SERVICE);
+        let made = setup_with(&os, &cfg, URL, true, &config::save_to).unwrap();
         assert_eq!(
-            secrets::read(TEST_SERVICE, TOKEN_NAME).unwrap().as_deref(),
+            os.read(TOKEN_NAME).unwrap().as_deref(),
             Some(made.token.as_str())
         );
         assert_eq!(
-            secrets::read(TEST_SERVICE, CLIENT_STATE_NAME)
-                .unwrap()
-                .as_deref(),
-            Some(made.client_state.as_str())
+            setup_with(&os, &cfg, URL, false, &config::save_to).unwrap_err(),
+            SECRETS_EXIST
         );
-        assert_eq!(
-            config::load().unwrap().relay_url.as_deref(),
-            Some("https://chatcli-relay.example.workers.dev")
-        );
-        secrets::clear(TEST_SERVICE, TOKEN_NAME).unwrap();
-        secrets::clear(TEST_SERVICE, CLIENT_STATE_NAME).unwrap();
-        let _ = std::fs::remove_dir_all(&dir);
+        os.clear(TOKEN_NAME).unwrap();
+        os.clear(CLIENT_STATE_NAME).unwrap();
     }
 }

@@ -27,7 +27,7 @@
 
 
 
-Tab network  q quit
+/ commands  ? help  Tab network  q quit
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 10-18: fg=Reset bg=Reset BOLD
@@ -54,4 +54,4 @@ row 20 cols 32-68: fg=Black bg=White NONE
 row 21 cols 32-68: fg=Black bg=White NONE
 row 22 cols 32-68: fg=Black bg=White NONE
 row 23 cols 32-68: fg=Black bg=White NONE
-row 29 cols 0-18: fg=Reset bg=Reset DIM
+row 29 cols 0-38: fg=Reset bg=Reset DIM

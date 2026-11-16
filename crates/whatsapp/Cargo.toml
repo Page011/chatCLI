@@ -19,3 +19,18 @@ webpki-roots = "1"
 # Same ureq major as whatsapp-rust-ureq-http-client, so the Agent type unifies. platform-verifier
 # makes the media/version HTTP client trust the OS store (networks that re-sign HTTPS).
 ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier"] }
+# Media keys and file hashes travel in the stored fetch ref as base64; same crate and version as the workspace.
+base64.workspace = true
+# Checks a download against the sender's plaintext file hash (the library only checks the encrypted one).
+sha2.workspace = true
+
+[dev-dependencies]
+# Paused clock for the 5 s typing throttle and the 30 s phone deadline.
+tokio = { workspace = true, features = ["test-util"] }
+# Builds a real picture file for the send-image test (the app itself only re-encodes through core).
+image.workspace = true
+# Fake transport tests (tests/fake_transport.rs): same crates and versions the library already links.
+async-trait = "0.1"
+async-channel = "2"
+bytes = "1"
+anyhow = "1"

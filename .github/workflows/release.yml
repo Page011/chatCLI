@@ -34,6 +34,12 @@ jobs:
             echo "Tag $TAG does not match workspace version v$version" >&2
             exit 1
           fi
+      - name: CHANGELOG must have a section for this tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Fails the job, before any build time is spent, with the sentence the script prints.
+          bash scripts/release-notes.sh "$TAG" CHANGELOG.md > release-notes-changelog.md
       # dtolnay/rust-toolchain has no version tags: pinned to a master commit (2026-11-15).
       - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
@@ -53,13 +59,33 @@ jobs:
           sha256sum "$name.zip" > "$name.zip.sha256"
           cat "$name.zip.sha256"
           echo "ASSET=$name.zip" >> "$GITHUB_ENV"
+      - name: Release notes
+        env:
+          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Body = the hand-written CHANGELOG section, then GitHub's generated list (pull
+          # requests by label, see .github/release.yml), then the fixed footer. The generated
+          # list is a nice-to-have: if the API call fails the release still carries the
+          # CHANGELOG section and the footer, and the log says so.
+          cp release-notes-changelog.md release-notes.md
+          if gh api "repos/$REPO/releases/generate-notes" -f tag_name="$TAG" --jq .body > generated.md \
+            && [ -s generated.md ]; then
+            printf '\n\n' >> release-notes.md
+            cat generated.md >> release-notes.md
+          else
+            echo "::warning::Could not generate the pull request list; the release has the CHANGELOG section only."
+          fi
+          cat .github/release-footer.md >> release-notes.md
+          echo "Release body: $(wc -l < release-notes.md) lines"
       - name: Publish release
         uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           files: |
             ${{ env.ASSET }}
             ${{ env.ASSET }}.sha256
-          generate_release_notes: true
+          body_path: release-notes.md
           fail_on_unmatched_files: true
           # A tag is not gated on CI, so the release lands as a draft: the owner checks CI is
           # green on the tagged commit, then publishes it by hand.

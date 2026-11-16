@@ -2,16 +2,26 @@
 //! and for debugging one network without the full screen.
 
 use std::io::Write;
+use std::path::Path;
 
-use chatcli_core::{config, Result};
+use chatcli_core::media::MediaCache;
+use chatcli_core::model::Network;
+use chatcli_core::settings::{self, LoadReport, SettingsProblem, Severity};
+use chatcli_core::store::{SearchHit, Store};
+use chatcli_core::{config, paths, Result};
 use chatcli_teams::{auth, graph::Graph, graph::MAX_PAGE};
 
-pub const USAGE: [&str; 13] = [
+/// Most hits `chatcli search` prints.
+const SEARCH_LIMIT: u32 = 50;
+
+pub const USAGE: &[&str] = &[
     "usage:",
     "  chatcli                                  open the full-screen chat client",
-    "  chatcli --demo                           try the screen with fake data (no store, no network)",
+    "  chatcli --keys <default|vim>             open it with a key preset (wins over settings.toml)",
+    "  chatcli --demo [--tour] [--keys <default|vim>]  try the screen with fake data (no store, no network); --tour plays a guided tour",
     "  chatcli --version                        print the version",
-    "  chatcli relay setup <url>                make the relay secrets for your Worker URL",
+    "  chatcli relay setup <url> [--rotate]     make the relay secrets (refuses to replace working ones)",
+    "  chatcli relay url <url>                  change the relay URL, keep the secrets",
     "  chatcli relay status                     show the relay URL and whether its secrets exist",
     "  chatcli teams setup <client-id> <tenant> save your Entra app registration ids",
     "  chatcli teams login                      sign in through the browser",
@@ -19,15 +29,56 @@ pub const USAGE: [&str; 13] = [
     "  chatcli teams messages <chat-id> [n]     last n messages (default 20, max 50)",
     "  chatcli teams send <chat-id> <text...>   send a message (asks to confirm)",
     "  chatcli teams logout                     forget the stored sign-in",
-    "Times are UTC. Log: %LOCALAPPDATA%\\chatcli\\chatcli.log",
+    "  chatcli settings path                    print where settings.toml lives",
+    "  chatcli settings check                   check settings.toml (exit 1 on errors)",
+    "  chatcli doctor [--online] [--json]       check setup and print fixes (exit 1 on a failure)",
+    "  chatcli search <text...>                 search every stored message on this PC",
+    "  chatcli media clear                      delete the downloaded media cache",
+    "Times are UTC.",
 ];
+
+/// The last line of `--help`: the log file of this OS, without creating the data folder.
+pub fn log_line() -> String {
+    match paths::log_file_path() {
+        Ok(p) => format!("Log: {}", p.display()),
+        Err(_) => "Log: chatcli.log in the data folder".to_string(),
+    }
+}
+
+/// Commands that read or write the shared sign-in, or delete cache files a running client may
+/// be writing: they must not run beside the full client (main.rs takes its lock first). Read-only
+/// ones (`relay status`, `settings`, `search`, `doctor`) never need it, and `doctor` reports the
+/// lock itself.
+pub fn needs_instance_lock(args: &[&str]) -> bool {
+    matches!(
+        args,
+        ["relay", "setup", ..]
+            | ["relay", "url", ..]
+            | ["teams", "setup", ..]
+            | [
+                "teams",
+                "login" | "logout" | "chats" | "messages" | "send",
+                ..
+            ]
+            | ["media", "clear"]
+    )
+}
 
 /// Runs a subcommand. None = the arguments are not a known subcommand.
 pub async fn run(args: &[&str]) -> Option<Result<()>> {
     Some(match args {
-        ["relay", "setup", url] => relay_setup(url),
+        ["relay", "setup", url] => relay_setup(url, false),
+        ["relay", "setup", url, "--rotate"] | ["relay", "setup", "--rotate", url] => {
+            relay_setup(url, true)
+        }
+        ["relay", "url", url] => relay_url(url),
         ["relay", "status"] => relay_status(),
+        ["media", "clear"] => media_clear(),
+        ["search", words @ ..] if !words.is_empty() => search(&words.join(" ")),
         ["teams", "setup", client_id, tenant] => teams_setup(client_id, tenant),
+        ["doctor", flags @ ..] => crate::doctor::run(flags).await,
+        ["settings", "path"] => settings_path(),
+        ["settings", "check"] => settings_check(),
         ["teams", "login"] => login().await,
         ["teams", "logout"] => auth::sign_out().map(|()| println!("Signed out of Teams.")),
         ["teams", "chats"] => chats().await,
@@ -41,6 +92,68 @@ pub async fn run(args: &[&str]) -> Option<Result<()>> {
         }
         _ => return None,
     })
+}
+
+fn settings_path() -> Result<()> {
+    println!("{}", paths::settings_file()?.display());
+    Ok(())
+}
+
+fn settings_check() -> Result<()> {
+    check_settings_file(&paths::settings_file()?)
+}
+
+/// Core's problems plus the ones only the TUI can see (`[keys]` bindings, `[theme]` roles), so
+/// `settings check` and `doctor` report what the screen would show at start.
+pub fn with_tui_problems(mut report: LoadReport) -> LoadReport {
+    report
+        .problems
+        .extend(chatcli_tui::validate_settings(&report.settings));
+    report
+}
+
+/// Prints every problem in the file and fails when at least one is an error (exit code 1);
+/// warnings alone pass (exit code 0).
+fn check_settings_file(path: &Path) -> Result<()> {
+    let report = with_tui_problems(settings::load_from(path));
+    let (lines, errors) = problem_lines(path, &report.problems);
+    for line in lines {
+        println!("{line}");
+    }
+    if errors > 0 {
+        return Err(format!(
+            "{errors} error(s) in settings.toml: fix them and run chatcli settings check again."
+        ));
+    }
+    Ok(())
+}
+
+/// One line per problem, then a summary line; and how many of them are errors. Pure.
+fn problem_lines(path: &Path, problems: &[SettingsProblem]) -> (Vec<String>, usize) {
+    let errors = problems
+        .iter()
+        .filter(|p| p.severity == Severity::Error)
+        .count();
+    let mut lines: Vec<String> = problems
+        .iter()
+        .map(|p| {
+            let level = match p.severity {
+                Severity::Error => "error",
+                Severity::Warning => "warning",
+            };
+            format!("{level}: {}", p.text())
+        })
+        .collect();
+    let warnings = problems.len() - errors;
+    lines.push(if problems.is_empty() {
+        format!("{}: no problems.", path.display())
+    } else {
+        format!(
+            "{}: {errors} error(s), {warnings} warning(s).",
+            path.display()
+        )
+    });
+    (lines, errors)
 }
 
 fn teams_setup(client_id: &str, tenant: &str) -> Result<()> {
@@ -63,9 +176,14 @@ fn teams_setup(client_id: &str, tenant: &str) -> Result<()> {
     Ok(())
 }
 
-fn relay_setup(url: &str) -> Result<()> {
-    let made = chatcli_teams::relay_setup(url)?;
-    println!("Relay URL saved and two secrets made (kept in Windows Credential Manager).");
+fn relay_setup(url: &str, rotate: bool) -> Result<()> {
+    // Stored secrets without --rotate come back as the fixed "use --rotate" sentence: main
+    // prints it and exits 1, and nothing was changed.
+    let made = chatcli_teams::relay_setup(url, rotate)?;
+    println!(
+        "Relay URL saved and two secrets made (kept in {}).",
+        chatcli_core::secrets::store_name()
+    );
     println!("Next, from the chatCLI folder:");
     println!("  1. cd relay");
     println!("  2. bunx wrangler secret put RELAY_TOKEN");
@@ -74,7 +192,86 @@ fn relay_setup(url: &str) -> Result<()> {
     println!("     paste this value when asked: {}", made.client_state);
     println!("  4. restart chatcli");
     println!("These values are shown once. Do not share them or paste them anywhere else.");
+    println!("Clear this screen or close the terminal when you are done.");
     Ok(())
+}
+
+fn relay_url(url: &str) -> Result<()> {
+    chatcli_teams::relay_set_url(url)?;
+    println!("Relay URL changed. The two secrets are kept: nothing to redo on the Worker.");
+    Ok(())
+}
+
+fn media_clear() -> Result<()> {
+    let cache = MediaCache::open(&paths::media_dir()?, &settings::load().settings.media)?;
+    let freed = cache.clear()?;
+    println!("Media cache emptied: {}.", megabytes(freed));
+    Ok(())
+}
+
+/// "0.0 MB" style size for the cache summary.
+fn megabytes(bytes: u64) -> String {
+    format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+}
+
+fn search(text: &str) -> Result<()> {
+    let db = paths::store_db()?;
+    if !db.exists() {
+        return Err("No store yet: start chatcli once, then search.".to_string());
+    }
+    let hits = Store::open_read_only(&db)?.search(text, None, SEARCH_LIMIT)?;
+    for line in hit_lines(&hits) {
+        println!("{line}");
+    }
+    Ok(())
+}
+
+/// One line per hit, newest first as the store returns them: `time network chat: sender: text`.
+/// The matched words sit in square brackets. Printed to the terminal only, never logged. Pure.
+fn hit_lines(hits: &[SearchHit]) -> Vec<String> {
+    if hits.is_empty() {
+        return vec!["No messages match.".to_string()];
+    }
+    let mut lines: Vec<String> = hits
+        .iter()
+        .map(|h| {
+            let net = match h.network {
+                Network::Teams => "Teams",
+                Network::WhatsApp => "WhatsApp",
+            };
+            let snippet: String = h
+                .snippet
+                .iter()
+                .map(|p| {
+                    if p.hit {
+                        format!("[{}]", p.text)
+                    } else {
+                        p.text.clone()
+                    }
+                })
+                .collect();
+            format!(
+                "{} {net} {}: {}: {}",
+                utc_minute(h.ts),
+                clip(&h.chat_title, 30),
+                clip(&h.sender, 20),
+                snippet
+            )
+        })
+        .collect();
+    if hits.len() as u32 >= SEARCH_LIMIT {
+        lines.push(format!(
+            "Newest {SEARCH_LIMIT} shown: use more words to narrow it."
+        ));
+    }
+    lines
+}
+
+/// Milliseconds since 1970 as "2026-11-16 01:02Z". Command-line times are UTC.
+fn utc_minute(ms: i64) -> String {
+    chrono::DateTime::from_timestamp_millis(ms)
+        .map(|d| d.format("%Y-%m-%d %H:%MZ").to_string())
+        .unwrap_or_else(|| "(unknown time)".to_string())
 }
 
 fn relay_status() -> Result<()> {
@@ -240,4 +437,183 @@ fn clip(s: &str, max: usize) -> String {
     let mut out: String = s.chars().take(max.saturating_sub(3)).collect();
     out.push_str("...");
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_file(tag: &str, text: Option<&str>) -> std::path::PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("chatcli-cli-test-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.toml");
+        if let Some(text) = text {
+            std::fs::write(&path, text).unwrap();
+        }
+        path
+    }
+
+    #[test]
+    fn settings_check_exit_codes() {
+        // Missing file and a clean file: 0.
+        assert!(check_settings_file(&temp_file("missing", None)).is_ok());
+        assert!(check_settings_file(&temp_file(
+            "clean",
+            Some(
+                "[layout]
+density = \"compact\"
+"
+            )
+        ))
+        .is_ok());
+        // Warnings only (an unknown key): still 0.
+        assert!(check_settings_file(&temp_file(
+            "warn",
+            Some(
+                "[layout]
+densty = 1
+"
+            )
+        ))
+        .is_ok());
+        // A bad value, a syntax error, or both: 1.
+        for (tag, text) in [
+            (
+                "value",
+                "[layout]
+density = \"tiny\"
+",
+            ),
+            (
+                "syntax",
+                "[media]
+cache_max_mb = = 1
+",
+            ),
+            (
+                "both",
+                "[layout]
+densty = 1
+[teams]
+files_read = 3
+",
+            ),
+        ] {
+            let err = check_settings_file(&temp_file(tag, Some(text))).unwrap_err();
+            assert!(err.contains("error(s) in settings.toml"), "{tag}: {err}");
+        }
+    }
+
+    #[test]
+    fn only_sign_in_and_cache_commands_take_the_instance_lock() {
+        for locked in [
+            &["teams", "login"][..],
+            &["teams", "logout"],
+            &["teams", "chats"],
+            &["teams", "messages", "id", "5"],
+            &["teams", "send", "id", "hi"],
+            &["teams", "setup", "a", "b"],
+            &["relay", "setup", "https://x", "--rotate"],
+            &["relay", "url", "https://x"],
+            &["media", "clear"],
+        ] {
+            assert!(needs_instance_lock(locked), "{locked:?}");
+        }
+        for free in [
+            &["relay", "status"][..],
+            &["settings", "check"],
+            &["settings", "path"],
+            &["doctor", "--online"],
+            &["search", "word"],
+        ] {
+            assert!(!needs_instance_lock(free), "{free:?}");
+        }
+    }
+
+    #[test]
+    fn tui_problems_join_the_core_ones() {
+        let report = with_tui_problems(settings::parse(
+            "[keys.list]\n\"ctrl+q\" = \"lst_down\"\n",
+            Path::new("settings.toml"),
+        ));
+        assert!(
+            report
+                .problems
+                .iter()
+                .any(|p| p.message.contains("list_down")),
+            "{:?}",
+            report.problems
+        );
+    }
+
+    #[test]
+    fn search_lines_mark_the_match_and_say_when_nothing_matches() {
+        use chatcli_core::store::SnippetPart;
+        let part = |text: &str, hit| SnippetPart {
+            text: text.to_string(),
+            hit,
+        };
+        let hit = SearchHit {
+            network: Network::Teams,
+            chat_id: "c".into(),
+            chat_title: "Alex Example".into(),
+            message_id: "m".into(),
+            ts: 1_700_000_000_000,
+            sender: "Sam Sample".into(),
+            snippet: vec![
+                part("the ", false),
+                part("draft", true),
+                part(" is done", false),
+            ],
+        };
+        let lines = hit_lines(&[hit]);
+        assert_eq!(
+            lines,
+            vec!["2023-11-14 22:13Z Teams Alex Example: Sam Sample: the [draft] is done"]
+        );
+        assert_eq!(hit_lines(&[]), vec!["No messages match."]);
+    }
+
+    #[test]
+    fn a_full_page_of_hits_says_it_was_cut() {
+        let hit = SearchHit {
+            network: Network::WhatsApp,
+            chat_id: "c".into(),
+            chat_title: "t".into(),
+            message_id: "m".into(),
+            ts: 0,
+            sender: "s".into(),
+            snippet: Vec::new(),
+        };
+        let lines = hit_lines(&vec![hit; SEARCH_LIMIT as usize]);
+        assert_eq!(lines.len(), SEARCH_LIMIT as usize + 1);
+        assert!(lines.last().unwrap().starts_with("Newest 50 shown"));
+    }
+
+    #[test]
+    fn problem_lines_name_level_line_and_totals() {
+        let report = settings::parse(
+            "[layout]
+density = \"tiny\"
+[teams]
+files_reed = true
+",
+            Path::new("settings.toml"),
+        );
+        let (lines, errors) = problem_lines(Path::new("settings.toml"), &report.problems);
+        assert_eq!(errors, 1);
+        assert!(
+            lines[0].starts_with("error: settings.toml line 2: [layout] density:"),
+            "{lines:?}"
+        );
+        assert!(
+            lines[1].starts_with("warning: settings.toml line 4: unknown setting"),
+            "{lines:?}"
+        );
+        assert_eq!(lines[2], "settings.toml: 1 error(s), 1 warning(s).");
+        let (clean, none) = problem_lines(Path::new("s.toml"), &[]);
+        assert_eq!((clean, none), (vec!["s.toml: no problems.".to_string()], 0));
+    }
 }

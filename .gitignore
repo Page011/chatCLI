@@ -18,3 +18,5 @@ config.json
 .claude/
 *.log.*
 .dev.vars.*
+
+/bench-out/

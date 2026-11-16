@@ -1,0 +1,54 @@
+ chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
+┌ Settings ──────┐╔ Appearance ════════════════════════════════════════════════╗
+│Appearance      │║Theme               default                                 ║
+│Layout          │║Text                default                                 ║
+│Notifications   │║Dim text            default                                 ║
+│Media           │║Hints               default                                 ║
+│Teams           │║Accent              default                                 ║
+│WhatsApp        │║Your name           default                                 ║
+│Keys            │║Unread count        default                                 ║
+│About           │║Errors              default                                 ║
+│                │║Warnings            default                                 ║
+│                │║OK and progress     default                                 ║
+│                │║Selected row        default                                 ║
+│                │║Status: live        default                                 ║
+│                │║Status: attention   default                                 ║
+│                │║Teams tab           default                                 ║
+│                │║WhatsApp tab        default                                 ║
+│                │║Preview Teams LIVE  WhatsApp SIGN-IN NEEDED                 ║
+│                │║[Alex Morgan             ] 3                                ║
+│                │║You 09:30  See you at ten                                   ║
+│                │║NOT SENT slow 45% Enter                                     ║
+│                │║default, high-contrast, light, dark                         ║
+└────────────────┘╚════════════════════════════════════════════════════════════╝
+Up/Down move  Esc close  Left/Right change  Enter edit  r reset  Tab sections
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 69-79: fg=Reset bg=Reset DIM
+row 1 cols 19-30: fg=Reset bg=Reset BOLD
+row 2 cols 1-16: fg=Reset bg=Reset BOLD
+row 2 cols 19-78: fg=Reset bg=Reset BOLD | REVERSED
+row 4 cols 39-78: fg=DarkGray bg=Reset NONE
+row 5 cols 39-78: fg=Reset bg=Reset DIM
+row 6 cols 39-78: fg=Cyan bg=Reset NONE
+row 7 cols 39-78: fg=Cyan bg=Reset BOLD
+row 8 cols 39-78: fg=Reset bg=Reset BOLD
+row 9 cols 39-78: fg=Red bg=Reset NONE
+row 11 cols 39-78: fg=Reset bg=Reset BOLD
+row 13 cols 39-78: fg=Green bg=Reset NONE
+row 14 cols 39-78: fg=Yellow bg=Reset NONE
+row 17 cols 19-26: fg=Reset bg=Reset BOLD
+row 17 cols 33-36: fg=Green bg=Reset NONE
+row 17 cols 48-61: fg=Yellow bg=Reset NONE
+row 18 cols 20-43: fg=Reset bg=Reset BOLD | REVERSED
+row 18 cols 46-46: fg=Reset bg=Reset BOLD
+row 19 cols 19-21: fg=Cyan bg=Reset BOLD
+row 19 cols 22-27: fg=DarkGray bg=Reset NONE
+row 20 cols 19-26: fg=Red bg=Reset NONE
+row 20 cols 33-35: fg=Reset bg=Reset BOLD
+row 20 cols 37-41: fg=Reset bg=Reset DIM
+row 21 cols 19-53: fg=Reset bg=Reset DIM
+row 23 cols 0-76: fg=Reset bg=Reset DIM

@@ -7,7 +7,12 @@
 
 use std::time::Duration;
 
+use std::sync::Arc;
+
+use chatcli_core::media::MediaCache;
 use chatcli_core::model::{Command, Event, Status};
+use chatcli_core::runtime::BackendCtx;
+use chatcli_core::settings::Settings;
 use chatcli_core::store::Store;
 use tokio::sync::mpsc;
 
@@ -21,9 +26,16 @@ async fn first_qr_arrives_with_an_empty_session() {
 
     let store = Store::open(&dir.join("store.db")).unwrap();
     let (etx, mut erx) = mpsc::unbounded_channel();
-    let (ctx, crx) = mpsc::unbounded_channel();
-    let task = tokio::spawn(chatcli_whatsapp::run(store, crx, etx));
-    ctx.send(Command::Login).unwrap();
+    let (cmd_tx, crx) = mpsc::unbounded_channel();
+    let settings = Settings::default();
+    let media = MediaCache::open(&dir.join("media"), &settings.media).unwrap();
+    let ctx = BackendCtx {
+        store,
+        settings: Arc::new(settings),
+        media,
+    };
+    let task = tokio::spawn(chatcli_whatsapp::run(ctx, crx, etx));
+    cmd_tx.send(Command::Login).unwrap();
 
     let mut seen: Vec<String> = Vec::new();
     let waited = tokio::time::timeout(Duration::from_secs(60), async {
@@ -42,7 +54,7 @@ async fn first_qr_arrives_with_an_empty_session() {
     })
     .await;
 
-    ctx.send(Command::Shutdown).unwrap();
+    cmd_tx.send(Command::Shutdown).unwrap();
     let stopped = tokio::time::timeout(Duration::from_secs(15), task)
         .await
         .is_ok();

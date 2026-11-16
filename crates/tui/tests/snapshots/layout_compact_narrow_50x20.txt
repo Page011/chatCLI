@@ -1,0 +1,40 @@
+ Teams 103 LIVE   WhatsApp CONN…       Ctrl+C quit
+╔ Chats ═════════════════════════════════════════╗
+║  2  Alex Example                          09:15║
+║99+  Project Team                          08:02║
+║  1  Sam Sample                              Sun║
+║     Release Planning for the Autumn Quarte… Fri║
+║     田中太郎 (Taro) 🎉                 05/11/26║
+║     Jordan Placeholder                 09/10/26║
+║                                                ║
+║                                                ║
+║                                                ║
+║                                                ║
+║                                                ║
+║                                                ║
+║                                                ║
+║                                                ║
+║                                                ║
+║                                                ║
+╚════════════════════════════════════════════════╝
+Up/Down chat  Enter open  / commands  ? help
+--- styled runs (everything else is default style) ---
+row 0 cols 0-15: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 18-25: fg=Reset bg=Reset BOLD
+row 0 cols 27-31: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 39-49: fg=Reset bg=Reset DIM
+row 1 cols 1-7: fg=Reset bg=Reset BOLD
+row 2 cols 1-48: fg=Reset bg=Reset BOLD | REVERSED
+row 3 cols 1-4: fg=Reset bg=Reset BOLD
+row 3 cols 6-42: fg=Reset bg=Reset BOLD
+row 3 cols 43-48: fg=DarkGray bg=Reset NONE
+row 4 cols 1-4: fg=Reset bg=Reset BOLD
+row 4 cols 6-44: fg=Reset bg=Reset BOLD
+row 4 cols 45-48: fg=DarkGray bg=Reset NONE
+row 5 cols 1-4: fg=Reset bg=Reset BOLD
+row 5 cols 45-48: fg=DarkGray bg=Reset NONE
+row 6 cols 1-4: fg=Reset bg=Reset BOLD
+row 6 cols 40-48: fg=DarkGray bg=Reset NONE
+row 7 cols 1-4: fg=Reset bg=Reset BOLD
+row 7 cols 40-48: fg=DarkGray bg=Reset NONE
+row 19 cols 0-43: fg=Reset bg=Reset DIM

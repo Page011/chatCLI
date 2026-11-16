@@ -2,11 +2,16 @@
 //!
 //! - `backend`: the task (`run`) that owns the session, commands, store and events.
 //! - `map`: pure mapping from WhatsApp messages / JIDs to the shared model.
+//! - `rich`: pure mapping for replies, mentions, reactions and media (read and build).
+//! - `wa`: the seam to whatsapp-rust (`Wa`), so command handling is tested with a fake.
+//! - `ops`: react, edit, delete, media, older history, typing, members and chat flags.
 //! - `tls`: TLS roots (Mozilla + OS store) so the socket works behind TLS inspection.
 
 mod backend;
 mod map;
+mod rich;
 mod tls;
+mod wa;
 
 pub use backend::run;
 
