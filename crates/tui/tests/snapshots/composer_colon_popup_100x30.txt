@@ -11,21 +11,21 @@
 │     田中太郎 (Tar… 05/11/26││                           ---- Today ----                          │
 │     了解しました           ││09:10 Alex Example  is the build done? 🚀 今日はどうですか          │
 │     Jordan Placeh… 09/10/26││09:15 You           yes, shipped                                    │
-│     You: thanks            ││                                                                    │
-│                            ││┌ Commands ────────────────────────────────────────────────────────┐│
-│                            │││/settings       theme, layout, keys and more                      ││
-│                            │││/search         search every stored message                       ││
-│                            │││/signin         sign in to this network                           ││
-│                            │││/signout        sign out, after y/n                               ││
-│                            │││/keys           change key bindings                               ││
-│                            │││/notifications  desktop notifications                             ││
-│                            │││/refresh        reload the chat list                              ││
-│                            │││/layout         sidebar, density, time format                     ││
-│                            │││/tour           watch chatcli show itself                         ││
+│     You: thanks            ││┌ Commands ────────────────────────────────────────────────────────┐│
+│                            │││:settings       theme, layout, keys and more                      ││
+│                            │││:search         search every stored message                       ││
+│                            │││🦭  :seal:                                                        ││
+│                            │││💺  :seat:                                                        ││
+│                            │││7️⃣  :seven:                                                       ││
+│                            │││🤳  :selfie:                                                      ││
+│                            │││㊙️  :secret:                                                      ││
+│                            │││🇷🇸  :serbia:                                                      ││
+│                            │││🇸🇳  :senegal:                                                     ││
+│                            │││🌱  :seedling:                                                    ││
 │                            ││└──────────────────────────────────────────────────────────────────┘│
 │                            │└────────────────────────────────────────────────────────────────────┘
 │                            │╔ Message ═══════════════════════════════════════════════════════════╗
-│                            │║> /s                                                                ║
+│                            │║> :se                                                               ║
 └────────────────────────────┘╚════════════════════════════════════════════════════════════════════╝
 Enter run  Up/Down choose  Esc close
 --- styled runs (everything else is default style) ---
@@ -66,15 +66,16 @@ row 12 cols 20-28: fg=DarkGray bg=Reset NONE
 row 12 cols 31-35: fg=DarkGray bg=Reset NONE
 row 12 cols 37-48: fg=Cyan bg=Reset BOLD
 row 13 cols 1-16: fg=DarkGray bg=Reset NONE
-row 15 cols 32-97: fg=Reset bg=Reset BOLD | REVERSED
-row 16 cols 48-74: fg=DarkGray bg=Reset NONE
-row 17 cols 48-70: fg=DarkGray bg=Reset NONE
-row 18 cols 48-66: fg=DarkGray bg=Reset NONE
-row 19 cols 48-66: fg=DarkGray bg=Reset NONE
-row 20 cols 48-68: fg=DarkGray bg=Reset NONE
-row 21 cols 48-67: fg=DarkGray bg=Reset NONE
-row 22 cols 48-76: fg=DarkGray bg=Reset NONE
-row 23 cols 48-72: fg=DarkGray bg=Reset NONE
+row 14 cols 32-97: fg=Reset bg=Reset BOLD | REVERSED
+row 15 cols 48-74: fg=DarkGray bg=Reset NONE
+row 16 cols 36-41: fg=DarkGray bg=Reset NONE
+row 17 cols 36-41: fg=DarkGray bg=Reset NONE
+row 18 cols 36-42: fg=DarkGray bg=Reset NONE
+row 19 cols 36-43: fg=DarkGray bg=Reset NONE
+row 20 cols 36-43: fg=DarkGray bg=Reset NONE
+row 21 cols 36-43: fg=DarkGray bg=Reset NONE
+row 22 cols 36-44: fg=DarkGray bg=Reset NONE
+row 23 cols 36-45: fg=DarkGray bg=Reset NONE
 row 26 cols 31-39: fg=Reset bg=Reset BOLD
 row 27 cols 31-32: fg=Reset bg=Reset BOLD
 row 29 cols 0-35: fg=Reset bg=Reset DIM

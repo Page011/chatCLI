@@ -463,7 +463,10 @@ mod tests {
         for s in STEPS {
             for a in s.acts {
                 if let Act::Cmd(name) = a {
-                    assert!(crate::commands::find(name).is_some(), "/{name}");
+                    assert!(
+                        crate::commands::COMMANDS.iter().any(|c| c.name == *name),
+                        ":{name}"
+                    );
                 }
             }
         }

@@ -1371,7 +1371,7 @@ mod tests {
     }
 
     #[test]
-    fn slash_keys_opens_the_keys_page_ready_for_its_rows() {
+    fn colon_keys_opens_the_keys_page_ready_for_its_rows() {
         let mut a = app();
         press(&mut a, KeyCode::Char(':'));
         type_text(&mut a, "keys");

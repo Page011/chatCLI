@@ -2738,22 +2738,12 @@ fn command_bar_dims_what_cannot_run() {
 }
 
 #[test]
-fn composer_slash_popup() {
-    at_sizes("composer_slash_popup", &[(100, 30), (80, 24)], || {
+/// `:se` at the start of the message box: the matching commands, then the matching emoji.
+fn composer_colon_popup() {
+    at_sizes("composer_colon_popup", &[(100, 30), (80, 24)], || {
         let mut app = online_in(new_app());
         press(&mut app, KeyCode::Char('i'));
-        type_str(&mut app, "/s");
-        app
-    });
-}
-
-#[test]
-fn unknown_command_notice() {
-    at_sizes("unknown_command", &[(80, 24)], || {
-        let mut app = online_in(new_app());
-        press(&mut app, KeyCode::Char('i'));
-        type_str(&mut app, "/foo");
-        press(&mut app, KeyCode::Enter);
+        type_str(&mut app, ":se");
         app
     });
 }
@@ -2831,10 +2821,9 @@ fn footers_point_at_commands_and_help() {
         press_mod(&mut app, KeyCode::Up, KeyModifiers::SHIFT);
         app
     };
-    // The message box keeps `/word` commands (and `:` types there), so it points at /.
     let screens: [(&str, App, &str, &str); 4] = [
         ("list", online_in(new_app()), ": commands", "? help"),
-        ("composer", typing_app(), "/ commands", "F1 help"),
+        ("composer", typing_app(), ": commands", "F1 help"),
         ("panel", panel(), ": commands", "? help"),
         // 80 columns keep the way out (Esc back) and the bar; help follows on wider screens.
         ("select", select(), ": commands", "Esc back"),

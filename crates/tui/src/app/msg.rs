@@ -134,6 +134,7 @@ pub(crate) fn suggest_members(members: &[PersonRef], query: &str, limit: usize) 
             // The trailing space ends the mention, so the list does not reopen on it.
             insert: format!("@{} ", p.name),
             person: Some(p.clone()),
+            command: None,
         })
         .collect()
 }

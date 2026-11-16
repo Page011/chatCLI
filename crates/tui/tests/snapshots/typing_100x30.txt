@@ -27,7 +27,7 @@
 │                            │╔ Message ════════════════════════════════ Riley Sample is typing... ╗
 │                            │║>                                                                   ║
 └────────────────────────────┘╚════════════════════════════════════════════════════════════════════╝
-Enter send  / commands  F1 help  Esc back  Shift+Up select  Ctrl+J newline  Ctrl+E emoji
+Enter send  : commands  F1 help  Esc back  Shift+Up select  Ctrl+J newline  Ctrl+E emoji
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 10-14: fg=Reset bg=Reset BOLD

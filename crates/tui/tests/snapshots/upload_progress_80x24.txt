@@ -21,7 +21,7 @@
 │                          │║>                                                 ║
 └──────────────────────────┘╚══════════════════════════════════════════════════╝
 SENDING 45% (1.3 MB of 2.9 MB)
-Enter send  / commands  F1 help  Esc back  Shift+Up select  Ctrl+J newline
+Enter send  : commands  F1 help  Esc back  Shift+Up select  Ctrl+J newline
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED

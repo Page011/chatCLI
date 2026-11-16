@@ -471,7 +471,7 @@ fn hints(app: &App) -> Vec<(String, bool)> {
     }
     if let Some(p) = app.popup() {
         // The commands list runs the chosen command; the emoji and mention lists insert.
-        let accept = if p.title == crate::commands::COMMANDS_TITLE {
+        let accept = if p.chosen().is_some_and(|i| i.command.is_some()) {
             "run"
         } else {
             "insert"
@@ -564,7 +564,7 @@ fn hints(app: &App) -> Vec<(String, bool)> {
                 ctx,
                 &[
                     (&[Send], "send"),
-                    (&[], "/ commands"),
+                    (&[], ": commands"),
                     (&[Help], "help"),
                     (
                         &[Back],
@@ -585,7 +585,7 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             );
             // The pointer is for an empty box: once you type, the keys matter more.
             if !ns.draft().is_empty() {
-                items.retain(|(t, _)| t != "/ commands");
+                items.retain(|(t, _)| t != ": commands");
             }
             items
         }

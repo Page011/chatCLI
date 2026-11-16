@@ -1,4 +1,5 @@
-//! Commands: the `/` command bar and `/command` in the message box both end in `run_cmd`. `App` stays pure: a command that needs a backend returns an `Out`.
+//! Commands: the `:` command bar and `:command` at the start of the message box both end in
+//! `run_cmd`. `App` stays pure: a command that needs a backend returns an `Out`.
 
 use chatcli_core::model::{Command, Status};
 
@@ -199,49 +200,64 @@ impl App {
         self.open_selected(n)
     }
 
-    // ---- `/` in the message box ----
+    // ---- `:` in the message box ----
 
-    /// The Commands popup above the message box while the draft starts with `/word`.
+    /// The list above the message box while the draft starts with `:word`: the matching commands
+    /// first (`commands::typed_matches`), then the matching emoji shortcodes. Enter takes the
+    /// highlighted item; a space or punctuation closes the list and the text stays text.
     pub(super) fn refresh_command_popup(&mut self, query: &str) -> Out {
-        if self
-            .popup
-            .as_ref()
-            .is_some_and(|p| p.title == COMMANDS_TITLE && p.query == query)
-        {
-            return Vec::new();
-        }
-        let items: Vec<PopupItem> = commands::matching(query)
+        // An edit is always text: no commands while one is under way.
+        let editing = matches!(self.active().target(), Some(super::Target::Edit { .. }));
+        let words = if editing {
+            Vec::new()
+        } else {
+            commands::typed_matches(query)
+        };
+        let commands: Vec<PopupItem> = words
             .into_iter()
             .map(|c: &Cmd| PopupItem {
                 // Padded so the docs line up in the list.
-                label: format!("{:<14}", format!("/{}", c.name)),
+                label: format!("{:<14}", format!(":{}", c.name)),
                 detail: c.doc.to_string(),
-                insert: format!("/{}", c.name),
+                insert: String::new(),
                 person: None,
+                command: Some(c.id),
             })
             .collect();
+        let title = if commands.is_empty() {
+            "Emoji"
+        } else {
+            COMMANDS_TITLE
+        };
+        if self
+            .popup
+            .as_ref()
+            .is_some_and(|p| p.title == title && p.query == query)
+        {
+            return Vec::new();
+        }
+        let mut items = commands;
+        if crate::emoji::shortcode_query(&format!(":{query}")).is_some() {
+            items.extend(super::emoji_items(query));
+        }
         self.popup = if items.is_empty() {
             None
         } else {
-            // The slash plus what was typed after it.
+            // The colon plus what was typed after it.
             let replace = 1 + query.chars().count();
-            Some(Popup::new(items, query.to_string(), replace).titled(COMMANDS_TITLE))
+            Some(Popup::new(items, query.to_string(), replace).titled(title))
         };
         Vec::new()
     }
 
-    /// Enter on a command in the popup: the draft is a command, not a message, so it goes.
-    pub(super) fn run_chosen_command(
-        &mut self,
-        n: chatcli_core::model::Network,
-        chosen: Option<String>,
-    ) -> Out {
-        if let Some(id) = self.ns(n).open.clone() {
-            self.ns_mut(n).drafts.remove(&id);
+    /// Enter on a command in the list: the draft was a command, not a message, so it goes. A
+    /// command that cannot run now keeps it, with the reason.
+    pub(super) fn run_chosen_command(&mut self, n: chatcli_core::model::Network, id: CmdId) -> Out {
+        if self.cmd_refusal(id, None).is_none() {
+            if let Some(chat) = self.ns(n).open.clone() {
+                self.ns_mut(n).drafts.remove(&chat);
+            }
         }
-        match chosen.as_deref().and_then(commands::find) {
-            Some(c) => self.run_cmd(c.id, None),
-            None => Vec::new(),
-        }
+        self.run_cmd(id, None)
     }
 }

@@ -1,5 +1,6 @@
 //! A small list that opens above the message box while you type and completes what you typed.
-//! The emoji `:shortcode:` popup and the `@mention` popup share it, so nothing here knows about
+//! The emoji `:shortcode:` popup (with the commands first when the box starts with `:word`) and
+//! the `@mention` popup share it, so nothing here knows about
 //! either. Pure: the keys move `selected`, `ui` draws it.
 
 use chatcli_core::model::PersonRef;
@@ -15,6 +16,9 @@ pub struct PopupItem {
     pub insert: String,
     /// Set for a mention: the person the inserted `@name` stands for.
     pub person: Option<PersonRef>,
+    /// Set for a command (`:help` at the start of the message box): choosing it runs the
+    /// command instead of inserting anything.
+    pub command: Option<crate::commands::CmdId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,6 +76,7 @@ mod tests {
             detail: String::new(),
             insert: s.into(),
             person: None,
+            command: None,
         }
     }
 

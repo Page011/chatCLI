@@ -29,7 +29,7 @@ use ratatui::layout::{Position, Rect};
 
 use crate::burst;
 use crate::chats;
-use crate::commands::{self, slash_query, CmdId, Typed, COMMANDS_TITLE};
+use crate::commands::{colon_query, CmdId};
 use crate::composer::Composer;
 use crate::emoji::{self, Picker, PickerFor};
 use crate::input::TextInput;
@@ -368,6 +368,20 @@ pub(crate) enum Prompt {
 }
 
 /// The notice for a draft over the network's text limit: what is wrong, then what to do.
+/// The emoji whose shortcode matches `query` (typed after a colon), as popup lines.
+pub(crate) fn emoji_items(query: &str) -> Vec<PopupItem> {
+    emoji::suggest(query, emoji::SUGGESTIONS)
+        .into_iter()
+        .map(|s| PopupItem {
+            label: s.emoji.to_string(),
+            detail: format!(":{}:", s.shortcode),
+            insert: s.emoji.to_string(),
+            person: None,
+            command: None,
+        })
+        .collect()
+}
+
 fn too_long(n: Network) -> String {
     match n {
         Network::Teams => format!(
@@ -1613,24 +1627,20 @@ impl App {
             self.popup = None;
             return Vec::new();
         };
-        if let Some(query) = slash_query(&before) {
+        if let Some(query) = colon_query(&before) {
             return self.refresh_command_popup(query);
         }
         let Some(query) = emoji::shortcode_query(&before).map(str::to_string) else {
             return self.refresh_mention_popup(n, &before);
         };
-        if self.popup.as_ref().is_some_and(|p| p.query == query) {
+        if self
+            .popup
+            .as_ref()
+            .is_some_and(|p| p.title == "Emoji" && p.query == query)
+        {
             return Vec::new();
         }
-        let items: Vec<PopupItem> = emoji::suggest(&query, emoji::SUGGESTIONS)
-            .into_iter()
-            .map(|s| PopupItem {
-                label: s.emoji.to_string(),
-                detail: format!(":{}:", s.shortcode),
-                insert: s.emoji.to_string(),
-                person: None,
-            })
-            .collect();
+        let items = emoji_items(&query);
         self.popup = if items.is_empty() {
             None
         } else {
@@ -1670,13 +1680,13 @@ impl App {
             Action::Up => p.up(),
             Action::Down => p.down(),
             Action::Accept => {
+                let command = p.chosen().and_then(|i| i.command);
                 let chosen = p.chosen().map(|i| (i.insert.clone(), i.person.clone()));
                 let replace = p.replace;
-                let is_command = p.title == COMMANDS_TITLE;
                 self.popup = None;
-                if is_command {
+                if let Some(id) = command {
                     // A command runs at once; what was typed is not a message.
-                    return self.run_chosen_command(n, chosen.map(|c| c.0));
+                    return self.run_chosen_command(n, id);
                 }
                 if let Some((text, person)) = chosen {
                     if let Some(c) = self.ns_mut(n).composer_mut() {
@@ -2144,34 +2154,14 @@ impl App {
     }
 
     fn send(&mut self, n: Network) -> Out {
-        let mut text = self.ns(n).draft().trim().to_string();
+        let text = self.ns(n).draft().trim().to_string();
         let Some(chat_id) = self.ns(n).open.clone() else {
             return Vec::new();
         };
         if let Some(Target::Edit { .. }) = self.ns(n).targets.get(&chat_id) {
             return self.send_edit(n, chat_id, text);
         }
-        // `/word` is a command, `//text` sends `/text`. An edit (above) is always literal.
-        match commands::parse_typed(&text) {
-            Typed::Text => {}
-            Typed::Escaped(rest) => text = rest.to_string(),
-            Typed::Command(word, args) => {
-                let Some(c) = commands::find(word) else {
-                    self.push_notice(
-                        n,
-                        &format!("UNKNOWN COMMAND /{word} - start with // to send as text"),
-                        true,
-                    );
-                    return Vec::new();
-                };
-                let arg = Some(args).filter(|a| !a.is_empty());
-                // A refused command keeps the draft: "/help me with the report" is not lost.
-                if self.cmd_refusal(c.id, arg).is_none() {
-                    self.ns_mut(n).drafts.remove(&chat_id);
-                }
-                return self.run_cmd(c.id, arg);
-            }
-        }
+        // Text is always text: a command runs only from the list above the box (`:word`).
         // A chosen file goes first: the draft is its caption.
         if self.ns(n).pending.contains_key(&chat_id) {
             return self.send_media(n);
@@ -2351,6 +2341,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::{self, COMMANDS_TITLE};
     use chatcli_core::model::ChatKind;
     use crossterm::event::KeyEventState;
 
@@ -2592,7 +2583,7 @@ mod tests {
         let mut app = online_app();
         app.handle_key(key(KeyCode::Char('q')));
         assert!(!app.should_quit());
-        slash(&mut app, "quit");
+        colon(&mut app, "quit");
         assert!(app.should_quit());
         // q while typing is text.
         let mut app = online_app();
@@ -3101,7 +3092,7 @@ mod tests {
     }
 
     /// `/`, the text, Enter: what a user types into the command bar.
-    fn slash(app: &mut App, text: &str) -> Out {
+    fn colon(app: &mut App, text: &str) -> Out {
         app.handle_key(key(KeyCode::Char(':')));
         type_text(app, text);
         app.handle_key(key(KeyCode::Enter))
@@ -3271,13 +3262,13 @@ mod tests {
     #[test]
     fn keys_command_opens_the_keys_page_and_takes_no_preset() {
         let mut app = online(App::new(clock()));
-        slash(&mut app, "keys");
+        colon(&mut app, "keys");
         assert_eq!(
             app.settings_page().map(|p| p.section),
             Some(crate::settings_view::Section::Keys)
         );
         let mut app = online(App::new(clock()));
-        slash(&mut app, "keys vim");
+        colon(&mut app, "keys vim");
         assert!(app.settings_page().is_none());
         assert_eq!(
             notice_text(&app).as_deref(),
@@ -4115,7 +4106,7 @@ mod tests {
     #[test]
     fn popup_follows_the_text_and_closes_when_it_stops_matching() {
         let mut app = typing_app();
-        type_text(&mut app, ":sm");
+        type_text(&mut app, "hi :sm");
         assert!(app.popup().is_some());
         type_text(&mut app, "zzzz");
         assert!(app.popup().is_none(), "no emoji matches :smzzzz");
@@ -4124,6 +4115,11 @@ mod tests {
         app.handle_key(key(KeyCode::Backspace));
         app.handle_key(key(KeyCode::Backspace));
         assert!(app.popup().is_some(), "back to :sm");
+        assert_eq!(
+            app.popup().unwrap().title,
+            "Emoji",
+            "not at the start: no commands"
+        );
         app.handle_key(key(KeyCode::Left));
         app.handle_key(key(KeyCode::Left));
         assert!(app.popup().is_none(), "the cursor is before the token");
@@ -4550,7 +4546,7 @@ mod tests {
         assert!(lay.convo.height >= 4, "{}", lay.convo.height);
     }
 
-    // ---- commands: the / bar, slash in the message box, ":" and F1/F2 ----
+    // ---- commands: the : bar, :word in the message box, and F1/F2 ----
 
     fn sent_text(out: &Out) -> Option<String> {
         out.iter().find_map(|(_, c)| match c {
@@ -4560,7 +4556,7 @@ mod tests {
     }
 
     #[test]
-    fn slash_in_the_list_opens_the_bar_with_every_command() {
+    fn colon_in_the_list_opens_the_bar_with_every_command() {
         let mut app = online_app();
         assert!(app.handle_key(key(KeyCode::Char(':'))).is_empty());
         assert_eq!(app.context(), Context::Popup);
@@ -4643,7 +4639,7 @@ mod tests {
     #[test]
     fn an_unavailable_command_gives_its_reason_and_runs_nothing() {
         let mut app = online_app();
-        let out = slash(&mut app, "signin");
+        let out = colon(&mut app, "signin");
         assert!(out.is_empty());
         assert!(app.palette().is_none());
         assert_eq!(
@@ -4656,15 +4652,15 @@ mod tests {
             Network::Teams,
             Status::NeedsLogin { reason: None },
         ));
-        assert!(slash(&mut app, "signout").is_empty());
+        assert!(colon(&mut app, "signout").is_empty());
         assert_eq!(notice_text(&app).as_deref(), Some("Not signed in to Teams"));
-        assert!(slash(&mut app, "refresh").is_empty());
+        assert!(colon(&mut app, "refresh").is_empty());
         assert_eq!(
             notice_text(&app).as_deref(),
             Some("REFRESH - sign in first")
         );
         assert_eq!(
-            slash(&mut app, "signin"),
+            colon(&mut app, "signin"),
             vec![(Network::Teams, Command::Login)]
         );
         // The panel and message selection open the bar too.
@@ -4688,7 +4684,7 @@ mod tests {
     #[test]
     fn signout_asks_first_and_y_sends_logout() {
         let mut app = online_app();
-        assert!(slash(&mut app, "signout").is_empty());
+        assert!(colon(&mut app, "signout").is_empty());
         assert_eq!(app.prompt(), Some(&Prompt::SignOut(Network::Teams)));
         assert_eq!(app.context(), Context::Confirm);
         assert_eq!(
@@ -4696,20 +4692,20 @@ mod tests {
             vec![(Network::Teams, Command::Logout)]
         );
         assert!(app.prompt().is_none());
-        slash(&mut app, "logout");
+        colon(&mut app, "logout");
         assert!(app.handle_key(key(KeyCode::Char('n'))).is_empty());
         assert!(app.prompt().is_none());
     }
 
     #[test]
-    fn slash_tour_in_the_demo_starts_the_tour_and_takes_the_top_row() {
+    fn colon_tour_in_the_demo_starts_the_tour_and_takes_the_top_row() {
         let mut app = online_app();
         app.demo = true;
         app.handle_key(key(KeyCode::F(2)));
         assert!(app.settings_page().is_some());
         let body_before = app.layout_in(app.size).body;
         app.handle_key(key(KeyCode::F(2)));
-        slash(&mut app, "tour");
+        colon(&mut app, "tour");
         assert!(app.tour_running() && app.tour_step() == Some(1));
         assert!(app.settings_page().is_none(), "start_tour closes the page");
         assert_eq!(app.layout_in(app.size).body.y, body_before.y + 1);
@@ -4752,7 +4748,7 @@ mod tests {
     #[test]
     fn tour_outside_the_demo_says_how_to_start_it() {
         let mut app = online_app();
-        slash(&mut app, "tour");
+        colon(&mut app, "tour");
         assert_eq!(
             notice_text(&app).as_deref(),
             Some("TOUR - run chatcli --demo --tour")
@@ -4762,13 +4758,13 @@ mod tests {
     #[test]
     fn a_command_that_takes_no_arguments_says_so() {
         let mut app = online_app();
-        slash(&mut app, "quit now");
+        colon(&mut app, "quit now");
         assert!(!app.should_quit());
         assert_eq!(
             notice_text(&app).as_deref(),
             Some("/quit takes no arguments")
         );
-        slash(&mut app, "keys emacs");
+        colon(&mut app, "keys emacs");
         assert_eq!(
             notice_text(&app).as_deref(),
             Some("/keys takes no arguments")
@@ -4778,18 +4774,24 @@ mod tests {
     #[test]
     fn search_runs_from_the_bar() {
         let (mut app, _) = app_with_store();
-        slash(&mut app, "search");
+        colon(&mut app, "search");
         assert!(app.search().is_some());
     }
 
     #[test]
-    fn slash_in_the_message_box_lists_commands_and_enter_runs_one() {
+    fn colon_in_the_message_box_lists_commands_then_emoji_and_enter_runs_one() {
         let mut app = online_app();
-        app.handle_key(key(KeyCode::Enter));
-        type_text(&mut app, "/se");
+        app.handle_key(key(KeyCode::Char('i')));
+        type_text(&mut app, ":se");
         let p = app.popup().expect("commands popup");
         assert_eq!(p.title, COMMANDS_TITLE);
-        assert_eq!(p.items[0].label.trim_end(), "/settings");
+        let labels: Vec<&str> = p.items.iter().map(|i| i.label.trim_end()).collect();
+        assert_eq!(&labels[..2], [":settings", ":search"]);
+        assert!(
+            p.items[2..].iter().all(|i| i.command.is_none()) && p.items.len() > 2,
+            "emoji follow the commands: {labels:?}"
+        );
+        assert_eq!(p.items[0].label.trim_end(), ":settings");
         assert_eq!(p.items[0].detail, "theme, layout, keys and more");
         let out = app.handle_key(key(KeyCode::Enter));
         assert!(out.is_empty());
@@ -4799,67 +4801,68 @@ mod tests {
     }
 
     #[test]
-    fn the_commands_popup_closes_on_a_space_and_a_double_slash() {
+    fn the_commands_list_closes_on_a_space_or_a_second_colon() {
+        let commands = |app: &App| {
+            app.popup()
+                .is_some_and(|p| p.items.iter().any(|i| i.command.is_some()))
+        };
+        for (text, why) in [
+            (":keys ", "a space ends the command word"),
+            ("::", "a second colon"),
+            ("hi :se", "only at the start of the draft"),
+            (":zzz", "no command matches"),
+            (":P", "an emoticon"),
+        ] {
+            let mut app = typing_app();
+            type_text(&mut app, text);
+            assert!(!commands(&app), "{why}");
+        }
         let mut app = typing_app();
-        type_text(&mut app, "/keys ");
-        assert!(app.popup().is_none(), "a space ends the command word");
-        let mut app = typing_app();
-        type_text(&mut app, "//");
-        assert!(app.popup().is_none());
-        let mut app = typing_app();
-        type_text(&mut app, "hi /se");
-        assert!(app.popup().is_none(), "only at the start of the draft");
-        let mut app = typing_app();
-        type_text(&mut app, "/zzz");
-        assert!(app.popup().is_none(), "no command matches");
+        type_text(&mut app, ":");
+        assert!(commands(&app), "a lone colon lists them all");
     }
 
     #[test]
-    fn double_slash_sends_the_text_with_one_slash() {
-        let mut app = typing_app();
-        type_text(&mut app, "//usr/bin");
-        let out = app.handle_key(key(KeyCode::Enter));
-        assert_eq!(sent_text(&out).as_deref(), Some("/usr/bin"));
-    }
-
-    #[test]
-    fn an_unknown_slash_word_sends_nothing_and_keeps_the_draft() {
-        let mut app = typing_app();
-        type_text(&mut app, "/foo bar");
-        let out = app.handle_key(key(KeyCode::Enter));
-        assert!(out.is_empty());
-        assert_eq!(app.active().draft(), "/foo bar");
-        assert_eq!(
-            notice_text(&app).as_deref(),
-            Some("UNKNOWN COMMAND /foo - start with // to send as text")
-        );
-        assert!(app.current_notice().unwrap().is_error);
-    }
-
-    #[test]
-    fn a_message_that_starts_with_a_command_word_keeps_its_draft() {
+    fn a_message_that_starts_with_a_command_word_is_text() {
         for text in [
-            "/help me with the report please",
-            "/about the meeting",
-            "/q what?",
+            ":help me with the report please",
+            ":about the meeting",
+            ":q what?",
+            ":theme light",
+            "/help",
+            "//usr/bin",
+            ":zzq",
+            ":P",
+            ":D",
         ] {
             let mut app = typing_app();
             type_text(&mut app, text);
             let out = app.handle_key(key(KeyCode::Enter));
-            assert!(out.is_empty(), "{text}");
-            assert_eq!(app.active().draft(), text, "{text}");
-            assert!(app.current_notice().unwrap().is_error, "{text}");
+            assert_eq!(sent_text(&out).as_deref(), Some(text), "{text}");
+            assert!(app.settings_page().is_none() && app.help_open().is_none());
         }
     }
 
     #[test]
-    fn a_slash_command_with_arguments_runs_from_the_message_box() {
+    fn a_space_or_esc_closes_the_list_and_enter_then_sends_the_word_as_text() {
         let mut app = typing_app();
-        type_text(&mut app, "/theme light ");
+        type_text(&mut app, ":help ");
+        assert!(app.popup().is_none());
         let out = app.handle_key(key(KeyCode::Enter));
-        assert!(out.is_empty());
-        assert_eq!(app.settings.theme.name, "light");
-        assert_eq!(app.active().draft(), "");
+        assert_eq!(sent_text(&out).as_deref(), Some(":help"));
+        let mut app = typing_app();
+        type_text(&mut app, ":help");
+        assert!(app.popup().is_some());
+        app.handle_key(key(KeyCode::Esc));
+        assert!(app.popup().is_none());
+        assert_eq!(
+            app.active().focus,
+            Focus::Composer,
+            "Esc closed the list only"
+        );
+        let out = app.handle_key(key(KeyCode::Enter));
+        assert_eq!(sent_text(&out).as_deref(), Some(":help"));
+        assert!(app.help_open().is_none());
     }
 
     #[test]
@@ -4873,10 +4876,15 @@ mod tests {
                 saved: Composer::default(),
             },
         );
-        type_text(&mut app, "/x");
+        type_text(&mut app, ":help");
+        assert!(
+            app.popup()
+                .is_none_or(|p| p.items.iter().all(|i| i.command.is_none())),
+            "no commands while editing"
+        );
         let out = app.handle_key(key(KeyCode::Enter));
         assert!(
-            matches!(&out[..], [(_, Command::Edit { text, .. })] if text == "/x"),
+            matches!(&out[..], [(_, Command::Edit { text, .. })] if text == ":help"),
             "{out:?}"
         );
         assert!(app.settings_page().is_none());

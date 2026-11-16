@@ -286,7 +286,7 @@ Message box:
 | Key | Does |
 |---|---|
 | `Enter` | Send the whole message |
-| `/command` | A message that starts with `/` is a command, not text: `/help`, `/settings`, `/keys`, `/signout`. A list of commands opens as you type; `Enter` runs the chosen one. An unknown word shows `UNKNOWN COMMAND` and keeps your text. Start with `//` to send a message that begins with a slash (`//usr/bin` sends `/usr/bin`) |
+| `:command` | At the start of the box, `:` opens a list: the matching commands first (`:help`, `:settings`, `:keys`, `:signout`), then the matching emoji. `Enter` takes the highlighted item: a command runs, an emoji goes in. A space, punctuation or `Esc` closes the list, and the text stays text, so `:help` then a space or `Esc` and `Enter` sends `:help`. Only a lower-case word that is a whole command name (`:q`) or at least two letters of one opens commands, so `:P` and `:D` are never commands. Commands take no arguments here: use the command bar (`:theme dark`) |
 | `Esc` | Cancel a pending reply or edit; otherwise to message selection (to the chat list when the chat has no message yet) |
 | `Shift+Up` | Message selection |
 | `Left` / `Right`, `Ctrl+Left` / `Ctrl+Right` | Move the cursor by character, by word. These editing keys, down to `Ctrl+U`, work the same in every box you type in: the chat filter, the command bar, search, the emoji search and the file prompt (in the emoji picker `Left` and `Right` move through the grid) |
