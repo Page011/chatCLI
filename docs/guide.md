@@ -258,7 +258,7 @@ These are the default keys. Your own bindings are below.
 | `F1` | Help |
 | `F2` | Settings screen (`/settings`): theme, layout, notifications, media, Teams, WhatsApp and every key binding. `Up`/`Down` move, `Left`/`Right` change, `Enter` edits a number or colour, `r` resets, `Tab` switches between the section list and the rows, `Esc` closes |
 | `Ctrl+F` | [Search](#search) every stored message |
-| `Ctrl+C` | Quit from anywhere. It cannot be rebound |
+| `Ctrl+C` | Quit from anywhere |
 | `?` | Help (chat list and sign-in panel) |
 | `/` | The command bar: type to list commands and chats, `Enter` runs or opens the highlighted one (chat list, sign-in panel, message selection; `Esc` closes it) |
 
@@ -423,7 +423,7 @@ name = "default"            # "default", "high-contrast", "light" or "dark"
 
 ### Key bindings
 
-The `/keys` page (or the Keys section of `F2`) lists every action with its keys: `Enter` on an action, then press the new key. If the key already runs another action you are asked whether to swap; `Backspace` removes a key. An action can have several keys: `a` adds one and keeps the others (a key another action of the same context holds is refused with its name, and a key that would hide or be hidden by an `Everywhere` key, or a two-key sequence, asks first), and `d` lets you choose one of its keys with `Left` / `Right` and deletes it with `Enter`. The key you set last is the one the footer shows. `r` resets one action, and the last row resets them all. `Ctrl+C` and the `Esc` that backs out of a screen cannot be changed. What follows is the same thing as a file.
+The `/keys` page (or the Keys section of `F2`) lists every action with its keys: `Enter` on an action, then press the new key. Every key you press is taken, `Esc`, `Backspace` and `Ctrl+C` included: no key cancels (press the key the action already has to leave it as it is, or delete the new key afterwards). If the key already runs another action you are asked whether to swap. An action can have several keys: `a` adds one and keeps the others (a key another action of the same context holds is refused with its name, and a key that would hide or be hidden by an `Everywhere` key, or a two-key sequence, asks first), and `d` lets you choose one of its keys with `Left` / `Right` and deletes it with `Enter`. The key you set last is the one the footer shows. `r` resets one action, and the last row resets them all. `Ctrl+C` and `Esc` are ordinary keys, but a change that would leave nothing to quit with somewhere, or nothing to close help, a popup or a `y/n` question with, is refused. What follows is the same thing as a file.
 
 Your own bindings sit in one table per context, `key = "action"`, over the built-in keys:
 
@@ -441,7 +441,7 @@ Your own bindings sit in one table per context, `key = "action"`, over the built
 - **Contexts:** `common` (see below), `panel` (sign-in), `list` (chat list), `filter`, `composer` (message box), `select` (message selection), `popup` (suggestions, emoji picker, file prompt, search box, command bar), `confirm` (the `y/n` questions), `help`.
 - **`[keys.common]`** binds a key once for every context where its action makes sense: quitting everywhere; the tabs, help, settings, search and the command bar outside the overlays; the editing keys in every box you type in; any other action where chatcli itself gives it a key. A context's own table wins over `common`, and a `common` key that types a character (a letter, `?`, `/`) is skipped in the boxes you type in, so it never stops you typing.
 - **Text contexts** (`filter`, `composer`, `popup`) refuse plain letters and `Backspace` in their own tables, because that would stop you typing. Use `ctrl+` or `alt+`, or `[keys.common]`.
-- `Ctrl+C` always quits and cannot be rebound or unbound.
+- **Ways out:** `Ctrl+C` (`quit`) and `Esc` (`back`) are ordinary bindings: a context can give `Ctrl+C` to another action, or you can move `quit` to another key. chatcli only checks that some key still quits from every context (a `common` key that types a character does not count in the boxes you type in), and that `popup`, `confirm` and `help` each keep a key that backs out (`confirm_no` counts in `confirm`). If not, `Ctrl+C` quits and `Esc` backs out in the contexts named by the notice until you bind one.
 - A bad binding (unknown action, unreadable key, the same key twice in one table) is skipped with one notice, and the rest load. The notice suggests the closest name. Some terminals send `Ctrl+I` as `Tab`, `Ctrl+M` and `Ctrl+J` as `Enter`, `Ctrl+[` as `Esc` and `Ctrl+H` as `Backspace`: these are warned about and still applied.
 - User key sequences (like `gg`) are not supported.
 

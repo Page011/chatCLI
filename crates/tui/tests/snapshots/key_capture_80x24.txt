@@ -21,7 +21,7 @@
 │                │║Refresh             press a key                             ║
 │                │║ask the network for a fresh chat list                       ║
 └────────────────┘╚════════════════════════════════════════════════════════════╝
-Press the new key for Refresh (Esc cancels, Backspace removes)
+Press the new key for Refresh (any key is taken, Esc too)
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -34,4 +34,4 @@ row 8 cols 19-31: fg=Reset bg=Reset BOLD
 row 13 cols 19-27: fg=Reset bg=Reset BOLD
 row 20 cols 19-78: fg=Reset bg=Reset BOLD | REVERSED
 row 21 cols 19-55: fg=Reset bg=Reset DIM
-row 23 cols 0-61: fg=Reset bg=Reset BOLD
+row 23 cols 0-56: fg=Reset bg=Reset BOLD

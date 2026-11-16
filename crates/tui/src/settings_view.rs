@@ -121,7 +121,7 @@ pub(crate) fn capture_line(edit: Option<&PageEdit>) -> Option<String> {
     match edit? {
         PageEdit::Text(_) => None,
         PageEdit::Capture { action, .. } => Some(format!(
-            "Press the new key for {} (Esc cancels, Backspace removes)",
+            "Press the new key for {} (any key is taken, Esc too)",
             action.label()
         )),
         PageEdit::Conflict {
@@ -134,7 +134,7 @@ pub(crate) fn capture_line(edit: Option<&PageEdit>) -> Option<String> {
             action.label()
         )),
         PageEdit::Add { action, .. } => Some(format!(
-            "Press a key to add to {} (Esc cancels)",
+            "Press a key to add to {} (any key is taken, Esc too)",
             action.label()
         )),
         PageEdit::AddOverlap { note, .. } => {
@@ -1304,7 +1304,7 @@ mod tests {
         };
         assert_eq!(
             capture_line(Some(&c)).as_deref(),
-            Some("Press the new key for Refresh (Esc cancels, Backspace removes)")
+            Some("Press the new key for Refresh (any key is taken, Esc too)")
         );
         let c = PageEdit::Conflict {
             ctx: Context::List,

@@ -7,7 +7,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState};
 use ratatui::layout::Rect;
 
 use super::{App, Focus, Out};
-use crate::keymap::{KeyChord, CTRL_C};
+use crate::keymap::{Action, Context, KeyChord};
 use crate::settings_view::RowId;
 use crate::tour::{self as script, Cond, Prim, Tour};
 
@@ -181,10 +181,11 @@ impl App {
     }
 
     /// Keys while the tour plays: Space pauses, Right or `n` finishes the step at once, Esc ends
-    /// the tour, Ctrl+C quits. Anything else is ignored, so a stray key cannot derail it. On the
+    /// the tour, the `[keys.common]` quit key (Ctrl+C) quits. Anything else is ignored, so a stray key cannot derail it. On the
     /// last step any key ends the tour and is then handled as usual.
     pub(super) fn tour_key(&mut self, key: KeyEvent) -> Out {
-        if KeyChord::from_event(&key) == CTRL_C {
+        let chord = KeyChord::from_event(&key);
+        if self.keys.lookup(Context::Common, chord) == Some(Action::Quit) {
             self.quit = true;
             return Vec::new();
         }

@@ -21,7 +21,7 @@
 │                │║Delete word back    Ctrl+W, Ctrl+Backspace                  ║
 │                │║This key cannot be saved: pick another                      ║
 └────────────────┘╚════════════════════════════════════════════════════════════╝
-Press the new key for Next network (Esc cancels, Backspace removes)
+Press the new key for Next network (any key is taken, Esc too)
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -34,4 +34,4 @@ row 3 cols 19-28: fg=Reset bg=Reset BOLD
 row 5 cols 19-78: fg=Reset bg=Reset BOLD | REVERSED
 row 8 cols 1-16: fg=Reset bg=Reset BOLD
 row 21 cols 19-56: fg=Red bg=Reset NONE
-row 23 cols 0-66: fg=Reset bg=Reset BOLD
+row 23 cols 0-61: fg=Reset bg=Reset BOLD

@@ -216,9 +216,17 @@ pub struct KeyChord {
     pub mods: KeyModifiers,
 }
 
+/// The default quit key, and the one that quits when the bindings leave a context without one.
 pub(crate) const CTRL_C: KeyChord = KeyChord {
     code: KeyCode::Char('c'),
     mods: KeyModifiers::CONTROL,
+};
+
+/// The default back key, and the one that backs out when the bindings leave an overlay without
+/// one.
+pub(crate) const ESC: KeyChord = KeyChord {
+    code: KeyCode::Esc,
+    mods: KeyModifiers::NONE,
 };
 
 /// The character a key types, if it types one. Ctrl or Alt alone make a shortcut, not text.
@@ -757,11 +765,8 @@ impl Keymap {
             .map(|e| e.2)
     }
 
-    /// The action for a key: the context's own table, then `[keys.common]`. Ctrl+C is hard-wired.
+    /// The action for a key: the context's own table, then `[keys.common]`.
     pub fn lookup(&self, ctx: Context, chord: KeyChord) -> Option<Action> {
-        if chord == CTRL_C {
-            return Some(Action::Quit);
-        }
         self.find(ctx, chord)
             .or_else(|| self.common_for(ctx, chord))
     }
@@ -813,11 +818,7 @@ impl Keymap {
 
     /// The pending-key state machine. `pending` is the held first key, if any. A held key is
     /// dropped by any key that does not complete a sequence, and the key does nothing.
-    /// Ctrl+C quits even with a key held.
     pub fn step(&self, ctx: Context, pending: Option<KeyChord>, chord: KeyChord) -> Step {
-        if chord == CTRL_C {
-            return Step::Action(Action::Quit);
-        }
         if let Some(first) = pending {
             return match self
                 .seq
@@ -899,9 +900,81 @@ impl Keymap {
         out
     }
 
-    /// The built-in keys plus the user's `[keys]` tables, and every problem found.
-    /// Bad bindings are skipped; the rest still apply.
+    /// The ways out the bindings have taken away: `(quit, context)` where no key quits, and
+    /// `(back, overlay)` where no key closes help, a list or a y/n question. Each is worked out
+    /// through `lookup`, so a key the context binds to something else does not count.
+    pub(crate) fn missing_exits(&self) -> Vec<(Action, Context)> {
+        let reaches = |ctx: Context, exits: &[Action]| {
+            self.single.iter().any(|(_, k, _)| {
+                self.lookup(ctx, *k)
+                    .is_some_and(|action| exits.contains(&action))
+            })
+        };
+        let mut out = Vec::new();
+        for ctx in Context::ALL.into_iter().filter(|c| *c != Context::Common) {
+            if !reaches(ctx, &[Action::Quit]) {
+                out.push((Action::Quit, ctx));
+            }
+        }
+        for ctx in [Context::Popup, Context::Confirm, Context::Help] {
+            // "No" closes a y/n question as well as `back` does.
+            let exits: &[Action] = if ctx == Context::Confirm {
+                &[Action::Back, Action::ConfirmNo]
+            } else {
+                &[Action::Back]
+            };
+            if !reaches(ctx, exits) {
+                out.push((Action::Back, ctx));
+            }
+        }
+        out
+    }
+
+    /// The built-in keys plus the user's `[keys]` tables, and every problem found. Bad bindings
+    /// are skipped; the rest still apply. Where the bindings leave no way out (`missing_exits`),
+    /// Ctrl+C quits and Esc backs out there whatever they were bound to, and the problem says so.
     pub fn build(user: &KeySettings) -> (Keymap, Vec<SettingsProblem>) {
+        let (mut map, mut problems) = Keymap::layer(user);
+        let missing = map.missing_exits();
+        for (action, key, what) in [
+            (Action::Quit, CTRL_C, "quits chatcli"),
+            (Action::Back, ESC, "backs out"),
+        ] {
+            let ctxs: Vec<Context> = missing
+                .iter()
+                .filter(|m| m.0 == action)
+                .map(|m| m.1)
+                .collect();
+            if ctxs.is_empty() {
+                continue;
+            }
+            for ctx in &ctxs {
+                map.single.retain(|(c, k, _)| !(c == ctx && *k == key));
+                map.single.push((*ctx, key, action));
+            }
+            let names: Vec<String> = ctxs
+                .iter()
+                .map(|c| format!("[keys.{}]", c.name()))
+                .collect();
+            problems.push(SettingsProblem {
+                severity: Severity::Error,
+                line: None,
+                section: "keys".to_string(),
+                key: None,
+                message: format!(
+                    "no key {what} in {}: bind one to \"{}\" there or in [keys.common]. Until then {} does it there.",
+                    names.join(", "),
+                    action.name(),
+                    key.display()
+                ),
+            });
+        }
+        (map, problems)
+    }
+
+    /// The built-in keys with the user's `[keys]` tables over them, before the ways out are
+    /// checked: `build` is the one to use.
+    pub(crate) fn layer(user: &KeySettings) -> (Keymap, Vec<SettingsProblem>) {
         let mut map = Keymap {
             single: rows()
                 .into_iter()
@@ -966,15 +1039,6 @@ impl Keymap {
                         continue;
                     }
                 };
-                if chord == CTRL_C {
-                    problems.push(problem(
-                        Severity::Error,
-                        key,
-                        "Ctrl+C always quits and cannot be rebound or unbound. Skipping this binding."
-                            .to_string(),
-                    ));
-                    continue;
-                }
                 if let Some((_, first)) = seen.iter().find(|(c, _)| *c == chord) {
                     problems.push(problem(
                         Severity::Error,
@@ -1049,23 +1113,6 @@ impl Keymap {
                     .insert(insert_at.min(map.single.len()), (ctx, chord, action));
                 insert_at += 1;
                 map.user += 1;
-            }
-        }
-        for ctx in [Context::Panel, Context::List] {
-            let quits = map
-                .single
-                .iter()
-                .any(|(c, k, a)| *c == ctx && *a == Action::Quit && *k != CTRL_C);
-            if !quits {
-                problems.push(SettingsProblem {
-                    severity: Severity::Warning,
-                    line: None,
-                    section: format!("keys.{}", ctx.name()),
-                    key: None,
-                    message:
-                        "no key quits here except Ctrl+C: bind one to \"quit\" if you want it."
-                            .to_string(),
-                });
             }
         }
         (map, problems)
@@ -1359,16 +1406,15 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_c_quits_from_every_context_and_pending_state() {
+    fn ctrl_c_quits_from_every_context_by_default() {
         let ctrl_c = ev(KeyCode::Char('c'), KeyModifiers::CONTROL);
         let map = Keymap::default();
+        assert!(map.missing_exits().is_empty());
         for ctx in Context::ALL {
             assert_eq!(map.lookup(ctx, ctrl_c), Some(Action::Quit), "{ctx:?}");
             assert_eq!(map.step(ctx, None, ctrl_c), Step::Action(Action::Quit));
-            assert_eq!(
-                map.step(ctx, Some(k("g")), ctrl_c),
-                Step::Action(Action::Quit)
-            );
+            // It is a key like any other: it drops a held key and does nothing.
+            assert_eq!(map.step(ctx, Some(k("g")), ctrl_c), Step::Cancel);
         }
     }
 
@@ -1482,7 +1528,7 @@ mod tests {
             Some(Action::Send)
         );
         assert_eq!(map.user_bindings(), 5);
-        // `x` was never bound: warned, not an error. Removing q leaves only Ctrl+C in the list.
+        // `x` was never bound: warned, not an error.
         assert!(
             problems.iter().all(|p| p.severity == Severity::Warning),
             "{problems:?}"
@@ -1660,16 +1706,96 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_c_cannot_be_rebound_or_unbound() {
-        for action in ["refresh", "unbound"] {
-            let (map, problems) = build(&[("list", "ctrl+c", action)]);
-            assert_eq!(problems.len(), 1, "{problems:?}");
-            assert!(
-                problems[0].message.contains("Ctrl+C always quits"),
-                "{problems:?}"
-            );
-            assert_eq!(map.lookup(Context::List, k("ctrl+c")), Some(Action::Quit));
+    fn a_context_may_take_ctrl_c_while_another_key_quits_there() {
+        // The chat list has q.
+        let (map, problems) = build(&[("list", "ctrl+c", "refresh")]);
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(
+            map.lookup(Context::List, k("ctrl+c")),
+            Some(Action::Refresh)
+        );
+        assert_eq!(map.lookup(Context::Select, k("ctrl+c")), Some(Action::Quit));
+        // Message selection has no other quit key: Ctrl+C keeps quitting there, with an error.
+        let (map, problems) = build(&[("select", "ctrl+c", "reply")]);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert_eq!(problems[0].severity, Severity::Error);
+        assert!(
+            problems[0].message.starts_with(
+                "no key quits chatcli in [keys.select]: bind one to \"quit\" there or in [keys.common]."
+            ) && problems[0].message.ends_with("Until then Ctrl+C does it there."),
+            "{problems:?}"
+        );
+        assert_eq!(map.lookup(Context::Select, k("ctrl+c")), Some(Action::Quit));
+        // Another quit key that reaches it settles that.
+        let (map, problems) = build(&[("select", "ctrl+c", "reply"), ("common", "f10", "quit")]);
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(
+            map.lookup(Context::Select, k("ctrl+c")),
+            Some(Action::Reply)
+        );
+        assert_eq!(map.lookup(Context::Select, k("f10")), Some(Action::Quit));
+    }
+
+    #[test]
+    fn quit_must_reach_every_context() {
+        // Unbound everywhere: the panel and the chat list still have q.
+        let (map, problems) = build(&[("common", "ctrl+c", "unbound")]);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(
+            problems[0].message.starts_with(
+                "no key quits chatcli in [keys.filter], [keys.composer], [keys.select], [keys.popup], [keys.confirm], [keys.help]:"
+            ),
+            "{problems:?}"
+        );
+        assert_eq!(map.lookup(Context::List, k("ctrl+c")), None);
+        for ctx in [Context::Filter, Context::Composer, Context::Help] {
+            assert_eq!(map.lookup(ctx, k("ctrl+c")), Some(Action::Quit), "{ctx:?}");
         }
+        // A key that types a character does not reach the boxes you type in.
+        let (map, problems) = build(&[("common", "ctrl+c", "unbound"), ("common", "Q", "quit")]);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(
+            problems[0].message.starts_with(
+                "no key quits chatcli in [keys.filter], [keys.composer], [keys.popup]:"
+            ),
+            "{problems:?}"
+        );
+        assert_eq!(map.lookup(Context::Select, k("Q")), Some(Action::Quit));
+        assert_eq!(
+            map.lookup(Context::Composer, k("ctrl+c")),
+            Some(Action::Quit)
+        );
+        // One that does not is enough on its own.
+        let (_, problems) = build(&[("common", "ctrl+c", "unbound"), ("common", "f10", "quit")]);
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    #[test]
+    fn back_must_keep_a_key_in_every_overlay() {
+        let (map, problems) = build(&[("popup", "esc", "unbound")]);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(
+            problems[0].message.starts_with(
+                "no key backs out in [keys.popup]: bind one to \"back\" there or in [keys.common]."
+            ) && problems[0]
+                .message
+                .ends_with("Until then Esc does it there."),
+            "{problems:?}"
+        );
+        assert_eq!(map.lookup(Context::Popup, k("esc")), Some(Action::Back));
+        // Esc may do something else there once another key backs out.
+        let (map, problems) = build(&[("popup", "esc", "accept"), ("popup", "f9", "back")]);
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(map.lookup(Context::Popup, k("esc")), Some(Action::Accept));
+        // Help has other keys, and n answers a y/n question.
+        let (_, problems) = build(&[("help", "esc", "unbound"), ("confirm", "esc", "unbound")]);
+        assert!(problems.is_empty(), "{problems:?}");
+        let (map, problems) = build(&[("confirm", "esc", "unbound"), ("confirm", "n", "unbound")]);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert_eq!(map.lookup(Context::Confirm, k("esc")), Some(Action::Back));
+        // A back key in common reaches the overlays too.
+        let (_, problems) = build(&[("popup", "esc", "unbound"), ("common", "f9", "back")]);
+        assert!(problems.is_empty(), "{problems:?}");
     }
 
     #[test]
@@ -1692,20 +1818,6 @@ mod tests {
             problems[0].message.contains("did you mean [keys.list]"),
             "{problems:?}"
         );
-    }
-
-    #[test]
-    fn leaving_no_key_for_quit_warns() {
-        let (_, problems) = build(&[("list", "q", "unbound")]);
-        assert!(
-            texts(&problems)
-                .iter()
-                .any(|t| t.contains("no key quits here except Ctrl+C")),
-            "{problems:?}"
-        );
-        // Another key for quit settles it.
-        let (_, problems) = build(&[("list", "q", "unbound"), ("list", "ctrl+q", "quit")]);
-        assert!(problems.is_empty(), "{problems:?}");
     }
 
     #[test]

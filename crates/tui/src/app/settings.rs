@@ -11,7 +11,7 @@ use chatcli_core::settings::{SettingEdit, Settings};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::{App, Out, Prompt};
-use crate::keymap::{Action, Context, KeyChord, Keymap, CTRL_C};
+use crate::keymap::{Action, Context, KeyChord, Keymap};
 use crate::keys_edit::{self, Adding, Captured};
 use crate::settings_view::{self, Change, Kind, PageEdit, Row, RowId, Section, SettingsPage};
 
@@ -257,14 +257,12 @@ impl App {
     }
 
     /// One key press while a key is being captured, or a swap is asked. The key is read here,
-    /// before the keymap, so a key that already does something can still be chosen. Only Ctrl+C
-    /// (quits), Esc (cancels) and Backspace (removes the first key) are not captured.
+    /// before the keymap, so a key that already does something can still be chosen. While the
+    /// page waits for a key every key is captured, Esc, Backspace and the quit key included; a
+    /// question (swap, add anyway, which key to delete) reads its own keys, then the quit key.
     fn capture_key(&mut self, chord: KeyChord, code: KeyCode) -> Out {
-        if chord == CTRL_C {
-            self.quit = true;
-            return Vec::new();
-        }
         self.set_error(None);
+        let quit = self.keys.lookup(Context::Common, chord) == Some(Action::Quit);
         let edit = self.settings_page.as_ref().and_then(|p| p.edit.clone());
         match edit {
             Some(PageEdit::Conflict {
@@ -280,11 +278,11 @@ impl App {
                     return self.key_result(done);
                 }
                 KeyCode::Esc => self.set_edit(None),
-                _ => {}
+                _ => self.quit |= quit,
             },
             Some(PageEdit::Add { ctx, action }) => {
                 match keys_edit::capture_add(&self.keys, ctx, action, chord) {
-                    Adding::Cancel | Adding::Same => self.set_edit(None),
+                    Adding::Same => self.set_edit(None),
                     Adding::Refused(msg) => self.set_error(Some(msg)),
                     Adding::Overlaps(note) => self.set_edit(Some(PageEdit::AddOverlap {
                         ctx,
@@ -308,14 +306,14 @@ impl App {
                     return self.key_result(done);
                 }
                 KeyCode::Esc => self.set_edit(None),
-                _ => {}
+                _ => self.quit |= quit,
             },
             Some(PageEdit::Pick { ctx, action, index }) => {
                 return self.pick_key(chord, code, ctx, action, index)
             }
             Some(PageEdit::Capture { ctx, action }) => {
                 match keys_edit::capture(&self.keys, ctx, action, chord) {
-                    Captured::Cancel | Captured::Same => self.set_edit(None),
+                    Captured::Same => self.set_edit(None),
                     Captured::Refused(msg) => self.set_error(Some(msg)),
                     Captured::Conflict(other) => self.set_edit(Some(PageEdit::Conflict {
                         ctx,
@@ -323,17 +321,6 @@ impl App {
                         key: chord,
                         other,
                     })),
-                    Captured::Remove => {
-                        match keys_edit::remove_first(&self.keys, &self.settings.keys, ctx, action)
-                        {
-                            Ok(done) => {
-                                self.set_edit(None);
-                                return self.key_result(Ok(done));
-                            }
-                            // A locked key: say why and keep listening.
-                            Err(msg) => self.set_error(Some(msg)),
-                        }
-                    }
                     Captured::Bind => {
                         self.set_edit(None);
                         let done =
@@ -348,7 +335,8 @@ impl App {
     }
 
     /// One key press while choosing which key of `action` to delete. Left/Right (h/l) move,
-    /// Enter or d deletes, Esc leaves. A locked key is refused and the choice stays open.
+    /// Enter or d deletes, Esc leaves. The last way out (the only key that quits, or that backs
+    /// out of an overlay) is refused and the choice stays open.
     fn pick_key(
         &mut self,
         chord: KeyChord,
@@ -372,7 +360,7 @@ impl App {
             (KeyCode::Left | KeyCode::Char('h'), true) => self.set_edit(moved((index + n - 1) % n)),
             (KeyCode::Right | KeyCode::Char('l'), true) => self.set_edit(moved((index + 1) % n)),
             (KeyCode::Enter | KeyCode::Char('d'), true) => {
-                match keys_edit::remove_key(&self.settings.keys, ctx, action, keys[index]) {
+                match keys_edit::remove_key(&self.settings.keys, ctx, keys[index]) {
                     Ok(done) => {
                         self.set_edit(None);
                         return self.key_result(Ok(done));
@@ -381,6 +369,7 @@ impl App {
                 }
             }
             (KeyCode::Esc, _) => self.set_edit(None),
+            _ if self.keys.lookup(Context::Common, chord) == Some(Action::Quit) => self.quit = true,
             _ => {}
         }
         Vec::new()
@@ -455,8 +444,8 @@ impl App {
         }
     }
 
-    /// Keys while the settings screen is open: fixed, not in the keymap. Ctrl+C quits (the
-    /// keymap hard-wires it), F1 opens help, F2 and Esc close.
+    /// Keys while the settings screen is open: fixed, not in the keymap, except the `[keys.common]`
+    /// keys for quit (Ctrl+C), help (F1) and settings (F2, which closes it, as Esc does).
     pub(super) fn settings_key(&mut self, key: &KeyEvent) -> Out {
         let chord = KeyChord::from_event(key);
         let capturing = self
@@ -466,10 +455,6 @@ impl App {
             .is_some_and(PageEdit::is_key_edit);
         if capturing {
             return self.capture_key(chord, key.code);
-        }
-        if chord == CTRL_C {
-            self.quit = true;
-            return Vec::new();
         }
         // Global Quit is checked last (`settings_global`): the page's own keys win.
         let global = self.keys.lookup(Context::Common, chord);
@@ -970,7 +955,7 @@ mod tests {
         press(&mut a, KeyCode::Enter);
         assert_eq!(
             capture_text(&a).as_deref(),
-            Some("Press the new key for Refresh (Esc cancels, Backspace removes)")
+            Some("Press the new key for Refresh (any key is taken, Esc too)")
         );
         let out = press(&mut a, KeyCode::F(5));
         assert!(out.is_empty(), "keys need no backend");
@@ -1007,7 +992,7 @@ mod tests {
         press(&mut a, KeyCode::Char('a'));
         assert_eq!(
             capture_text(&a).as_deref(),
-            Some("Press a key to add to Refresh (Esc cancels)")
+            Some("Press a key to add to Refresh (any key is taken, Esc too)")
         );
         press(&mut a, KeyCode::F(5));
         assert!(a.settings_page().unwrap().edit.is_none());
@@ -1019,14 +1004,15 @@ mod tests {
             a.take_setting_edits(),
             vec![kset("keys.list", "f5", "refresh")]
         );
-        // Esc leaves an add without a change.
+        // Esc is a key like any other: here it already backs out, so it is refused by name.
         press(&mut a, KeyCode::Char('a'));
         press(&mut a, KeyCode::Esc);
-        assert!(a.settings_page().unwrap().edit.is_none());
-        assert!(
-            a.settings_page().is_some(),
-            "Esc cancels the add, not the page"
+        let p = a.settings_page().expect("the page stays open");
+        assert_eq!(
+            p.error.as_deref(),
+            Some("Esc is already Back (Chat list): delete it there first")
         );
+        assert!(matches!(p.edit, Some(PageEdit::Add { .. })));
         assert!(a.take_setting_edits().is_empty());
     }
 
@@ -1135,7 +1121,7 @@ mod tests {
     }
 
     #[test]
-    fn a_locked_key_cannot_be_picked_away_and_a_keyless_action_says_so() {
+    fn the_last_quit_key_cannot_be_picked_away_and_a_keyless_action_says_so() {
         let mut a = on_key_row(Context::Common, Action::Quit);
         assert_eq!(
             value_of(&a, keys_row(Context::Common, Action::Quit)),
@@ -1144,7 +1130,10 @@ mod tests {
         press(&mut a, KeyCode::Char('d'));
         press(&mut a, KeyCode::Enter);
         let p = a.settings_page().unwrap();
-        assert_eq!(p.error.as_deref(), Some("Ctrl+C always quits"));
+        assert_eq!(
+            p.error.as_deref(),
+            Some("KEY NOT SAVED - Quit would have no key in Filter box and 5 more places")
+        );
         assert!(
             matches!(p.edit, Some(PageEdit::Pick { .. })),
             "still choosing"
@@ -1162,14 +1151,25 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_c_quits_while_adding_or_picking() {
-        for start in ['a', 'd'] {
-            let mut a = on_key_row(Context::List, Action::Refresh);
-            press(&mut a, KeyCode::Char(start));
-            press_mod(&mut a, KeyCode::Char('c'), KeyModifiers::CONTROL);
-            assert!(a.quit, "{start}");
-            assert!(a.take_setting_edits().is_empty());
-        }
+    fn the_quit_key_is_captured_while_adding_and_quits_from_a_question() {
+        // Adding: Ctrl+C is the key, and it overlaps quit, so the page asks first.
+        let mut a = on_key_row(Context::List, Action::Refresh);
+        press(&mut a, KeyCode::Char('a'));
+        press_mod(&mut a, KeyCode::Char('c'), KeyModifiers::CONTROL);
+        assert!(!a.quit);
+        assert!(matches!(
+            a.settings_page().unwrap().edit,
+            Some(PageEdit::AddOverlap { .. })
+        ));
+        // A question reads its own keys, then the quit key.
+        press_mod(&mut a, KeyCode::Char('c'), KeyModifiers::CONTROL);
+        assert!(a.quit);
+        assert!(a.take_setting_edits().is_empty());
+        let mut a = on_key_row(Context::List, Action::Refresh);
+        press(&mut a, KeyCode::Char('d'));
+        press_mod(&mut a, KeyCode::Char('c'), KeyModifiers::CONTROL);
+        assert!(a.quit);
+        assert!(a.take_setting_edits().is_empty());
     }
 
     #[test]
@@ -1191,7 +1191,7 @@ mod tests {
     }
 
     #[test]
-    fn a_text_key_is_refused_where_you_type_and_esc_is_never_captured() {
+    fn a_text_key_is_refused_where_you_type_and_esc_is_captured() {
         let mut a = on_key_row(Context::Composer, Action::Send);
         press(&mut a, KeyCode::Enter);
         press(&mut a, KeyCode::Char('x'));
@@ -1205,11 +1205,18 @@ mod tests {
             "still listening"
         );
         assert!(a.take_setting_edits().is_empty());
+        // Esc is captured too. Here it already backs out, so the page asks before swapping, and
+        // Esc answers no.
         press(&mut a, KeyCode::Esc);
-        assert!(
-            a.settings_page().is_some(),
-            "Esc cancels the capture, not the page"
-        );
+        assert!(matches!(
+            a.settings_page().unwrap().edit,
+            Some(PageEdit::Conflict {
+                other: Action::Back,
+                ..
+            })
+        ));
+        press(&mut a, KeyCode::Esc);
+        assert!(a.settings_page().is_some(), "the page stays open");
         assert!(a.settings_page().unwrap().edit.is_none());
         assert!(a.take_setting_edits().is_empty());
         assert_eq!(
@@ -1219,42 +1226,50 @@ mod tests {
     }
 
     #[test]
-    fn backspace_removes_the_first_key_and_a_locked_one_is_refused() {
+    fn backspace_and_ctrl_c_are_captured_like_any_other_key() {
         let mut a = on_key_row(Context::List, Action::Refresh);
         press(&mut a, KeyCode::Enter);
         press(&mut a, KeyCode::Backspace);
         assert!(a.settings_page().unwrap().edit.is_none());
         assert_eq!(
             a.take_setting_edits(),
-            vec![kset("keys.list", "r", "unbound")]
+            vec![
+                kset("keys.list", "backspace", "refresh"),
+                kset("keys.list", "r", "unbound")
+            ]
         );
         assert_eq!(
-            value_of(&a, keys_row(Context::List, Action::Refresh)),
-            "- *"
+            a.keys.lookup(Context::List, plain(KeyCode::Backspace)),
+            Some(Action::Refresh)
         );
-        let mut b = on_key_row(Context::Help, Action::Back);
+        // Ctrl+C: the chat list still has q to quit, so the list may take it.
+        let mut b = on_key_row(Context::List, Action::Refresh);
         press(&mut b, KeyCode::Enter);
-        press(&mut b, KeyCode::Backspace);
-        let p = b.settings_page().unwrap();
-        assert_eq!(p.error.as_deref(), Some("Esc always backs out here"));
-        assert!(p.edit.is_some());
-        assert!(b.take_setting_edits().is_empty());
-        let mut c = on_key_row(Context::Common, Action::Quit);
+        press_mod(&mut b, KeyCode::Char('c'), KeyModifiers::CONTROL);
+        assert!(!b.should_quit());
+        assert_eq!(
+            b.take_setting_edits(),
+            vec![
+                kset("keys.list", "ctrl+c", "refresh"),
+                kset("keys.list", "r", "unbound")
+            ]
+        );
+        // Message selection has no other quit key: refused, and Ctrl+C still quits there.
+        let mut c = on_key_row(Context::Select, Action::Reply);
         press(&mut c, KeyCode::Enter);
-        press(&mut c, KeyCode::Backspace);
+        press_mod(&mut c, KeyCode::Char('c'), KeyModifiers::CONTROL);
         assert_eq!(
             c.settings_page().unwrap().error.as_deref(),
-            Some("Ctrl+C always quits")
+            Some("KEY NOT SAVED - Quit would have no key in Message selection")
         );
-    }
-
-    #[test]
-    fn ctrl_c_during_a_capture_quits() {
-        let mut a = on_key_row(Context::List, Action::Refresh);
-        press(&mut a, KeyCode::Enter);
-        press_mod(&mut a, KeyCode::Char('c'), KeyModifiers::CONTROL);
-        assert!(a.should_quit());
-        assert!(a.take_setting_edits().is_empty());
+        assert!(c.take_setting_edits().is_empty());
+        assert_eq!(
+            c.keys.lookup(
+                Context::Select,
+                KeyChord::new(KeyCode::Char('c'), KeyModifiers::CONTROL)
+            ),
+            Some(Action::Quit)
+        );
     }
 
     #[test]

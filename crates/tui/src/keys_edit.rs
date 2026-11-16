@@ -8,38 +8,14 @@
 use std::collections::BTreeMap;
 
 use chatcli_core::settings::{KeySettings, SettingEdit, SettingValue, Severity};
-use crossterm::event::{KeyCode, KeyModifiers};
 
-use crate::keymap::{
-    common_applies, default_keys, parse_key, Action, Context, KeyChord, Keymap, CTRL_C,
-};
-
-const ESC: KeyChord = KeyChord {
-    code: KeyCode::Esc,
-    mods: KeyModifiers::NONE,
-};
+use crate::keymap::{common_applies, default_keys, parse_key, Action, Context, KeyChord, Keymap};
 
 pub(crate) type Done = Result<(KeySettings, Vec<SettingEdit>), String>;
-
-/// Why `chord` may not be taken away from `action`: Ctrl+C always quits, and Esc on `back` always
-/// backs out, so there is always a way out.
-pub(crate) fn locked(chord: KeyChord, action: Action) -> Option<&'static str> {
-    if chord == CTRL_C {
-        Some("Ctrl+C always quits")
-    } else if chord == ESC && action == Action::Back {
-        Some("Esc always backs out here")
-    } else {
-        None
-    }
-}
 
 /// What a key pressed while capturing means.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Captured {
-    /// Esc: leave the capture, nothing changes.
-    Cancel,
-    /// Backspace: remove the action's first key.
-    Remove,
     /// This key cannot be used: the message, and the capture stays open.
     Refused(String),
     /// The action already has this key.
@@ -50,14 +26,9 @@ pub(crate) enum Captured {
     Bind,
 }
 
-/// Sorts one key press during capture for `action` in `ctx`.
+/// Sorts one key press during capture for `action` in `ctx`. Every key is taken, Esc, Backspace
+/// and Ctrl+C included: no key cancels (the key the action already has changes nothing).
 pub(crate) fn capture(keys: &Keymap, ctx: Context, action: Action, k: KeyChord) -> Captured {
-    if k == ESC {
-        return Captured::Cancel;
-    }
-    if k.code == KeyCode::Backspace && k.mods.is_empty() {
-        return Captured::Remove;
-    }
     if k.to_setting().is_none() {
         return Captured::Refused("This key cannot be saved: pick another".to_string());
     }
@@ -114,9 +85,32 @@ fn errors(user: &KeySettings) -> usize {
         .count()
 }
 
+/// Why `new` may not replace `user`: it would leave a context with no key that quits, or an
+/// overlay with no key that backs out. A way out the file had already lost does not count.
+fn exit_lost(user: &KeySettings, new: &KeySettings) -> Option<String> {
+    let had = Keymap::layer(user).0.missing_exits();
+    let lost: Vec<(Action, Context)> = Keymap::layer(new)
+        .0
+        .missing_exits()
+        .into_iter()
+        .filter(|m| !had.contains(m))
+        .collect();
+    let (action, ctx) = *lost.first()?;
+    let more = lost.iter().filter(|m| m.0 == action).count() - 1;
+    let place = match more {
+        0 => ctx.title().to_string(),
+        n if n + 2 == Context::ALL.len() => "any context".to_string(),
+        n => format!("{} and {n} more places", ctx.title()),
+    };
+    Some(format!(
+        "KEY NOT SAVED - {} would have no key in {place}",
+        action.label()
+    ))
+}
+
 /// The new `KeySettings` with `t` as the table of `ctx`, and the edits that get there. A change
-/// that makes the keymap report a new error is refused (defensive: the page only writes keys
-/// that parse).
+/// that takes away the last way out is refused (`exit_lost`), and so is one that makes the keymap
+/// report a new error (defensive: the page only writes keys that parse).
 fn finish(user: &KeySettings, ctx: Context, t: BTreeMap<String, String>) -> Done {
     let before = table_of(user, ctx);
     let table = format!("keys.{}", ctx.name());
@@ -136,6 +130,9 @@ fn finish(user: &KeySettings, ctx: Context, t: BTreeMap<String, String>) -> Done
     } else {
         new.bindings.insert(ctx.name().to_string(), t);
     }
+    if let Some(why) = exit_lost(user, &new) {
+        return Err(why);
+    }
     if errors(&new) > errors(user) {
         let problem = Keymap::build(&new)
             .1
@@ -149,8 +146,7 @@ fn finish(user: &KeySettings, ctx: Context, t: BTreeMap<String, String>) -> Done
     Ok((new, edits))
 }
 
-/// `k` becomes a key of `action` in `ctx`, replacing the action's first key. A
-/// locked first key (Esc that backs out, Ctrl+C) stays and `k` is added. When `give` is set
+/// `k` becomes a key of `action` in `ctx`, replacing the action's first key. When `give` is set
 /// (the swap) that action takes the key `action` gave up, if it gave one up.
 fn rebind(
     keys: &Keymap,
@@ -161,11 +157,7 @@ fn rebind(
     give: Option<Action>,
 ) -> Done {
     let mut t = table_of(user, ctx);
-    let old = keys
-        .keys_in(ctx, action)
-        .first()
-        .copied()
-        .filter(|c| locked(*c, action).is_none());
+    let old = keys.keys_in(ctx, action).first().copied();
     if let Some(old) = old {
         unbind(&mut t, ctx, old)?;
     }
@@ -199,25 +191,9 @@ pub(crate) fn swap(
     rebind(keys, user, ctx, action, k, Some(other))
 }
 
-/// Backspace: the action's first key goes. A locked one is refused with the reason.
-pub(crate) fn remove_first(
-    keys: &Keymap,
-    user: &KeySettings,
-    ctx: Context,
-    action: Action,
-) -> Done {
-    let Some(first) = keys.keys_in(ctx, action).first().copied() else {
-        return Ok((user.clone(), Vec::new()));
-    };
-    remove_key(user, ctx, action, first)
-}
-
-/// `d` on the keys page: `k` stops running `action` in `ctx`. A locked key is refused with
-/// the reason.
-pub(crate) fn remove_key(user: &KeySettings, ctx: Context, action: Action, k: KeyChord) -> Done {
-    if let Some(why) = locked(k, action) {
-        return Err(why.to_string());
-    }
+/// `d` on the keys page: `k` stops doing anything in `ctx`. Refused when it is the last way out
+/// (`exit_lost`).
+pub(crate) fn remove_key(user: &KeySettings, ctx: Context, k: KeyChord) -> Done {
     let mut t = table_of(user, ctx);
     unbind(&mut t, ctx, k)?;
     finish(user, ctx, t)
@@ -226,8 +202,6 @@ pub(crate) fn remove_key(user: &KeySettings, ctx: Context, action: Action, k: Ke
 /// What a key pressed while adding a key to an action means.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Adding {
-    /// Esc: leave, nothing changes.
-    Cancel,
     /// This key cannot be added: the message, and the capture stays open.
     Refused(String),
     /// The action already has this key.
@@ -244,9 +218,6 @@ pub(crate) enum Adding {
 /// there. A key that only overlaps another context that is live at the same time is allowed
 /// after a warning.
 pub(crate) fn capture_add(keys: &Keymap, ctx: Context, action: Action, k: KeyChord) -> Adding {
-    if k == ESC {
-        return Adding::Cancel;
-    }
     if k.to_setting().is_none() {
         return Adding::Refused("This key cannot be saved: pick another".to_string());
     }
@@ -365,6 +336,7 @@ pub(crate) fn reset_all(user: &KeySettings) -> Done {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::{KeyCode, KeyModifiers};
 
     fn k(s: &str) -> KeyChord {
         parse_key(s).unwrap()
@@ -423,11 +395,21 @@ mod tests {
     fn capture_sorts_a_key_press() {
         let map = keymap(&KeySettings::default());
         let c = |key: &str, ctx, a| capture(&map, ctx, a, k(key));
-        assert_eq!(c("esc", Context::List, Action::Refresh), Captured::Cancel);
+        // Esc, Backspace and Ctrl+C are keys like any other: nothing cancels the capture.
+        assert_eq!(
+            c("esc", Context::List, Action::Refresh),
+            Captured::Conflict(Action::Back)
+        );
+        assert_eq!(c("esc", Context::Panel, Action::Accept), Captured::Bind);
         assert_eq!(
             c("backspace", Context::List, Action::Refresh),
-            Captured::Remove
+            Captured::Bind
         );
+        assert_eq!(
+            c("backspace", Context::Composer, Action::Send),
+            Captured::Refused("Backspace types text here: use a Ctrl or Alt key".to_string())
+        );
+        assert_eq!(c("ctrl+c", Context::Select, Action::Reply), Captured::Bind);
         assert_eq!(c("f5", Context::List, Action::Refresh), Captured::Bind);
         assert_eq!(c("r", Context::List, Action::Refresh), Captured::Same);
         assert_eq!(
@@ -545,53 +527,33 @@ mod tests {
     }
 
     #[test]
-    fn a_locked_first_key_stays_and_the_new_key_is_added() {
+    fn the_quit_and_back_keys_are_replaced_like_any_other() {
         let u = KeySettings::default();
         let map = keymap(&u);
         let (new, edits) = bind(&map, &u, Context::Common, Action::Quit, k("ctrl+q")).unwrap();
-        assert_eq!(edits, vec![set("keys.common", "ctrl+q", "quit")]);
+        assert_eq!(
+            edits,
+            vec![
+                set("keys.common", "ctrl+c", "unbound"),
+                set("keys.common", "ctrl+q", "quit")
+            ]
+        );
+        let (after, problems) = Keymap::build(&new);
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(after.lookup(Context::Help, k("ctrl+q")), Some(Action::Quit));
+        assert_eq!(after.lookup(Context::Help, k("ctrl+c")), None);
+        // The same for Esc on back.
+        let (new, edits) = bind(&map, &u, Context::Popup, Action::Back, k("f9")).unwrap();
+        assert_eq!(
+            edits,
+            vec![
+                set("keys.popup", "esc", "unbound"),
+                set("keys.popup", "f9", "back")
+            ]
+        );
         let after = keymap(&new);
-        assert_eq!(
-            after.lookup(Context::Common, k("ctrl+q")),
-            Some(Action::Quit)
-        );
-        assert_eq!(
-            after.lookup(Context::Common, k("ctrl+c")),
-            Some(Action::Quit)
-        );
-        // The same for Esc on a cancel action.
-        let (new, edits) = bind(&map, &u, Context::Help, Action::Back, k("x")).unwrap();
-        assert_eq!(edits, vec![set("keys.help", "x", "back")]);
-        assert_eq!(
-            keymap(&new).lookup(Context::Help, k("esc")),
-            Some(Action::Back)
-        );
-    }
-
-    #[test]
-    fn backspace_removes_the_first_key_unless_it_is_locked() {
-        let u = KeySettings::default();
-        let map = keymap(&u);
-        let (new, edits) = remove_first(&map, &u, Context::List, Action::Refresh).unwrap();
-        assert_eq!(edits, vec![set("keys.list", "r", "unbound")]);
-        assert_eq!(keymap(&new).lookup(Context::List, k("r")), None);
-        assert_eq!(
-            remove_first(&map, &u, Context::Help, Action::Back).unwrap_err(),
-            "Esc always backs out here"
-        );
-        assert_eq!(
-            remove_first(&map, &u, Context::Common, Action::Quit).unwrap_err(),
-            "Ctrl+C always quits"
-        );
-        // Nothing bound: nothing to do.
-        let (same, edits) = remove_first(&map, &u, Context::List, Action::FilterStart).unwrap();
-        assert!(edits.is_empty() && same == u);
-        // A user entry is removed as written, not unbound.
-        let u = user(&[("list", "Ctrl+N", "refresh")]);
-        let map = keymap(&u);
-        let (new, edits) = remove_first(&map, &u, Context::List, Action::Refresh).unwrap();
-        assert_eq!(edits, vec![SettingEdit::remove("keys.list", "Ctrl+N")]);
-        assert!(new.bindings.is_empty());
+        assert_eq!(after.lookup(Context::Popup, k("f9")), Some(Action::Back));
+        assert_eq!(after.lookup(Context::Popup, k("esc")), None);
     }
 
     #[test]
@@ -635,7 +597,12 @@ mod tests {
             Adding::Refused("p is already Pin (Chat list): delete it there first".to_string())
         );
         assert_eq!(c(Context::List, Action::Refresh, "r"), Adding::Same);
-        assert_eq!(c(Context::List, Action::Refresh, "esc"), Adding::Cancel);
+        // Esc is a key like any other: it does not cancel.
+        assert_eq!(
+            c(Context::List, Action::Refresh, "esc"),
+            Adding::Refused("Esc is already Back (Chat list): delete it there first".to_string())
+        );
+        assert_eq!(c(Context::Panel, Action::Accept, "esc"), Adding::Free);
         assert_eq!(
             c(Context::Composer, Action::Send, "x"),
             Adding::Refused("x types text here: use a Ctrl or Alt key".to_string())
@@ -687,7 +654,7 @@ mod tests {
             "r, F5, Ctrl+R"
         );
         // A user key: its entry goes.
-        let (new, edits) = remove_key(&u, Context::List, Action::Refresh, k("f5")).unwrap();
+        let (new, edits) = remove_key(&u, Context::List, k("f5")).unwrap();
         assert_eq!(edits, vec![SettingEdit::remove("keys.list", "f5")]);
         let after = keymap(&new);
         assert_eq!(
@@ -695,20 +662,45 @@ mod tests {
             vec![k("ctrl+r"), k("r")]
         );
         // A built-in key: written as unbound.
-        let (new, edits) = remove_key(&new, Context::List, Action::Refresh, k("r")).unwrap();
+        let (new, edits) = remove_key(&new, Context::List, k("r")).unwrap();
         assert_eq!(edits, vec![set("keys.list", "r", "unbound")]);
         assert_eq!(
             keymap(&new).keys_in(Context::List, Action::Refresh),
             vec![k("ctrl+r")]
         );
-        // Locked keys stay, with the reason.
+    }
+
+    #[test]
+    fn the_last_way_out_cannot_be_removed() {
+        let u = KeySettings::default();
+        // Only the panel and the chat list have another quit key (q).
         assert_eq!(
-            remove_key(&u, Context::Common, Action::Quit, k("ctrl+c")).unwrap_err(),
-            "Ctrl+C always quits"
+            remove_key(&u, Context::Common, k("ctrl+c")).unwrap_err(),
+            "KEY NOT SAVED - Quit would have no key in Filter box and 5 more places"
         );
         assert_eq!(
-            remove_key(&u, Context::Help, Action::Back, k("esc")).unwrap_err(),
-            "Esc always backs out here"
+            remove_key(&u, Context::Popup, k("esc")).unwrap_err(),
+            "KEY NOT SAVED - Back would have no key in Suggestions, pickers and search"
+        );
+        // Help has other keys that close it, and n answers a y/n question.
+        assert!(remove_key(&u, Context::Help, k("esc")).is_ok());
+        assert!(remove_key(&u, Context::Confirm, k("esc")).is_ok());
+        // With another quit key everywhere, Ctrl+C can go.
+        let u = user(&[("common", "ctrl+q", "quit")]);
+        let (new, _) = remove_key(&u, Context::Common, k("ctrl+c")).unwrap();
+        assert_eq!(keymap(&new).lookup(Context::Select, k("ctrl+c")), None);
+        // A context may take the quit key for itself while another one still quits there.
+        let map = keymap(&u);
+        let (new, _) = bind(&map, &u, Context::Select, Action::Reply, k("ctrl+c")).unwrap();
+        assert_eq!(
+            keymap(&new).lookup(Context::Select, k("ctrl+c")),
+            Some(Action::Reply)
+        );
+        // Without one, taking it is refused: nothing would quit from message selection.
+        let u = KeySettings::default();
+        assert_eq!(
+            add(&u, Context::Select, Action::Reply, k("ctrl+c")).unwrap_err(),
+            "KEY NOT SAVED - Quit would have no key in Message selection"
         );
     }
 
@@ -719,7 +711,7 @@ mod tests {
         let u = user(&[("list", "p", "refresh")]);
         let map = keymap(&u);
         assert_eq!(map.lookup(Context::List, k("p")), Some(Action::Refresh));
-        let (new, edits) = remove_key(&u, Context::List, Action::Refresh, k("p")).unwrap();
+        let (new, edits) = remove_key(&u, Context::List, k("p")).unwrap();
         assert_eq!(edits, vec![set("keys.list", "p", "unbound")]);
         assert_eq!(keymap(&new).lookup(Context::List, k("p")), None);
     }

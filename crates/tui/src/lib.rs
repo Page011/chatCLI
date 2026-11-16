@@ -78,7 +78,7 @@ pub use theme::{parse_colour, Theme};
 pub use ui::draw;
 
 /// Problems the TUI finds in `settings.toml` that core cannot: every `[keys]` binding (unknown
-/// action, unreadable key, same key twice, a key that would stop typing, Ctrl+C). `chatcli settings check` prints these together with core's own problems.
+/// action, unreadable key, same key twice, a key that would stop typing, no key left to quit or back out with). `chatcli settings check` prints these together with core's own problems.
 pub fn validate_settings(settings: &Settings) -> Vec<SettingsProblem> {
     let mut problems = keymap::validate_keys(settings);
     problems.extend(theme::validate_theme(&settings.theme));

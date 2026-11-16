@@ -3137,12 +3137,14 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_c_cannot_be_rebound_by_the_user() {
-        let s = settings_with(&[
-            ("list", "ctrl+c", "refresh"),
-            ("common", "ctrl+c", "unbound"),
-        ]);
+    fn ctrl_c_can_be_rebound_by_the_user() {
+        // The chat list takes Ctrl+C for itself (q still quits there); elsewhere it quits.
+        let s = settings_with(&[("list", "ctrl+c", "refresh")]);
         let mut app = online(App::with_settings(clock(), &s));
+        assert_eq!(app.handle_key(ctrl('c')).len(), 1, "refresh");
+        assert!(!app.should_quit());
+        app.handle_key(key(KeyCode::Enter));
+        assert_eq!(app.context(), Context::Composer);
         app.handle_key(ctrl('c'));
         assert!(app.should_quit());
     }
@@ -4664,7 +4666,7 @@ mod tests {
         assert!(!app.should_quit());
         app.handle_key(key(KeyCode::Char('x')));
         assert!(app.tour_running() && app.tour_step() == Some(1));
-        // Space pauses and resumes; Esc ends; Ctrl+C always quits.
+        // Space pauses and resumes; Esc ends; the quit key (Ctrl+C) quits.
         app.handle_key(key(KeyCode::Char(' ')));
         assert!(app.tour_paused() && app.next_deadline().is_none());
         app.handle_key(key(KeyCode::Char(' ')));

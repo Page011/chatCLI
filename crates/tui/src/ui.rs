@@ -256,8 +256,19 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         f.render_widget(Paragraph::new(Line::from(t.spans)), r);
         end = t.x + t.w;
     }
-    let quit = "Ctrl+C quit";
-    if area.width >= end + 2 + quit.len() as u16 {
+    // The key that quits from where the focus is now: the one that works everywhere if it
+    // reaches this context, else one of the context's own.
+    let here = app.keys().keys_for(app.context(), Action::Quit);
+    let everywhere = app.keys().keys_for(Context::Common, Action::Quit);
+    let Some(key) = everywhere
+        .iter()
+        .find(|k| here.contains(k))
+        .or(here.first())
+    else {
+        return;
+    };
+    let quit = format!("{key} quit");
+    if area.width >= end + 2 + quit.chars().count() as u16 {
         f.render_widget(
             Paragraph::new(Span::styled(quit, t.hint)).alignment(Alignment::Right),
             area,
