@@ -51,7 +51,7 @@ bun run test:e2e
 
 ## UI snapshots
 
-Screens are checked against stored snapshots in `crates/tui`. If you change the UI on purpose, rewrite them and read the diff before you commit:
+Two screens (the chat list with an open chat, and a group chat with avatars) are checked against stored snapshots in `crates/tui/tests/snapshots`. If you change those screens on purpose, rewrite the two files and read the diff before you commit. Other UI behaviour is covered by assertion tests, not snapshots:
 
 ```
 UPDATE_SNAPSHOTS=1 cargo test -p chatcli-tui
