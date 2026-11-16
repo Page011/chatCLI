@@ -286,7 +286,7 @@ Message box:
 | `Enter` | Send the whole message |
 | `/command` | A message that starts with `/` is a command, not text: `/help`, `/settings`, `/keys`, `/signout`. A list of commands opens as you type; `Enter` runs the chosen one. An unknown word shows `UNKNOWN COMMAND` and keeps your text. Start with `//` to send a message that begins with a slash (`//usr/bin` sends `/usr/bin`) |
 | `Esc` | Cancel a pending reply or edit; otherwise back to the chat list |
-| `Left` / `Right`, `Ctrl+Left` / `Ctrl+Right` | Move the cursor by character, by word |
+| `Left` / `Right`, `Ctrl+Left` / `Ctrl+Right` | Move the cursor by character, by word. These editing keys, down to `Ctrl+U`, work the same in every box you type in: the chat filter, the command bar, search, the emoji search and the file prompt (in the emoji picker `Left` and `Right` move through the grid) |
 | `Home` / `End` | Start / end of the line |
 | `Backspace` / `Delete` | Delete a character (an emoji goes whole) |
 | `Ctrl+W` or `Ctrl+Backspace` | Delete the word before the cursor |
@@ -438,8 +438,9 @@ Your own bindings sit in one table per context, `key = "action"`, over the built
 ```
 
 - **Key strings:** a single character (`a`, `G`, `/`), or `enter` `esc` `tab` `up` `down` `left` `right` `home` `end` `pgup` `pgdn` `backspace` `delete` `insert` `space` `f1` to `f24`, with `ctrl+`, `alt+` or `shift+` in front (`shift+tab`).
-- **Contexts:** `global` (everywhere except help, popups and the `y/n` questions), `panel` (sign-in), `list` (chat list), `filter`, `composer` (message box), `select` (message selection), `popup` (suggestions, emoji picker, file prompt, search box, command bar), `confirm` (the `y/n` questions), `help`.
-- **Text contexts** (`global`, `filter`, `composer`, `popup`) refuse plain letters and `Backspace` as bindings, because that would stop you typing. Use `ctrl+` or `alt+`.
+- **Contexts:** `common` (see below), `panel` (sign-in), `list` (chat list), `filter`, `composer` (message box), `select` (message selection), `popup` (suggestions, emoji picker, file prompt, search box, command bar), `confirm` (the `y/n` questions), `help`.
+- **`[keys.common]`** binds a key once for every context where its action makes sense: quitting everywhere; the tabs, help, settings, search and the command bar outside the overlays; the editing keys in every box you type in; any other action where chatcli itself gives it a key. A context's own table wins over `common`, and a `common` key that types a character (a letter, `?`, `/`) is skipped in the boxes you type in, so it never stops you typing.
+- **Text contexts** (`filter`, `composer`, `popup`) refuse plain letters and `Backspace` in their own tables, because that would stop you typing. Use `ctrl+` or `alt+`, or `[keys.common]`.
 - `Ctrl+C` always quits and cannot be rebound or unbound.
 - A bad binding (unknown action, unreadable key, the same key twice in one table) is skipped with one notice, and the rest load. The notice suggests the closest name. Some terminals send `Ctrl+I` as `Tab`, `Ctrl+M` and `Ctrl+J` as `Enter`, `Ctrl+[` as `Esc` and `Ctrl+H` as `Backspace`: these are warned about and still applied.
 - User key sequences (like `gg`) are not supported.

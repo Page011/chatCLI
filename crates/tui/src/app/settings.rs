@@ -472,7 +472,7 @@ impl App {
             return Vec::new();
         }
         // Global Quit is checked last (`settings_global`): the page's own keys win.
-        let global = self.keys.lookup(Context::Global, chord);
+        let global = self.keys.lookup(Context::Common, chord);
         let Some(page) = self.settings_page.as_mut() else {
             return Vec::new();
         };
@@ -704,7 +704,7 @@ mod tests {
         let mut a = in_section(Section::Layout);
         let mut user = chatcli_core::settings::KeySettings::default();
         user.bindings
-            .entry("global".to_string())
+            .entry("common".to_string())
             .or_default()
             .insert("enter".to_string(), "quit".to_string());
         a.keys = Keymap::build(&user).0;
@@ -933,7 +933,7 @@ mod tests {
     #[test]
     fn the_keys_page_lists_actions_by_context_with_their_keys() {
         let mut a = in_section(Section::Keys);
-        assert_eq!(row_id(&a), keys_row(Context::Global, Action::Quit));
+        assert_eq!(row_id(&a), keys_row(Context::Common, Action::Quit));
         let rows = a.page_rows();
         assert_eq!(
             rows[0].value, "* marks a key you changed",
@@ -1136,9 +1136,9 @@ mod tests {
 
     #[test]
     fn a_locked_key_cannot_be_picked_away_and_a_keyless_action_says_so() {
-        let mut a = on_key_row(Context::Global, Action::Quit);
+        let mut a = on_key_row(Context::Common, Action::Quit);
         assert_eq!(
-            value_of(&a, keys_row(Context::Global, Action::Quit)),
+            value_of(&a, keys_row(Context::Common, Action::Quit)),
             "Ctrl+C"
         );
         press(&mut a, KeyCode::Char('d'));
@@ -1239,7 +1239,7 @@ mod tests {
         assert_eq!(p.error.as_deref(), Some("Esc always backs out here"));
         assert!(p.edit.is_some());
         assert!(b.take_setting_edits().is_empty());
-        let mut c = on_key_row(Context::Global, Action::Quit);
+        let mut c = on_key_row(Context::Common, Action::Quit);
         press(&mut c, KeyCode::Enter);
         press(&mut c, KeyCode::Backspace);
         assert_eq!(
@@ -1373,6 +1373,6 @@ mod tests {
         press(&mut a, KeyCode::Enter);
         assert_eq!(a.settings_page().unwrap().section, Section::Keys);
         press(&mut a, KeyCode::Enter);
-        assert_eq!(row_id(&a), keys_row(Context::Global, Action::Quit));
+        assert_eq!(row_id(&a), keys_row(Context::Common, Action::Quit));
     }
 }

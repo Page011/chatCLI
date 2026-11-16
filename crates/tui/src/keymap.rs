@@ -17,8 +17,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 /// Where a key is read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Context {
-    /// Fallback for every context except the modal ones.
-    Global,
+    /// `[keys.common]`: a key bound here works in every context its action applies to (see
+    /// `common_applies`), unless that context binds the key itself.
+    Common,
     /// The sign-in panel that replaces the chat view.
     Panel,
     /// Chat list focus.
@@ -36,14 +37,14 @@ pub enum Context {
     /// The "Open <host>? y/n" line for a link, "Delete for everyone? y/n", or the y/n before a
     /// file is sent.
     Confirm,
-    /// The help overlay. Modal: no `Global` fallback.
+    /// The help overlay.
     Help,
 }
 
 impl Context {
     /// Every context, in help and keys-page order.
     pub const ALL: [Context; 9] = [
-        Context::Global,
+        Context::Common,
         Context::Panel,
         Context::List,
         Context::Filter,
@@ -57,7 +58,7 @@ impl Context {
     /// The name used for the `[keys.<name>]` table.
     pub fn name(self) -> &'static str {
         match self {
-            Context::Global => "global",
+            Context::Common => "common",
             Context::Panel => "panel",
             Context::List => "list",
             Context::Filter => "filter",
@@ -76,7 +77,7 @@ impl Context {
     /// Heading in the help overlay.
     pub fn title(self) -> &'static str {
         match self {
-            Context::Global => "Everywhere",
+            Context::Common => "Everywhere",
             Context::Panel => "Sign-in panel",
             Context::List => "Chat list",
             Context::Filter => "Filter box",
@@ -88,18 +89,11 @@ impl Context {
         }
     }
 
-    /// Plain characters and Backspace edit text here, so a binding on them is refused.
-    /// `Global` counts: it is the fallback for every text context.
+    /// A box you type in: plain characters and Backspace edit text here, so this context's own
+    /// table refuses them as bindings, and a `[keys.common]` key that types a character is
+    /// skipped here.
     pub fn types_text(self) -> bool {
-        matches!(
-            self,
-            Context::Global | Context::Filter | Context::Composer | Context::Popup
-        )
-    }
-
-    /// A modal context never falls back to `Global`.
-    pub(crate) fn modal(self) -> bool {
-        matches!(self, Context::Help | Context::Popup | Context::Confirm)
+        matches!(self, Context::Filter | Context::Composer | Context::Popup)
     }
 }
 
@@ -413,6 +407,14 @@ impl KeyChord {
             .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
         no_mods && matches!(self.code, KeyCode::Char(_) | KeyCode::Backspace)
     }
+
+    /// A plain printable key: it types a character in a text box.
+    pub(crate) fn prints(&self) -> bool {
+        let no_mods = !self
+            .mods
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
+        no_mods && matches!(self.code, KeyCode::Char(_))
+    }
 }
 
 /// True once the terminal reports Shift and Ctrl on Enter: the Windows console always does, a
@@ -516,14 +518,27 @@ type Row = (Context, &'static str, Action);
 
 /// Everywhere, the sign-in panel, the boxes and overlays, and message selection.
 const COMMON: &[Row] = &[
-    (Context::Global, "ctrl+c", Action::Quit),
-    (Context::Global, "tab", Action::NextNetwork),
-    (Context::Global, "shift+tab", Action::PrevNetwork),
-    (Context::Global, "alt+1", Action::GotoNetwork1),
-    (Context::Global, "alt+2", Action::GotoNetwork2),
-    (Context::Global, "f1", Action::Help),
-    (Context::Global, "f2", Action::Settings),
-    (Context::Global, "ctrl+f", Action::Search),
+    (Context::Common, "ctrl+c", Action::Quit),
+    (Context::Common, "tab", Action::NextNetwork),
+    (Context::Common, "shift+tab", Action::PrevNetwork),
+    (Context::Common, "alt+1", Action::GotoNetwork1),
+    (Context::Common, "alt+2", Action::GotoNetwork2),
+    (Context::Common, "f1", Action::Help),
+    (Context::Common, "f2", Action::Settings),
+    (Context::Common, "ctrl+f", Action::Search),
+    // Editing, in every box you type in: the message box, the filter, the command bar, search,
+    // the emoji search and the file prompt.
+    (Context::Common, "left", Action::CursorLeft),
+    (Context::Common, "right", Action::CursorRight),
+    (Context::Common, "ctrl+left", Action::WordLeft),
+    (Context::Common, "ctrl+right", Action::WordRight),
+    (Context::Common, "home", Action::LineStart),
+    (Context::Common, "end", Action::LineEnd),
+    (Context::Common, "backspace", Action::DeleteBack),
+    (Context::Common, "delete", Action::DeleteForward),
+    (Context::Common, "ctrl+w", Action::DeleteWordBack),
+    (Context::Common, "ctrl+backspace", Action::DeleteWordBack),
+    (Context::Common, "ctrl+u", Action::ClearLine),
     (Context::Panel, "enter", Action::SignIn),
     (Context::Panel, "/", Action::CommandBar),
     (Context::Panel, "q", Action::Quit),
@@ -540,17 +555,15 @@ const COMMON: &[Row] = &[
     (Context::Help, "down", Action::ListDown),
     (Context::Help, "pgup", Action::ScrollUp),
     (Context::Help, "pgdn", Action::ScrollDown),
-    // The emoji picker (modal) and the `:shortcode` list (which reads only the popup_* rows).
+    // The overlays and the `:shortcode` list (which reads only the popup_* rows). Left and Right
+    // (from `common`) move through the emoji picker's grid.
     (Context::Popup, "up", Action::PopupUp),
     (Context::Popup, "down", Action::PopupDown),
     (Context::Popup, "enter", Action::PopupAccept),
     (Context::Popup, "tab", Action::PopupAccept),
     (Context::Popup, "esc", Action::PopupClose),
-    (Context::Popup, "left", Action::CursorLeft),
-    (Context::Popup, "right", Action::CursorRight),
     (Context::Popup, "pgup", Action::ScrollUp),
     (Context::Popup, "pgdn", Action::ScrollDown),
-    (Context::Popup, "backspace", Action::DeleteBack),
     (Context::Confirm, "y", Action::ConfirmYes),
     (Context::Confirm, "n", Action::ConfirmNo),
     (Context::Confirm, "esc", Action::ConfirmNo),
@@ -577,19 +590,8 @@ const COMMON: &[Row] = &[
     (Context::Select, "/", Action::CommandBar),
 ];
 
-/// Message-box editing, bound in `composer`.
-const EDIT_KEYS: &[(&str, Action)] = &[
-    ("left", Action::CursorLeft),
-    ("right", Action::CursorRight),
-    ("ctrl+left", Action::WordLeft),
-    ("ctrl+right", Action::WordRight),
-    ("home", Action::LineStart),
-    ("end", Action::LineEnd),
-    ("backspace", Action::DeleteBack),
-    ("delete", Action::DeleteForward),
-    ("ctrl+w", Action::DeleteWordBack),
-    ("ctrl+backspace", Action::DeleteWordBack),
-    ("ctrl+u", Action::ClearLine),
+/// The message box's own keys, bound in `composer` (its editing keys are in `common`).
+const COMPOSER_KEYS: &[(&str, Action)] = &[
     // Shift+Enter first: the footer shows it where the terminal reports the Shift (the Windows
     // console, or a terminal with the kitty keyboard protocol), else Ctrl+J, which reaches
     // chatcli in every terminal. Windows Terminal keeps Alt+Enter for fullscreen.
@@ -646,7 +648,11 @@ fn rows() -> Vec<Row> {
         .iter()
         .chain(CHATS.iter())
         .copied()
-        .chain(EDIT_KEYS.iter().map(|(k, a)| (Context::Composer, *k, *a)))
+        .chain(
+            COMPOSER_KEYS
+                .iter()
+                .map(|(k, a)| (Context::Composer, *k, *a)),
+        )
         .collect()
 }
 
@@ -656,6 +662,29 @@ fn builtin(key: &str) -> KeyChord {
 
 /// Actions with no default key that can still be bound: the keys page lists them too.
 const EXTRA: &[(Context, Action)] = &[(Context::List, Action::FilterStart)];
+
+/// Where a key bound to `action` in `[keys.common]` works: quitting everywhere; the tabs, help,
+/// settings, search and the command bar outside the overlays; the editing keys in every box you
+/// type in; any other action where chatcli itself binds it.
+pub(crate) fn common_applies(action: Action, ctx: Context) -> bool {
+    use Action::*;
+    use Context as C;
+    match action {
+        Quit => true,
+        NextNetwork | PrevNetwork | GotoNetwork1 | GotoNetwork2 | Help | Settings | Search
+        | CommandBar => matches!(
+            ctx,
+            C::Panel | C::List | C::Filter | C::Composer | C::Select
+        ),
+        CursorLeft | CursorRight | WordLeft | WordRight | LineStart | LineEnd | DeleteBack
+        | DeleteForward | DeleteWordBack | ClearLine => ctx.types_text(),
+        _ => {
+            ctx != C::Common
+                && (rows().iter().any(|r| r.0 == ctx && r.2 == action)
+                    || EXTRA.contains(&(ctx, action)))
+        }
+    }
+}
 
 /// The keys chatcli itself gives `action` in `ctx` (no user bindings).
 pub(crate) fn default_keys(ctx: Context, action: Action) -> Vec<KeyChord> {
@@ -737,21 +766,26 @@ impl Keymap {
             .map(|e| e.2)
     }
 
-    /// The action for a key: the context's own table, then `Global`. Ctrl+C is hard-wired.
+    /// The action for a key: the context's own table, then `[keys.common]`. Ctrl+C is hard-wired.
     pub fn lookup(&self, ctx: Context, chord: KeyChord) -> Option<Action> {
         if chord == CTRL_C {
             return Some(Action::Quit);
         }
-        self.find(ctx, chord).or_else(|| {
-            if ctx.modal() {
-                None
-            } else {
-                self.find(Context::Global, chord)
-            }
-        })
+        self.find(ctx, chord)
+            .or_else(|| self.common_for(ctx, chord))
     }
 
-    /// The single keys `action` has in exactly `ctx` (no `Global`), the first one being the one
+    /// What `[keys.common]` gives `chord` in `ctx`: only an action that applies there, and never a
+    /// key that types a character in a box you type in.
+    pub(crate) fn common_for(&self, ctx: Context, chord: KeyChord) -> Option<Action> {
+        if ctx == Context::Common || (ctx.types_text() && chord.prints()) {
+            return None;
+        }
+        self.find(Context::Common, chord)
+            .filter(|a| common_applies(*a, ctx))
+    }
+
+    /// The single keys `action` has in exactly `ctx` (not `[keys.common]`), the first one being the one
     /// hints show. Sequences are not listed.
     pub(crate) fn keys_in(&self, ctx: Context, action: Action) -> Vec<KeyChord> {
         self.single
@@ -780,7 +814,7 @@ impl Keymap {
             .collect()
     }
 
-    /// The action `chord` has in exactly `ctx`: no `Global` fallback. For a table that is read
+    /// The action `chord` has in exactly `ctx`: no `[keys.common]` fallback. For a table that is read
     /// on top of another context (the `:shortcode` list over the message box).
     pub fn lookup_in(&self, ctx: Context, chord: KeyChord) -> Option<Action> {
         self.find(ctx, chord)
@@ -812,7 +846,7 @@ impl Keymap {
         Step::Unbound
     }
 
-    /// Keys of `action` in `ctx` (then `Global`), as display text, in priority order.
+    /// Keys of `action` in `ctx` (then `[keys.common]`), as display text, in priority order.
     pub fn keys_for(&self, ctx: Context, action: Action) -> Vec<String> {
         self.chords_for(ctx, action)
             .iter()
@@ -825,10 +859,14 @@ impl Keymap {
             .single
             .iter()
             .filter(|(c, _, a)| *c == ctx && *a == action);
-        let global = self.single.iter().filter(|(c, _, a)| {
-            !ctx.modal() && ctx != Context::Global && *c == Context::Global && *a == action
+        // The common keys that reach `action` here: not shadowed by this context's own table.
+        let common = self.single.iter().filter(|(c, k, a)| {
+            *c == Context::Common
+                && *a == action
+                && self.find(ctx, *k).is_none()
+                && self.common_for(ctx, *k) == Some(action)
         });
-        own.chain(global).map(|(_, k, _)| *k).collect()
+        own.chain(common).map(|(_, k, _)| *k).collect()
     }
 
     /// Footer text for a group of actions: the first key of each that this terminal can send,
@@ -897,10 +935,14 @@ impl Keymap {
             };
             let Some(ctx) = Context::from_name(ctx_name) else {
                 let names: Vec<&str> = Context::ALL.iter().map(|c| c.name()).collect();
-                let hint = closest(ctx_name, names.iter().copied())
-                    .map_or(format!("use one of {}", names.join(", ")), |c| {
-                        format!("did you mean [keys.{c}]?")
-                    });
+                let hint = if ctx_name == "global" {
+                    "[keys.global] is now [keys.common].".to_string()
+                } else {
+                    closest(ctx_name, names.iter().copied())
+                        .map_or(format!("use one of {}", names.join(", ")), |c| {
+                            format!("did you mean [keys.{c}]?")
+                        })
+                };
                 problems.push(problem(
                     Severity::Error,
                     None,
@@ -967,10 +1009,7 @@ impl Keymap {
                     problems.push(problem(
                         Severity::Error,
                         key,
-                        format!(
-                            "would stop typing in the text boxes: bind a Ctrl or Alt key instead. Skipping this binding.{}",
-                            if ctx == Context::Global { " [global] is used by every box." } else { "" }
-                        ),
+                        "would stop typing in this box: bind a Ctrl or Alt key instead, or put it in [keys.common], which skips the boxes you type in. Skipping this binding.".to_string(),
                     ));
                     continue;
                 }
@@ -1319,15 +1358,11 @@ mod tests {
                 let key = ev(KeyCode::Char(c), KeyModifiers::NONE);
                 assert_eq!(map.step(ctx, None, key), Step::Unbound, "{ctx:?} {c}");
             }
-            // Backspace is an action (delete_back) in the message box, so a rebinding can move
-            // it; in the filter it is still plain typing.
+            // Backspace is an action (delete_back, from `common`) in every box, so a rebinding can
+            // move it.
             assert_eq!(
                 map.step(ctx, None, ev(KeyCode::Backspace, KeyModifiers::NONE)),
-                if ctx == Context::Composer {
-                    Step::Action(Action::DeleteBack)
-                } else {
-                    Step::Unbound
-                }
+                Step::Action(Action::DeleteBack)
             );
         }
     }
@@ -1547,7 +1582,6 @@ mod tests {
             ("composer", "space"),
             ("filter", "backspace"),
             ("popup", "a"),
-            ("global", "x"),
         ] {
             let (map, problems) = build(&[(ctx, key, "refresh")]);
             assert_eq!(problems.len(), 1, "{ctx} {key}: {problems:?}");
@@ -1567,6 +1601,82 @@ mod tests {
         assert!(
             p.iter().all(|p| !p.message.contains("stop typing")),
             "{p:?}"
+        );
+    }
+
+    #[test]
+    fn a_common_key_works_where_its_action_applies_and_never_where_you_type() {
+        let (map, problems) = build(&[("common", "z", "refresh"), ("common", "ctrl+y", "pin")]);
+        assert!(problems.is_empty(), "{problems:?}");
+        // Refresh applies in the chat list (it has a key there): z refreshes there.
+        assert_eq!(map.lookup(Context::List, k("z")), Some(Action::Refresh));
+        // In a box you type in, a printable common key types instead.
+        assert_eq!(map.lookup(Context::Filter, k("z")), None);
+        assert_eq!(map.lookup(Context::Composer, k("z")), None);
+        // Where refresh means nothing (help), the key does nothing.
+        assert_eq!(map.lookup(Context::Help, k("z")), None);
+        // A context's own key wins over the common one.
+        let (map, _) = build(&[("common", "p", "refresh")]);
+        assert_eq!(map.lookup(Context::List, k("p")), Some(Action::Pin));
+        // The tabs keys stay out of the overlays.
+        let map = Keymap::default();
+        assert_eq!(
+            map.lookup(Context::List, k("tab")),
+            Some(Action::NextNetwork)
+        );
+        for ctx in [Context::Help, Context::Popup, Context::Confirm] {
+            assert_eq!(
+                map.lookup(ctx, k("tab")),
+                (ctx == Context::Popup).then_some(Action::PopupAccept),
+                "{ctx:?}"
+            );
+            assert_eq!(map.lookup(ctx, k("ctrl+f")), None, "{ctx:?}");
+        }
+    }
+
+    #[test]
+    fn the_editing_keys_work_in_every_box_and_nowhere_else() {
+        let map = Keymap::default();
+        for ctx in [Context::Filter, Context::Composer, Context::Popup] {
+            for (key, want) in [
+                ("ctrl+backspace", Action::DeleteWordBack),
+                ("ctrl+w", Action::DeleteWordBack),
+                ("ctrl+left", Action::WordLeft),
+                ("delete", Action::DeleteForward),
+                ("ctrl+u", Action::ClearLine),
+            ] {
+                assert_eq!(map.lookup(ctx, k(key)), Some(want), "{ctx:?} {key}");
+            }
+        }
+        for ctx in [
+            Context::List,
+            Context::Select,
+            Context::Help,
+            Context::Panel,
+        ] {
+            assert_eq!(map.lookup(ctx, k("ctrl+w")), None, "{ctx:?}");
+        }
+        // The chat list and selection keep their own Home and End.
+        assert_eq!(map.lookup(Context::List, k("home")), Some(Action::ListTop));
+        assert_eq!(
+            map.lookup(Context::Select, k("end")),
+            Some(Action::SelectLast)
+        );
+        assert_eq!(
+            map.hint(Context::Filter, &[Action::DeleteWordBack])
+                .as_deref(),
+            Some("Ctrl+W")
+        );
+    }
+
+    #[test]
+    fn the_old_global_table_names_its_new_name() {
+        let (_, problems) = build(&[("global", "f6", "next_network")]);
+        assert!(
+            problems[0]
+                .message
+                .contains("[keys.global] is now [keys.common]"),
+            "{problems:?}"
         );
     }
 
@@ -1654,7 +1764,7 @@ mod tests {
         assert_eq!(
             ctxs,
             [
-                Context::Global,
+                Context::Common,
                 Context::Panel,
                 Context::List,
                 Context::Filter,

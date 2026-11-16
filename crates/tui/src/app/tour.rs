@@ -252,7 +252,7 @@ mod tests {
     fn user_app() -> App {
         // The user moved `next_network` from Tab to F6.
         let mut s = Settings::default();
-        let global = s.keys.bindings.entry("global".to_string()).or_default();
+        let global = s.keys.bindings.entry("common".to_string()).or_default();
         global.insert("f6".to_string(), "next_network".to_string());
         global.insert("tab".to_string(), "unbound".to_string());
         App::with_settings(
@@ -293,6 +293,6 @@ mod tests {
         ));
         assert!(!app.tour_running());
         assert_eq!(app.keys().user_bindings(), own);
-        assert_eq!(app.settings.keys.bindings["global"]["f6"], "next_network");
+        assert_eq!(app.settings.keys.bindings["common"]["f6"], "next_network");
     }
 }

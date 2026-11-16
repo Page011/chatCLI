@@ -17,9 +17,9 @@
 ║/quit                            quit chatcli                                 ║
 ║                                                                              ║
 ║Everywhere                                                                    ║
-║Ctrl+C    Quit              quit chatcli                                      ║
-║Tab       Next network      switch to the next network tab                    ║
-║lines 1-18 of 119                                                             ║
+║Ctrl+C                 Quit              quit chatcli                         ║
+║Tab                    Next network      switch to the next network tab       ║
+║lines 1-18 of 116                                                             ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 Esc close  Up/Down scroll  PgUp/PgDn page
 --- styled runs (everything else is default style) ---
@@ -58,9 +58,9 @@ row 15 cols 32-58: fg=DarkGray bg=Reset NONE
 row 16 cols 1-14: fg=Reset bg=Reset BOLD
 row 16 cols 32-45: fg=DarkGray bg=Reset NONE
 row 18 cols 1-10: fg=Reset bg=Reset BOLD
-row 19 cols 1-9: fg=Reset bg=Reset BOLD
-row 19 cols 27-40: fg=DarkGray bg=Reset NONE
-row 20 cols 1-9: fg=Reset bg=Reset BOLD
-row 20 cols 27-58: fg=DarkGray bg=Reset NONE
+row 19 cols 1-22: fg=Reset bg=Reset BOLD
+row 19 cols 40-53: fg=DarkGray bg=Reset NONE
+row 20 cols 1-22: fg=Reset bg=Reset BOLD
+row 20 cols 40-71: fg=DarkGray bg=Reset NONE
 row 21 cols 1-17: fg=Reset bg=Reset DIM
 row 23 cols 0-40: fg=Reset bg=Reset DIM

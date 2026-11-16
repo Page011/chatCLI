@@ -397,7 +397,7 @@ impl App {
     }
 
     /// Runs the query again after the text changed. A failure is shown in the box and as a notice.
-    fn search_rerun(&mut self) {
+    pub(super) fn search_rerun(&mut self) {
         let rows = ui::search_geometry(self.layout_in(self.size).body).map_or(1, |g| g.rows);
         let (Some(s), Some(store)) = (self.search.as_mut(), self.store.as_ref()) else {
             return;
@@ -412,13 +412,6 @@ impl App {
     pub(super) fn search_type(&mut self, text: &str) {
         if let Some(s) = self.search.as_mut() {
             s.query.insert_str(text);
-            self.search_rerun();
-        }
-    }
-
-    pub(super) fn search_backspace(&mut self) {
-        if let Some(s) = self.search.as_mut() {
-            s.query.delete_back();
             self.search_rerun();
         }
     }

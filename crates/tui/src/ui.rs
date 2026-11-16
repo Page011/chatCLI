@@ -902,7 +902,7 @@ pub(crate) fn help_rows(app: &App) -> Vec<HelpRow> {
         rows.push(HelpRow::Entry {
             keys: format!("/{}", c.name),
             name: action
-                .and_then(|a| app.keys().keys_for(Context::Global, a).into_iter().next())
+                .and_then(|a| app.keys().keys_for(Context::Common, a).into_iter().next())
                 .unwrap_or_default(),
             doc: c.doc,
         });

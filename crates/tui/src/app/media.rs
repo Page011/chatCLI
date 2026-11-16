@@ -572,13 +572,6 @@ impl App {
         self.attach_refresh();
     }
 
-    pub(super) fn attach_backspace(&mut self) {
-        if let Some(a) = self.media.attach.as_mut() {
-            a.input.delete_back();
-        }
-        self.attach_refresh();
-    }
-
     /// Tab: finish the highlighted entry (a folder gets a separator, so its content lists next).
     pub(super) fn attach_complete(&mut self) {
         let base = self.attach_base();

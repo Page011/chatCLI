@@ -1288,10 +1288,6 @@ impl App {
         let n = self.active;
         let typed = typed_char(key);
         match (ctx, key.code, typed) {
-            (Context::Filter, KeyCode::Backspace, _) => {
-                self.ns_mut(n).filter.delete_back();
-                self.fix_selection(n, true);
-            }
             (Context::Filter, _, Some(c)) => {
                 self.ns_mut(n).filter.insert_char(c);
                 self.fix_selection(n, true);
@@ -1364,28 +1360,35 @@ impl App {
             Action::PopupUp | Action::PopupDown | Action::PopupAccept | Action::PopupClose => {
                 return self.popup_action(action, ctx);
             }
-            Action::DeleteBack if ctx == Context::Popup && self.palette.is_some() => {
-                self.palette_backspace();
-            }
             Action::ScrollUp | Action::ScrollDown
                 if ctx == Context::Popup && self.palette.is_some() =>
             {
                 self.palette_page(action == Action::ScrollUp);
-            }
-            Action::CursorLeft | Action::CursorRight
-                if ctx == Context::Popup && self.palette.is_some() => {}
-            Action::DeleteBack if ctx == Context::Popup && self.search.is_some() => {
-                self.search_backspace();
             }
             Action::ScrollUp | Action::ScrollDown
                 if ctx == Context::Popup && self.search.is_some() =>
             {
                 self.search_page(action == Action::ScrollUp);
             }
-            Action::CursorLeft | Action::CursorRight | Action::DeleteBack
-                if ctx == Context::Popup =>
+            // Left and Right move through the emoji grid; the other editing keys edit its search.
+            Action::CursorLeft | Action::CursorRight
+                if ctx == Context::Popup && self.line_box_is_picker() =>
             {
-                self.picker_edit(action);
+                self.picker_step(if action == Action::CursorLeft { -1 } else { 1 }, 0);
+            }
+            Action::CursorLeft
+            | Action::CursorRight
+            | Action::WordLeft
+            | Action::WordRight
+            | Action::LineStart
+            | Action::LineEnd
+            | Action::DeleteBack
+            | Action::DeleteForward
+            | Action::DeleteWordBack
+            | Action::ClearLine
+                if matches!(ctx, Context::Popup | Context::Filter) =>
+            {
+                self.line_edit(action);
             }
             Action::ScrollUp | Action::ScrollDown if ctx == Context::Popup => {
                 if let Some(p) = self.picker.as_mut() {
@@ -1716,25 +1719,70 @@ impl App {
     }
 
     /// Left, right and Backspace inside the picker: move a cell, or edit the search text.
-    fn picker_edit(&mut self, action: Action) {
-        // The path prompt shares the picker's keys: Backspace edits its text, the arrows do
-        // nothing (the cursor always sits at the end).
+    /// The one-line box that takes the editing keys: the open overlay's text (the command bar,
+    /// search, the file prompt or the emoji search), else the chat filter while it has focus. The
+    /// message box edits through `edit`.
+    fn line_box(&mut self) -> Option<&mut TextInput> {
+        if self.palette.is_some() {
+            return self.palette.as_mut().map(|p| &mut p.query);
+        }
+        if self.search.is_some() {
+            return self.search.as_mut().map(|s| &mut s.query);
+        }
         if self.media.attach.is_some() {
-            if action == Action::DeleteBack {
-                self.attach_backspace();
-            }
+            return self.media.attach.as_mut().map(|a| &mut a.input);
+        }
+        if self.picker.is_some() {
+            return self.picker.as_mut().map(|p| &mut p.query);
+        }
+        let n = self.active;
+        let ns = self.ns_mut(n);
+        (ns.focus == Focus::Filter).then_some(&mut ns.filter)
+    }
+
+    /// True when the emoji picker's search is the box `line_box` edits.
+    fn line_box_is_picker(&self) -> bool {
+        self.picker.is_some()
+            && self.palette.is_none()
+            && self.search.is_none()
+            && self.media.attach.is_none()
+    }
+
+    /// An editing key in the one-line box. A change of text refreshes what follows it: the
+    /// command bar's list, the search hits, the file candidates, the emoji grid or the chat list.
+    fn line_edit(&mut self, action: Action) {
+        let Some(b) = self.line_box() else {
+            return;
+        };
+        let before = b.text().to_string();
+        match action {
+            Action::CursorLeft => b.left(),
+            Action::CursorRight => b.right(),
+            Action::WordLeft => b.word_left(),
+            Action::WordRight => b.word_right(),
+            Action::LineStart => b.line_start(),
+            Action::LineEnd => b.line_end(),
+            Action::DeleteBack => b.delete_back(),
+            Action::DeleteForward => b.delete_forward(),
+            Action::DeleteWordBack => b.delete_word_back(),
+            Action::ClearLine => b.clear_line(),
+            _ => return,
+        }
+        if b.text() == before {
             return;
         }
-        match action {
-            Action::CursorLeft => self.picker_step(-1, 0),
-            Action::CursorRight => self.picker_step(1, 0),
-            _ => {
-                if let Some(p) = self.picker.as_mut() {
-                    p.query.delete_back();
-                    p.sel = 0;
-                    p.top = 0;
-                }
-            }
+        if let Some(p) = self.palette.as_mut() {
+            p.sel = 0;
+            p.top = 0;
+        } else if self.search.is_some() {
+            self.search_rerun();
+        } else if self.media.attach.is_some() {
+            self.attach_refresh();
+        } else if let Some(p) = self.picker.as_mut() {
+            p.sel = 0;
+            p.top = 0;
+        } else {
+            self.fix_selection(self.active, true);
         }
     }
 
@@ -3022,6 +3070,41 @@ mod tests {
     }
 
     #[test]
+    fn the_editing_keys_work_in_the_filter_and_the_command_bar() {
+        let mut app = filter_app();
+        app.handle_key(key(KeyCode::Char('f')));
+        type_text(&mut app, "sam exa");
+        app.handle_key(ctrl('w'));
+        assert_eq!(app.active().filter, "sam ");
+        app.handle_key(key_mod(KeyCode::Backspace, KeyModifiers::CONTROL));
+        assert_eq!(app.active().filter, "");
+        type_text(&mut app, "am");
+        app.handle_key(key(KeyCode::Home));
+        type_text(&mut app, "s");
+        assert_eq!(app.active().filter, "sam");
+        assert_eq!(
+            app.active().selected.as_deref(),
+            Some("b"),
+            "the list follows the edited filter"
+        );
+        app.handle_key(key(KeyCode::Esc));
+        // The command bar: Left moves the cursor, typing goes in there, and the list follows.
+        app.handle_key(key(KeyCode::Char('/')));
+        type_text(&mut app, "seting");
+        for _ in 0..3 {
+            app.handle_key(key(KeyCode::Left));
+        }
+        type_text(&mut app, "t");
+        assert_eq!(app.palette().unwrap().query, "setting");
+        app.handle_key(key(KeyCode::End));
+        app.handle_key(key(KeyCode::Backspace));
+        assert_eq!(app.palette().unwrap().query, "settin");
+        app.handle_key(ctrl('u'));
+        assert_eq!(app.palette().unwrap().query, "");
+        assert_eq!(app.palette_items().len(), commands::COMMANDS.len());
+    }
+
+    #[test]
     fn ctrl_c_quits_from_every_context() {
         // Panel
         let mut app = App::new(clock());
@@ -3058,7 +3141,7 @@ mod tests {
     fn ctrl_c_cannot_be_rebound_by_the_user() {
         let s = settings_with(&[
             ("list", "ctrl+c", "refresh"),
-            ("global", "ctrl+c", "unbound"),
+            ("common", "ctrl+c", "unbound"),
         ]);
         let mut app = online(App::with_settings(clock(), &s));
         app.handle_key(ctrl('c'));

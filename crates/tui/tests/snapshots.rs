@@ -669,7 +669,7 @@ fn rebinding_changes_help_and_footer() {
         "{footer}"
     );
     press(&mut app, KeyCode::Char('?'));
-    let help = render(&mut app, 100, 40);
+    let help = render(&mut app, 100, 60);
     assert!(help.contains("Ctrl+N, Down"), "{help}");
     assert!(help.contains("4 user bindings"), "{help}");
     // The unbound `q` quits no more, Ctrl+Q does.
@@ -2887,7 +2887,7 @@ fn settings_whatsapp() {
 /// tests below check the footer names `refresh`, so a reordered page fails loudly).
 fn keys_app() -> App {
     let mut app = settings_app(6, true);
-    for _ in 0..18 {
+    for _ in 0..28 {
         press(&mut app, KeyCode::Down);
     }
     app
@@ -2999,13 +2999,13 @@ fn the_new_screens_under_no_colour_and_high_contrast() {
 #[test]
 fn key_capture_refused() {
     at_sizes("key_capture_refused", &[(80, 24)], || {
-        // The first Everywhere row (quit): a plain key would stop typing everywhere.
+        // The first Everywhere row (quit), and a key settings.toml has no name for.
         let mut app = settings_app(6, true);
         press(&mut app, KeyCode::Down);
         press(&mut app, KeyCode::Enter);
-        press(&mut app, KeyCode::Char('x'));
+        press(&mut app, KeyCode::Null);
         let got = render(&mut app, 80, 24);
-        assert!(got.contains("x types text here"), "{got}");
+        assert!(got.contains("This key cannot be saved"), "{got}");
         app
     });
 }

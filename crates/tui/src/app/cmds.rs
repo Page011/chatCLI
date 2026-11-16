@@ -141,14 +141,6 @@ impl App {
         }
     }
 
-    pub(super) fn palette_backspace(&mut self) {
-        if let Some(p) = self.palette.as_mut() {
-            p.query.delete_back();
-            p.sel = 0;
-            p.top = 0;
-        }
-    }
-
     /// Page keys: about a screenful, clamped.
     pub(super) fn palette_page(&mut self, up: bool) {
         let len = self.palette_items().len();

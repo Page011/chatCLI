@@ -10,16 +10,16 @@
 │About           │║Help                F1                                      ║
 │                │║Settings            F2                                      ║
 │                │║Search              Ctrl+F                                  ║
-│                │║Sign-in panel                                               ║
-│                │║Sign in             Enter                                   ║
-│                │║Command bar         /                                       ║
-│                │║Quit                q                                       ║
-│                │║Help                ?                                       ║
-│                │║Chat list                                                   ║
-│                │║List up             Up, k                                   ║
-│                │║List down           Down, j                                 ║
-│                │║List top            Home                                    ║
-│                │║x types text here: use a Ctrl or Alt key                    ║
+│                │║Cursor left         Left                                    ║
+│                │║Cursor right        Right                                   ║
+│                │║Word left           Ctrl+Left                               ║
+│                │║Word right          Ctrl+Right                              ║
+│                │║Line start          Home                                    ║
+│                │║Line end            End                                     ║
+│                │║Delete back         Backspace                               ║
+│                │║Delete forward      Delete                                  ║
+│                │║Delete word back    Ctrl+W, Ctrl+Backspace                  ║
+│                │║This key cannot be saved: pick another                      ║
 └────────────────┘╚════════════════════════════════════════════════════════════╝
 Press the new key for Next network (Esc cancels, Backspace removes)
 --- styled runs (everything else is default style) ---
@@ -33,7 +33,5 @@ row 2 cols 19-43: fg=Reset bg=Reset DIM
 row 3 cols 19-28: fg=Reset bg=Reset BOLD
 row 5 cols 19-78: fg=Reset bg=Reset BOLD | REVERSED
 row 8 cols 1-16: fg=Reset bg=Reset BOLD
-row 12 cols 19-31: fg=Reset bg=Reset BOLD
-row 17 cols 19-27: fg=Reset bg=Reset BOLD
-row 21 cols 19-58: fg=Red bg=Reset NONE
+row 21 cols 19-56: fg=Red bg=Reset NONE
 row 23 cols 0-66: fg=Reset bg=Reset BOLD

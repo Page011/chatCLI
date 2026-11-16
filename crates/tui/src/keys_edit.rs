@@ -10,7 +10,9 @@ use std::collections::BTreeMap;
 use chatcli_core::settings::{KeySettings, SettingEdit, SettingValue, Severity};
 use crossterm::event::{KeyCode, KeyModifiers};
 
-use crate::keymap::{default_keys, parse_key, Action, Context, KeyChord, Keymap, CTRL_C};
+use crate::keymap::{
+    common_applies, default_keys, parse_key, Action, Context, KeyChord, Keymap, CTRL_C,
+};
 
 /// Esc on these actions backs out of something: it can never be moved or removed, so the user
 /// always has a way out.
@@ -286,12 +288,16 @@ pub(crate) fn capture_add(keys: &Keymap, ctx: Context, action: Action, k: KeyCho
 }
 
 /// How a new `k` for `action` in `ctx` would overlap bindings that are live at the same time.
-/// A context reads its own keys, then `Global` (unless modal), so only those pairs can clash.
+/// A context reads its own keys, then `[keys.common]` (where its action applies), so only those
+/// pairs can clash.
 fn overlaps(keys: &Keymap, ctx: Context, action: Action, k: KeyChord) -> Vec<String> {
     let mut out = Vec::new();
-    if ctx == Context::Global {
+    if ctx == Context::Common {
         for c in Context::ALL {
-            if c == Context::Global || c.modal() {
+            let reaches = c != Context::Common
+                && common_applies(action, c)
+                && !(c.types_text() && k.prints());
+            if !reaches {
                 continue;
             }
             if let Some(other) = keys.find(c, k) {
@@ -308,15 +314,13 @@ fn overlaps(keys: &Keymap, ctx: Context, action: Action, k: KeyChord) -> Vec<Str
             }
         }
     } else {
-        if !ctx.modal() {
-            if let Some(other) = keys.find(Context::Global, k) {
-                out.push(format!(
-                    "is {} everywhere: in {} it will be {} instead",
-                    other.label(),
-                    ctx.title(),
-                    action.label()
-                ));
-            }
+        if let Some(other) = keys.common_for(ctx, k) {
+            out.push(format!(
+                "is {} everywhere: in {} it will be {} instead",
+                other.label(),
+                ctx.title(),
+                action.label()
+            ));
         }
         let seqs = keys.sequences_from(ctx, k);
         if !seqs.is_empty() {
@@ -555,15 +559,15 @@ mod tests {
     fn a_locked_first_key_stays_and_the_new_key_is_added() {
         let u = KeySettings::default();
         let map = keymap(&u);
-        let (new, edits) = bind(&map, &u, Context::Global, Action::Quit, k("ctrl+q")).unwrap();
-        assert_eq!(edits, vec![set("keys.global", "ctrl+q", "quit")]);
+        let (new, edits) = bind(&map, &u, Context::Common, Action::Quit, k("ctrl+q")).unwrap();
+        assert_eq!(edits, vec![set("keys.common", "ctrl+q", "quit")]);
         let after = keymap(&new);
         assert_eq!(
-            after.lookup(Context::Global, k("ctrl+q")),
+            after.lookup(Context::Common, k("ctrl+q")),
             Some(Action::Quit)
         );
         assert_eq!(
-            after.lookup(Context::Global, k("ctrl+c")),
+            after.lookup(Context::Common, k("ctrl+c")),
             Some(Action::Quit)
         );
         // The same for Esc on a cancel action.
@@ -587,7 +591,7 @@ mod tests {
             "Esc always backs out here"
         );
         assert_eq!(
-            remove_first(&map, &u, Context::Global, Action::Quit).unwrap_err(),
+            remove_first(&map, &u, Context::Common, Action::Quit).unwrap_err(),
             "Ctrl+C always quits"
         );
         // Nothing bound: nothing to do.
@@ -672,14 +676,14 @@ mod tests {
         let u = user(&[("list", "ctrl+g", "refresh")]);
         let map = keymap(&u);
         let Adding::Overlaps(note) =
-            capture_add(&map, Context::Global, Action::Search, k("ctrl+g"))
+            capture_add(&map, Context::Common, Action::Search, k("ctrl+g"))
         else {
             panic!("expected an overlap warning");
         };
         assert_eq!(note, "Ctrl+G is Refresh in Chat list, which wins there");
-        let (new, _) = add(&u, Context::Global, Action::Search, k("ctrl+g")).unwrap();
+        let (new, _) = add(&u, Context::Common, Action::Search, k("ctrl+g")).unwrap();
         assert_eq!(
-            keymap(&new).keys_in(Context::Global, Action::Search),
+            keymap(&new).keys_in(Context::Common, Action::Search),
             vec![k("ctrl+g"), k("ctrl+f")]
         );
     }
@@ -710,7 +714,7 @@ mod tests {
         );
         // Locked keys stay, with the reason.
         assert_eq!(
-            remove_key(&u, Context::Global, Action::Quit, k("ctrl+c")).unwrap_err(),
+            remove_key(&u, Context::Common, Action::Quit, k("ctrl+c")).unwrap_err(),
             "Ctrl+C always quits"
         );
         assert_eq!(

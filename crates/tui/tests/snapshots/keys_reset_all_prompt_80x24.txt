@@ -1,14 +1,14 @@
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
-┌ Settings ──────┐╔ Keys - Suggestions, pickers and search ════════════════════╗
-│Appearance      │║Popup up            Up                                      ║
-│Layout          │║Popup down          Down                                    ║
-│Notifications   │║Popup accept        Enter, Tab                              ║
-│Media           │║Popup close         Esc                                     ║
-│Teams           │║Cursor left         Left                                    ║
-│WhatsApp        │║Cursor right        Right                                   ║
-│Keys            │║Scroll up           PgUp                                    ║
-│About           │║Scroll down         PgDn                                    ║
-│                │║Delete back         Backspace                               ║
+┌ Settings ──────┐╔ Keys - Message selection ══════════════════════════════════╗
+│Appearance      │║Help                ?                                       ║
+│Layout          │║Command bar         /                                       ║
+│Notifications   │║Suggestions, pickers and search                             ║
+│Media           │║Popup up            Up                                      ║
+│Teams           │║Popup down          Down                                    ║
+│WhatsApp        │║Popup accept        Enter, Tab                              ║
+│Keys            │║Popup close         Esc                                     ║
+│About           │║Scroll up           PgUp                                    ║
+│                │║Scroll down         PgDn                                    ║
 │                │║Confirm (link, delete, mark read)                           ║
 │                │║Confirm yes         y                                       ║
 │                │║Confirm no          n, Esc                                  ║
@@ -28,7 +28,8 @@ row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
 row 0 cols 27-34: fg=Reset bg=Reset BOLD
 row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
 row 0 cols 69-79: fg=Reset bg=Reset DIM
-row 1 cols 19-58: fg=Reset bg=Reset BOLD
+row 1 cols 19-44: fg=Reset bg=Reset BOLD
+row 4 cols 19-49: fg=Reset bg=Reset BOLD
 row 8 cols 1-16: fg=Reset bg=Reset BOLD
 row 11 cols 19-51: fg=Reset bg=Reset BOLD
 row 14 cols 19-27: fg=Reset bg=Reset BOLD
