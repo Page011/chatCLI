@@ -168,7 +168,7 @@ actions! {
     OpenLink "open_link" "open a link from the selected message (chat list: from the newest message that has one)",
     ConfirmYes "confirm_yes" "yes: open the link, delete the message, send the file or mark all read",
     ConfirmNo "confirm_no" "no, do not open it, delete it or send it",
-    JumpBack "jump_back" "back to the message selected before the last big jump (G, g g, H, M, L)",
+    JumpBack "jump_back" "back to the message selected before the last big jump (G, g, H, M, L)",
     SelectMessages "select_messages" "select a message in the open chat",
     Reply "reply" "reply to the selected message (quote it)",
     CancelReply "cancel_reply" "drop the reply or edit in the message box (back does it too)",
@@ -534,6 +534,7 @@ const COMMON: &[Row] = &[
     (Context::Common, "k", Action::Up),
     (Context::Common, "down", Action::Down),
     (Context::Common, "j", Action::Down),
+    (Context::Common, "g", Action::Top),
     (Context::Common, "G", Action::Bottom),
     (Context::Common, "pgup", Action::PageUp),
     (Context::Common, "pgdn", Action::PageDown),
@@ -611,9 +612,9 @@ const OWN: &[Row] = &[
     (Context::Help, "home", Action::Top),
     (Context::Help, "end", Action::Bottom),
 ];
-/// Two-key sequences (`g g`), held until the second key; no timer. One in `common` works where
-/// its action applies, like a single key there.
-const SEQUENCES: &[(Context, &str, &str, Action)] = &[(Context::Common, "g", "g", Action::Top)];
+/// Two-key sequences, held until the second key; no timer. One in `common` works where its action
+/// applies, like a single key there. None are bound by default (`g` alone goes to the top).
+const SEQUENCES: &[(Context, &str, &str, Action)] = &[];
 
 /// Every built-in single-key binding, in display order.
 fn rows() -> Vec<Row> {
@@ -1457,10 +1458,35 @@ mod tests {
         assert_eq!(map.lookup(Context::Select, k("v")), Some(Action::ViewImage));
     }
 
-    /// `g g` is bound in `common`: it works where `top` applies and never where `g` types.
+    /// `g` and `G` are in `common`: top and bottom where they apply, typed text where you type.
     #[test]
-    fn the_common_sequence_works_where_its_action_applies() {
+    fn g_goes_to_the_top_and_never_where_you_type() {
         let map = Keymap::default();
+        for ctx in [Context::List, Context::Select, Context::Help] {
+            assert_eq!(
+                map.step(ctx, None, k("g")),
+                Step::Action(Action::Top),
+                "{ctx:?}"
+            );
+            assert_eq!(
+                map.step(ctx, None, k("G")),
+                Step::Action(Action::Bottom),
+                "{ctx:?}"
+            );
+        }
+        for ctx in [Context::Filter, Context::Composer, Context::Popup] {
+            assert_eq!(map.step(ctx, None, k("g")), Step::Unbound, "{ctx:?}");
+        }
+    }
+
+    /// A sequence in `common` (none are built in now, so one is added by hand): it works where
+    /// its action applies and never where its first key types.
+    #[test]
+    fn a_common_sequence_works_where_its_action_applies() {
+        let mut map = Keymap::default();
+        map.single
+            .retain(|(_, k, _)| *k != super::parse_key("g").unwrap());
+        map.seq.push((Context::Common, k("g"), k("g"), Action::Top));
         for ctx in [Context::List, Context::Select, Context::Help] {
             assert_eq!(map.step(ctx, None, k("g")), Step::Pending, "{ctx:?}");
             assert_eq!(
@@ -1483,20 +1509,10 @@ mod tests {
             map.sequences_in(Context::Common, Action::Top),
             vec!["g g".to_string()]
         );
-        // A single key on g replaces the sequence: in one context, or everywhere.
-        let (map, _) = build(&[("list", "g", "refresh")]);
-        assert_eq!(
-            map.step(Context::List, None, k("g")),
-            Step::Action(Action::Refresh)
-        );
-        assert_eq!(map.step(Context::Select, None, k("g")), Step::Pending);
-        let (map, problems) = build(&[("common", "g", "top")]);
-        assert_eq!(problems.len(), 1, "{problems:?}");
-        assert!(problems[0].message.contains("starts two-key sequences"));
-        assert_eq!(
-            map.step(Context::Select, None, k("g")),
-            Step::Action(Action::Top)
-        );
+        // A context's `unbound` for the first key hides it there.
+        map.hidden.push((Context::Select, k("g")));
+        assert_eq!(map.step(Context::Select, None, k("g")), Step::Unbound);
+        assert_eq!(map.step(Context::List, None, k("g")), Step::Pending);
     }
 
     /// Typing must win in text contexts: `q` types in the filter and the message box.
@@ -1753,7 +1769,10 @@ mod tests {
         assert_eq!(map.lookup(Context::List, k("j")), Some(Action::Down));
         let (map, _) = build(&[("select", "g", "unbound")]);
         assert_eq!(map.step(Context::Select, None, k("g")), Step::Unbound);
-        assert_eq!(map.step(Context::List, None, k("g")), Step::Pending);
+        assert_eq!(
+            map.step(Context::List, None, k("g")),
+            Step::Action(Action::Top)
+        );
         let (map, problems) = build(&[("common", "w", "refresh"), ("common", "ctrl+y", "pin")]);
         assert!(problems.is_empty(), "{problems:?}");
         // Refresh applies in the chat list (it has a key there): z refreshes there.
@@ -2072,7 +2091,7 @@ mod tests {
         }
         // Tab and Ctrl+C still work while selecting (Global fallback); help is modal.
         assert_eq!(def.lookup(Context::Select, k("tab")), Some(NextNetwork));
-        assert_eq!(def.step(Context::Select, None, k("g")), Step::Pending);
+        assert_eq!(def.lookup(Context::Select, k("g")), Some(Top));
         // `cancel_reply` has no default key: Esc cancels through leave_composer.
         assert!(def.keys_for(Context::Composer, CancelReply).is_empty());
     }

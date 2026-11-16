@@ -507,19 +507,15 @@ mod tests {
     }
 
     #[test]
-    fn a_key_that_starts_g_g_warns_before_it_is_bound() {
+    fn g_is_a_common_key_so_capturing_it_asks_before_taking_it_from_top() {
         let map = keymap(&KeySettings::default());
         assert_eq!(
             capture(&map, Context::Select, Action::Copy, k("g")),
-            Captured::Overlaps("g starts g g, which stop working".to_string())
-        );
-        assert_eq!(
-            capture_add(&map, Context::List, Action::Refresh, k("g")),
-            Adding::Overlaps("g starts g g, which stop working".to_string())
+            Captured::Conflict(Action::Top)
         );
         assert!(matches!(
-            capture_add(&map, Context::Common, Action::Search, k("g")),
-            Adding::Overlaps(n) if n.contains("starts g g everywhere")
+            capture_add(&map, Context::List, Action::Refresh, k("g")),
+            Adding::Overlaps(n) if n.contains("is Top everywhere")
         ));
     }
 

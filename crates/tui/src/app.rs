@@ -118,7 +118,7 @@ pub(crate) struct NetState {
     /// The highlighted message of the open chat while `focus` is `Select`. Kept by id, so an
     /// incoming message, a resize or a wheel scroll never moves it.
     pub sel_msg: Option<String>,
-    /// Where the selection was before each big jump (`G`, `g g`, `H`, `M`, `L`), newest last, as
+    /// Where the selection was before each big jump (`G`, `g`, `H`, `M`, `L`), newest last, as
     /// (chat id, message id). `jump_back` (Ctrl+O) walks back through it.
     pub(crate) jumps: Vec<(String, String)>,
     /// A reply or an edit being composed, per chat id (shown above the message box).

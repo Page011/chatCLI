@@ -1,18 +1,18 @@
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                                           Ctrl+C quit
 ┌ Settings ──────┐╔ Keys - Everywhere ═════════════════════════════════════════════════════════════╗
-│Appearance      │║Accept              Enter                                                       ║
-│Layout          │║Back                Esc                                                         ║
-│Notifications   │║Cursor left         Left                                                        ║
-│Media           │║Cursor right        Right                                                       ║
-│Teams           │║Word left           Ctrl+Left                                                   ║
-│WhatsApp        │║Word right          Ctrl+Right                                                  ║
-│Keys            │║Line start          Home                                                        ║
-│About           │║Line end            End                                                         ║
+│Appearance      │║Screen bottom       L                                                           ║
+│Layout          │║Accept              Enter                                                       ║
+│Notifications   │║Back                Esc                                                         ║
+│Media           │║Cursor left         Left                                                        ║
+│Teams           │║Cursor right        Right                                                       ║
+│WhatsApp        │║Word left           Ctrl+Left                                                   ║
+│Keys            │║Word right          Ctrl+Right                                                  ║
+│About           │║Line start          Home                                                        ║
+│                │║Line end            End                                                         ║
 │                │║Delete back         Backspace                                                   ║
 │                │║Delete forward      Delete                                                      ║
 │                │║Delete word back    Ctrl+W, Ctrl+Backspace                                      ║
 │                │║Clear line          Ctrl+U                                                      ║
-│                │║Top                 g g                                                         ║
 │                │║Chat list                                                                       ║
 │                │║Accept              l, Right                                                    ║
 │                │║Compose             i                                                           ║

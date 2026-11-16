@@ -261,7 +261,7 @@ These are the default keys. Your own bindings are below. The same keys mean the 
 | `/` | Filter the chat list by name: `Enter` keeps the filter, `Esc` clears it |
 | `Ctrl+F` | [Search](#search) every stored message |
 | `Up` / `Down`, `k` / `j` | Move |
-| `g g` / `G`, `Home` / `End` | To the top / the bottom |
+| `g` / `G`, `Home` / `End` | To the top / the bottom |
 | `H` / `L` | To the first / last chat or message on screen |
 | `PgUp` / `PgDn` | A page up / down |
 | `Ctrl+C` | Quit from anywhere (also `:quit`) |
@@ -304,9 +304,9 @@ Message selection (`Enter` on a chat, or `Shift+Up` from the message box). The f
 
 | Key | Does |
 |---|---|
-| `Up` / `Down`, `k` / `j`, `PgUp` / `PgDn`, `g g` / `G`, `Home` / `End` | Move the selection. Up from the oldest message held loads older ones |
+| `Up` / `Down`, `k` / `j`, `PgUp` / `PgDn`, `g` / `G`, `Home` / `End` | Move the selection. Up from the oldest message held loads older ones |
 | `H` / `M` / `L` | The first / middle / last message on screen |
-| `Ctrl+O` | Back to the message selected before the last big jump (`G`, `g g`, `H`, `M`, `L`); again for the one before |
+| `Ctrl+O` | Back to the message selected before the last big jump (`G`, `g`, `H`, `M`, `L`); again for the one before |
 | `i` | To the message box |
 | `Esc`, `h` or `Left` | Back to the chat list |
 | `r` | Reply: quote this message |
@@ -450,7 +450,7 @@ Your own bindings sit in one table per context, `key = "action"`, over the built
 - **Text contexts** (`filter`, `composer`, `popup`) refuse plain letters and `Backspace` in their own tables, because that would stop you typing. Use `ctrl+` or `alt+`, or `[keys.common]`.
 - **Ways out:** `Ctrl+C` (`quit`) and `Esc` (`back`) are ordinary bindings: a context can give `Ctrl+C` to another action, or you can move `quit` to another key. chatcli only checks that some key still quits from every context (a `common` key that types a character does not count in the boxes you type in), and that `popup`, `confirm` and `help` each keep a key that backs out (`confirm_no` counts in `confirm`). If not, `Ctrl+C` quits and `Esc` backs out in the contexts named by the notice until you bind one.
 - A bad binding (unknown action, unreadable key, the same key twice in one table) is skipped with one notice, and the rest load. The notice suggests the closest name. Some terminals send `Ctrl+I` as `Tab`, `Ctrl+M` and `Ctrl+J` as `Enter`, `Ctrl+[` as `Esc` and `Ctrl+H` as `Backspace`: these are warned about and still applied.
-- Two-key sequences (`g g`, top) are built in; you cannot add your own yet. A single key bound to `g` replaces them in that context.
+- Two-key sequences (like `gg`) are not supported in your own bindings.
 
 Actions (the names are stable): `quit` `next_network` `prev_network` `goto_network_1` `goto_network_2` `help` `up` `down` `top` `bottom` `screen_top` `screen_middle` `screen_bottom` `page_up` `page_down` `accept` `back` `compose` `filter_start` `refresh` `send` `cursor_left` `cursor_right` `word_left` `word_right` `line_start` `line_end` `delete_back` `delete_forward` `delete_word_back` `clear_line` `insert_newline` `emoji_picker` `open_link` `confirm_yes` `confirm_no` `jump_back` `select_messages` `reply` `cancel_reply` `react` `edit` `delete` `open_media` `copy` `view_image` `attach` `paste_image` `next_unread` `prev_unread` `mark_read` `mark_all_read` `pin` `mute` `hide` `show_hidden` `search` `command_bar` `settings`, and `unbound`. `up`, `down`, `top`, `bottom`, `screen_top`, `screen_middle`, `screen_bottom`, `page_up`, `page_down`, `accept` and `back` do what they mean where they are pressed: `down` is the next chat in the list, the next message in selection, the next suggestion in a popup, and scrolls help; `accept` goes into a chat (its newest message selected), signs in, keeps the filter or takes a suggestion; `back` goes from the message box to selection and from selection to the chat list, closes the open chat, help or a popup, clears the filter, or answers no. `compose` goes to the message box. The `?` screen lists every action next to its keys. The footer hints follow your bindings too. A binding on an action that makes no sense in that context is accepted and does nothing.
 

@@ -1146,8 +1146,7 @@ mod tests {
         ctrl_up(&mut app);
         ch(&mut app, 'k');
         assert_eq!(sel(&app), Some("m38"));
-        // g g, then H after G: two places remembered.
-        ch(&mut app, 'g');
+        // g, then G: two places remembered.
         ch(&mut app, 'g');
         assert_eq!(sel(&app), Some("m00"));
         ch(&mut app, 'G');
@@ -1158,7 +1157,7 @@ mod tests {
         assert_eq!(sel(&app), Some("m00"), "back to before G");
         assert!(in_view(&app));
         ctrl_o(&mut app);
-        assert_eq!(sel(&app), Some("m38"), "back to before g g");
+        assert_eq!(sel(&app), Some("m38"), "back to before g");
         ctrl_o(&mut app);
         assert_eq!(sel(&app), Some("m38"), "nothing left");
         assert_eq!(
@@ -1188,8 +1187,7 @@ mod tests {
         ch(&mut app, 'M');
         let mid = sel(&app).unwrap().to_string();
         assert!(top < mid && mid.as_str() < "m39", "{mid}");
-        // g g is the very first message held.
-        ch(&mut app, 'g');
+        // g is the very first message held.
         ch(&mut app, 'g');
         assert_eq!(sel(&app), Some("m00"));
     }

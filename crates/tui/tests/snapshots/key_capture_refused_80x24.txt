@@ -14,11 +14,11 @@
 │                │║Filter start        /                                       ║
 │                │║Up                  Up, k                                   ║
 │                │║Down                Down, j                                 ║
+│                │║Top                 g                                       ║
 │                │║Bottom              G                                       ║
 │                │║Page up             PgUp                                    ║
 │                │║Page down           PgDn                                    ║
 │                │║Screen top          H                                       ║
-│                │║Screen bottom       L                                       ║
 │                │║This key cannot be saved: pick another                      ║
 └────────────────┘╚════════════════════════════════════════════════════════════╝
 Press the new key for Next network (any key is taken, Esc too)

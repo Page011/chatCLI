@@ -30,6 +30,7 @@
 ║/                      Filter start      filter the chat list                                     ║
 ║Up, k                  Up                up one: the chat, the selected message, a list or the em…║
 ║Down, j                Down              down one: the chat, the selected message, a list or the …║
+║g                      Top               to the first chat, the oldest message held, or the top o…║
 ║G                      Bottom            to the last chat, the newest message, or the end of help ║
 ║PgUp                   Page up           a page up: the chat list, the messages (from the message…║
 ║PgDn                   Page down         a page down: the chat list, the messages (from the messa…║
@@ -47,7 +48,6 @@
 ║Delete                 Delete forward    delete the character under the cursor                    ║
 ║Ctrl+W, Ctrl+Backspace Delete word back  delete the word before the cursor                        ║
 ║Ctrl+U                 Clear line        clear the line the cursor is on                          ║
-║g g                    Top               to the first chat, the oldest message held, or the top o…║
 ║                                                                                                  ║
 ║Chat list                                                                                         ║
 ║l, Right  Accept            open the chosen chat and select its newest message, sign in, keep the…║
@@ -84,7 +84,7 @@
 ║u         Open link         open a link from the selected message (chat list: from the newest mes…║
 ║o         Open media        open the selected message's attachment in the default app             ║
 ║y         Copy              copy the selected message's text (an attachment without a caption: it…║
-║Ctrl+O    Jump back         back to the message selected before the last big jump (G, g g, H, M, …║
+║Ctrl+O    Jump back         back to the message selected before the last big jump (G, g, H, M, L) ║
 ║                                                                                                  ║
 ║Confirm (link, delete, mark read)                                                                 ║
 ║y         Confirm yes       yes: open the link, delete the message, send the file or mark all read║
@@ -201,9 +201,9 @@ row 30 cols 40-98: fg=DarkGray bg=Reset NONE
 row 31 cols 1-22: fg=Reset bg=Reset BOLD
 row 31 cols 40-98: fg=DarkGray bg=Reset NONE
 row 32 cols 1-22: fg=Reset bg=Reset BOLD
-row 32 cols 40-97: fg=DarkGray bg=Reset NONE
+row 32 cols 40-98: fg=DarkGray bg=Reset NONE
 row 33 cols 1-22: fg=Reset bg=Reset BOLD
-row 33 cols 40-98: fg=DarkGray bg=Reset NONE
+row 33 cols 40-97: fg=DarkGray bg=Reset NONE
 row 34 cols 1-22: fg=Reset bg=Reset BOLD
 row 34 cols 40-98: fg=DarkGray bg=Reset NONE
 row 35 cols 1-22: fg=Reset bg=Reset BOLD
@@ -219,23 +219,23 @@ row 39 cols 40-98: fg=DarkGray bg=Reset NONE
 row 40 cols 1-22: fg=Reset bg=Reset BOLD
 row 40 cols 40-98: fg=DarkGray bg=Reset NONE
 row 41 cols 1-22: fg=Reset bg=Reset BOLD
-row 41 cols 40-91: fg=DarkGray bg=Reset NONE
+row 41 cols 40-98: fg=DarkGray bg=Reset NONE
 row 42 cols 1-22: fg=Reset bg=Reset BOLD
-row 42 cols 40-86: fg=DarkGray bg=Reset NONE
+row 42 cols 40-91: fg=DarkGray bg=Reset NONE
 row 43 cols 1-22: fg=Reset bg=Reset BOLD
-row 43 cols 40-81: fg=DarkGray bg=Reset NONE
+row 43 cols 40-86: fg=DarkGray bg=Reset NONE
 row 44 cols 1-22: fg=Reset bg=Reset BOLD
-row 44 cols 40-79: fg=DarkGray bg=Reset NONE
+row 44 cols 40-81: fg=DarkGray bg=Reset NONE
 row 45 cols 1-22: fg=Reset bg=Reset BOLD
-row 45 cols 40-98: fg=DarkGray bg=Reset NONE
+row 45 cols 40-79: fg=DarkGray bg=Reset NONE
 row 46 cols 1-22: fg=Reset bg=Reset BOLD
-row 46 cols 40-78: fg=DarkGray bg=Reset NONE
+row 46 cols 40-98: fg=DarkGray bg=Reset NONE
 row 47 cols 1-22: fg=Reset bg=Reset BOLD
-row 47 cols 40-74: fg=DarkGray bg=Reset NONE
+row 47 cols 40-78: fg=DarkGray bg=Reset NONE
 row 48 cols 1-22: fg=Reset bg=Reset BOLD
-row 48 cols 40-72: fg=DarkGray bg=Reset NONE
+row 48 cols 40-74: fg=DarkGray bg=Reset NONE
 row 49 cols 1-22: fg=Reset bg=Reset BOLD
-row 49 cols 40-98: fg=DarkGray bg=Reset NONE
+row 49 cols 40-72: fg=DarkGray bg=Reset NONE
 row 51 cols 1-9: fg=Reset bg=Reset BOLD
 row 52 cols 1-9: fg=Reset bg=Reset BOLD
 row 52 cols 27-98: fg=DarkGray bg=Reset NONE
@@ -300,7 +300,7 @@ row 84 cols 27-85: fg=DarkGray bg=Reset NONE
 row 85 cols 1-9: fg=Reset bg=Reset BOLD
 row 85 cols 27-98: fg=DarkGray bg=Reset NONE
 row 86 cols 1-9: fg=Reset bg=Reset BOLD
-row 86 cols 27-98: fg=DarkGray bg=Reset NONE
+row 86 cols 27-97: fg=DarkGray bg=Reset NONE
 row 88 cols 1-33: fg=Reset bg=Reset BOLD
 row 89 cols 1-9: fg=Reset bg=Reset BOLD
 row 89 cols 27-98: fg=DarkGray bg=Reset NONE

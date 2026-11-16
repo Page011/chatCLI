@@ -1,6 +1,6 @@
  Teams 103 LIVE   WhatsApp CONN…
 ╔ Keys - Everywhere ═══════════════════╗
-║Top                 g g               ║
+║Clear line          Ctrl+U            ║
 ║Chat list                             ║
 ║Accept              l, Right          ║
 ║Compose             i                 ║
