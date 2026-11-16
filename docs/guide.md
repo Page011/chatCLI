@@ -253,8 +253,8 @@ These are the default keys. Your own bindings are below. The same keys mean the 
 
 | Key | Does |
 |---|---|
-| `Tab` / `Shift+Tab` | Next / previous network |
-| `Alt+1`, `Alt+2` | Jump to Teams, WhatsApp |
+| `Tab` / `Shift+Tab` | Next / previous network tab. Signed-in networks come first (Teams before WhatsApp when both are), the ones waiting for a sign-in after. chatcli starts on the tab you used last |
+| `Alt+1`, `Alt+2` | Jump to the first, second tab as shown |
 | `?` or `F1` | Help (`?` types a question mark in the boxes you type in; `F1` works there too). `Esc` closes it |
 | `F2` | Settings screen (`:settings`): theme, layout, notifications, media, Teams, WhatsApp and every key binding. `Up`/`Down` move, `Left`/`Right` change, `Enter` edits a number or colour, `r` resets, `Tab` switches between the section list and the rows, `Esc` closes |
 | `:` | The command bar: type to list commands and chats, `Enter` runs or opens the highlighted one, `Esc` closes it |

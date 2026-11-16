@@ -203,7 +203,7 @@ pub(crate) fn tabs(app: &App, width: u16) -> Vec<Tab> {
     let short = width < NARROW;
     let mut x = if short { 0 } else { BRAND.len() as u16 };
     let mut out = Vec::new();
-    for net in Network::ALL {
+    for net in app.tab_order() {
         let ns = app.ns(net);
         let active = net == app.active().network;
         let unread = ns.unread();

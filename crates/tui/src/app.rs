@@ -401,6 +401,9 @@ fn too_long(n: Network) -> String {
     }
 }
 
+/// Store `meta` key: the network of the tab used last, so the next start opens on it.
+const LAST_TAB: &str = "tui.last_tab";
+
 fn idx(n: Network) -> usize {
     match n {
         Network::Teams => 0,
@@ -590,6 +593,16 @@ impl App {
                 log::error("tui", &format!("could not read recent emoji: {e}"));
                 Vec::new()
             });
+        // Start on the tab used last.
+        if let Some(n) = ctx
+            .store
+            .meta(LAST_TAB)
+            .ok()
+            .flatten()
+            .and_then(|k| Network::from_key(&k))
+        {
+            app.active = n;
+        }
         app.store = Some(ctx.store.clone());
         app.media.root = Some(ctx.media.root().to_path_buf());
         app.media.max_file_bytes = ctx.media.max_file_bytes();
@@ -724,9 +737,28 @@ impl App {
     }
 
     /// Makes `n` the active tab. What is on screen changes, so read timers follow.
+    /// The tab you chose: shown at once and remembered for the next start (`LAST_TAB`).
     fn set_active(&mut self, n: Network) {
         self.active = n;
         self.sync_read_timers();
+        if let Some(store) = &self.store {
+            if let Err(e) = store.set_meta(LAST_TAB, Some(n.key())) {
+                log::error("tui", &format!("last tab not saved: {e}"));
+            }
+        }
+    }
+
+    /// The networks in tab order: the signed-in ones first, then those waiting for a sign-in,
+    /// each group in the fixed order of `Network::ALL`. The tabs, Tab and Alt+1 / Alt+2 follow it.
+    pub(crate) fn tab_order(&self) -> Vec<Network> {
+        let mut order = Network::ALL.to_vec();
+        order.sort_by_key(|n| {
+            matches!(
+                self.ns(*n).status,
+                Status::NeedsLogin { .. } | Status::LoggingIn | Status::Qr { .. }
+            )
+        });
+        order
     }
 
     /// True while network `n`'s message pane is on screen: its tab is active, no sign-in panel
@@ -1363,7 +1395,7 @@ impl App {
             Action::PrevNetwork => return self.switch_by(-1),
             Action::GotoNetwork1 | Action::GotoNetwork2 => {
                 let i = usize::from(action == Action::GotoNetwork2);
-                if let Some(&net) = Network::ALL.get(i) {
+                if let Some(&net) = self.tab_order().get(i) {
                     self.set_active(net);
                 }
             }
@@ -2023,8 +2055,9 @@ impl App {
     }
 
     fn switch_by(&mut self, step: isize) -> Out {
-        let len = Network::ALL.len() as isize;
-        self.set_active(Network::ALL[(idx(self.active) as isize + step).rem_euclid(len) as usize]);
+        let order = self.tab_order();
+        let at = order.iter().position(|n| *n == self.active).unwrap_or(0);
+        self.set_active(order[crate::list::step(at, order.len(), step)]);
         Vec::new()
     }
 
@@ -4182,6 +4215,51 @@ mod tests {
         let ctx = UiCtx::new(store.clone(), media);
         let _ = std::fs::remove_dir_all(&dir);
         (online(App::with_ctx(clock(), &ctx)), store)
+    }
+
+    #[test]
+    fn signed_in_tabs_come_first_and_the_keys_follow_the_order() {
+        let mut app = App::new(clock());
+        assert_eq!(app.tab_order(), [Network::Teams, Network::WhatsApp]);
+        app.handle_event(Event::Status(
+            Network::Teams,
+            Status::NeedsLogin { reason: None },
+        ));
+        app.handle_event(Event::Status(
+            Network::WhatsApp,
+            Status::Online {
+                live: true,
+                detail: None,
+            },
+        ));
+        assert_eq!(app.tab_order(), [Network::WhatsApp, Network::Teams]);
+        // Alt+1 is the first tab shown, Alt+2 the second.
+        app.handle_key(key_mod(KeyCode::Char('1'), KeyModifiers::ALT));
+        assert_eq!(app.active, Network::WhatsApp);
+        app.handle_key(key_mod(KeyCode::Char('2'), KeyModifiers::ALT));
+        assert_eq!(app.active, Network::Teams);
+        // Tab wraps through the shown order.
+        app.handle_key(key(KeyCode::Tab));
+        assert_eq!(app.active, Network::WhatsApp);
+        // Both signed in: the fixed order again.
+        app.handle_event(Event::Status(Network::Teams, Status::Connecting));
+        assert_eq!(app.tab_order(), [Network::Teams, Network::WhatsApp]);
+    }
+
+    #[test]
+    fn the_next_start_opens_on_the_tab_used_last() {
+        let (mut app, store) = app_with_store();
+        assert_eq!(app.active, Network::Teams, "nothing remembered yet");
+        app.handle_key(key(KeyCode::Tab));
+        assert_eq!(app.active, Network::WhatsApp);
+        assert_eq!(store.meta(LAST_TAB).unwrap().as_deref(), Some("whatsapp"));
+        let media = chatcli_core::media::MediaCache::open(
+            &std::env::temp_dir().join(format!("chatcli-tui-lasttab-{}", std::process::id())),
+            &Settings::default().media,
+        )
+        .unwrap();
+        let again = App::with_ctx(clock(), &UiCtx::new(store.clone(), media));
+        assert_eq!(again.active, Network::WhatsApp);
     }
 
     #[test]
