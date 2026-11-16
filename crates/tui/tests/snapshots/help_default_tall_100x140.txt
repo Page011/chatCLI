@@ -69,7 +69,6 @@
 ║Ctrl+E                         Emoji picker      open the emoji picker                            ║
 ║Ctrl+O                         Attach            choose a file to send: type or complete its path ║
 ║Ctrl+Shift+V, Alt+v            Paste image       attach the image on the clipboard                ║
-║Shift+Up                       Select messages   select a message in the open chat                ║
 ║                                                                                                  ║
 ║Message selection                                                                                 ║
 ║h, Left   Back              back out: from the message box to selection, from selection to the ch…║
@@ -135,7 +134,8 @@
 ║                                                                                                  ║
 ║                                                                                                  ║
 ║                                                                                                  ║
-║lines 1-92 of 92                                                                                  ║
+║                                                                                                  ║
+║lines 1-91 of 91                                                                                  ║
 ╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
 Esc close  Up/Down scroll  PgUp/PgDn page
 --- styled runs (everything else is default style) ---
@@ -272,44 +272,42 @@ row 69 cols 1-30: fg=Reset bg=Reset BOLD
 row 69 cols 48-97: fg=DarkGray bg=Reset NONE
 row 70 cols 1-30: fg=Reset bg=Reset BOLD
 row 70 cols 48-82: fg=DarkGray bg=Reset NONE
-row 71 cols 1-30: fg=Reset bg=Reset BOLD
-row 71 cols 48-82: fg=DarkGray bg=Reset NONE
-row 73 cols 1-17: fg=Reset bg=Reset BOLD
+row 72 cols 1-17: fg=Reset bg=Reset BOLD
+row 73 cols 1-9: fg=Reset bg=Reset BOLD
+row 73 cols 27-98: fg=DarkGray bg=Reset NONE
 row 74 cols 1-9: fg=Reset bg=Reset BOLD
-row 74 cols 27-98: fg=DarkGray bg=Reset NONE
+row 74 cols 27-90: fg=DarkGray bg=Reset NONE
 row 75 cols 1-9: fg=Reset bg=Reset BOLD
 row 75 cols 27-90: fg=DarkGray bg=Reset NONE
 row 76 cols 1-9: fg=Reset bg=Reset BOLD
-row 76 cols 27-90: fg=DarkGray bg=Reset NONE
+row 76 cols 27-84: fg=DarkGray bg=Reset NONE
 row 77 cols 1-9: fg=Reset bg=Reset BOLD
-row 77 cols 27-84: fg=DarkGray bg=Reset NONE
+row 77 cols 27-78: fg=DarkGray bg=Reset NONE
 row 78 cols 1-9: fg=Reset bg=Reset BOLD
-row 78 cols 27-78: fg=DarkGray bg=Reset NONE
+row 78 cols 27-68: fg=DarkGray bg=Reset NONE
 row 79 cols 1-9: fg=Reset bg=Reset BOLD
-row 79 cols 27-68: fg=DarkGray bg=Reset NONE
+row 79 cols 27-71: fg=DarkGray bg=Reset NONE
 row 80 cols 1-9: fg=Reset bg=Reset BOLD
-row 80 cols 27-71: fg=DarkGray bg=Reset NONE
+row 80 cols 27-62: fg=DarkGray bg=Reset NONE
 row 81 cols 1-9: fg=Reset bg=Reset BOLD
-row 81 cols 27-62: fg=DarkGray bg=Reset NONE
+row 81 cols 27-77: fg=DarkGray bg=Reset NONE
 row 82 cols 1-9: fg=Reset bg=Reset BOLD
-row 82 cols 27-77: fg=DarkGray bg=Reset NONE
+row 82 cols 27-98: fg=DarkGray bg=Reset NONE
 row 83 cols 1-9: fg=Reset bg=Reset BOLD
-row 83 cols 27-98: fg=DarkGray bg=Reset NONE
+row 83 cols 27-85: fg=DarkGray bg=Reset NONE
 row 84 cols 1-9: fg=Reset bg=Reset BOLD
-row 84 cols 27-85: fg=DarkGray bg=Reset NONE
+row 84 cols 27-98: fg=DarkGray bg=Reset NONE
 row 85 cols 1-9: fg=Reset bg=Reset BOLD
-row 85 cols 27-98: fg=DarkGray bg=Reset NONE
-row 86 cols 1-9: fg=Reset bg=Reset BOLD
-row 86 cols 27-97: fg=DarkGray bg=Reset NONE
-row 88 cols 1-33: fg=Reset bg=Reset BOLD
+row 85 cols 27-97: fg=DarkGray bg=Reset NONE
+row 87 cols 1-33: fg=Reset bg=Reset BOLD
+row 88 cols 1-9: fg=Reset bg=Reset BOLD
+row 88 cols 27-98: fg=DarkGray bg=Reset NONE
 row 89 cols 1-9: fg=Reset bg=Reset BOLD
-row 89 cols 27-98: fg=DarkGray bg=Reset NONE
-row 90 cols 1-9: fg=Reset bg=Reset BOLD
-row 90 cols 27-68: fg=DarkGray bg=Reset NONE
+row 89 cols 27-68: fg=DarkGray bg=Reset NONE
+row 91 cols 1-9: fg=Reset bg=Reset BOLD
 row 92 cols 1-9: fg=Reset bg=Reset BOLD
+row 92 cols 27-90: fg=DarkGray bg=Reset NONE
 row 93 cols 1-9: fg=Reset bg=Reset BOLD
-row 93 cols 27-90: fg=DarkGray bg=Reset NONE
-row 94 cols 1-9: fg=Reset bg=Reset BOLD
-row 94 cols 27-84: fg=DarkGray bg=Reset NONE
+row 93 cols 27-84: fg=DarkGray bg=Reset NONE
 row 137 cols 1-16: fg=Reset bg=Reset DIM
 row 139 cols 0-40: fg=Reset bg=Reset DIM

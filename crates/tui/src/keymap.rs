@@ -606,7 +606,6 @@ const OWN: &[Row] = &[
     // Alt+V reaches chatcli there.
     (Context::Composer, "ctrl+shift+v", Action::PasteImage),
     (Context::Composer, "alt+v", Action::PasteImage),
-    (Context::Composer, "shift+up", Action::SelectMessages),
     (Context::Confirm, "y", Action::ConfirmYes),
     (Context::Confirm, "n", Action::ConfirmNo),
     (Context::Help, "home", Action::Top),
@@ -1379,7 +1378,6 @@ mod tests {
             (Composer, "pgdn", PageDown),
             (Composer, "enter", Send),
             (Composer, "esc", Back),
-            (Composer, "shift+up", SelectMessages),
             (List, "f2", Settings),
             (Composer, "f2", Settings),
             (Context::Help, "esc", Back),
@@ -2058,16 +2056,14 @@ mod tests {
         );
     }
 
-    /// Message selection keys: Shift+Up from the message box, and the per-message keys in the
-    /// `select` table.
+    /// Message selection keys: Esc from the message box (`back`; `select_messages` has no default
+    /// key), and the per-message keys in the `select` table.
     #[test]
     fn selection_keys() {
         use Action::*;
         let def = Keymap::default();
-        assert_eq!(
-            def.lookup(Context::Composer, k("shift+up")),
-            Some(SelectMessages)
-        );
+        assert_eq!(def.lookup(Context::Composer, k("shift+up")), None);
+        assert_eq!(def.lookup(Context::Composer, k("esc")), Some(Back));
         assert_eq!(def.lookup(Context::List, k("v")), None);
         for (key, want) in [
             ("up", Up),
@@ -2097,13 +2093,12 @@ mod tests {
     }
 
     /// The `select` table takes user bindings, plain letters included (it is not a text box),
-    /// and `select_messages` can move off Shift+Up for terminals that keep it.
+    /// and `select_messages` can be given a key in the message box.
     #[test]
     fn selection_keys_can_be_rebound() {
         let (map, problems) = build(&[
             ("select", "x", "react"),
             ("composer", "alt+up", "select_messages"),
-            ("composer", "shift+up", "unbound"),
         ]);
         assert!(problems.is_empty(), "{:?}", texts(&problems));
         assert_eq!(map.lookup(Context::Select, k("x")), Some(Action::React));
@@ -2111,6 +2106,5 @@ mod tests {
             map.lookup(Context::Composer, k("alt+up")),
             Some(Action::SelectMessages)
         );
-        assert_eq!(map.lookup(Context::Composer, k("shift+up")), None);
     }
 }

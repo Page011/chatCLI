@@ -170,7 +170,8 @@ impl App {
             .find(|m| &m.id == id)
     }
 
-    /// `select_messages` (Shift+Up from the message box): select the newest message of the open chat. From the chat list this
+    /// `select_messages` (no default key; Esc from the message box does the same): select the newest
+    /// message of the open chat. From the chat list this
     /// also opens the chat, like Enter. An empty chat stays as it was, with a notice.
     pub(super) fn enter_select(&mut self, n: Network) -> Out {
         let ids = self.selectable_ids(n);
@@ -668,8 +669,14 @@ mod tests {
         press(app, KeyCode::Char(c))
     }
 
-    fn ctrl_up(app: &mut App) -> Out {
-        app.handle_key(key_with(KeyCode::Up, KeyModifiers::SHIFT))
+    /// Into message selection from the message box (what `select_messages` does; Esc does it too
+    /// when nothing is being replied to). Nothing happens while already selecting.
+    fn to_selection(app: &mut App) -> Out {
+        if app.active().focus == Focus::Composer {
+            app.enter_select(Network::Teams)
+        } else {
+            Vec::new()
+        }
     }
 
     fn ctrl_u(app: &mut App) {
@@ -892,9 +899,12 @@ mod tests {
     // ---- selection (issue 11) ----
 
     #[test]
-    fn ctrl_up_selects_the_newest_message() {
+    fn esc_from_the_message_box_selects_the_newest_message() {
         let mut app = app_with(ChatKind::Direct, three());
-        assert!(ctrl_up(&mut app).is_empty());
+        // Shift+Up is no longer a key for it.
+        app.handle_key(key_with(KeyCode::Up, KeyModifiers::SHIFT));
+        assert_eq!(app.active().focus, Focus::Composer);
+        assert!(press(&mut app, KeyCode::Esc).is_empty());
         assert_eq!(app.active().focus, Focus::Select);
         assert_eq!(sel(&app), Some("m3"));
         assert_eq!(app.context(), crate::keymap::Context::Select);
@@ -903,7 +913,7 @@ mod tests {
     #[test]
     fn an_empty_chat_has_nothing_to_select() {
         let mut app = app_with(ChatKind::Direct, Vec::new());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         assert_eq!(app.active().focus, Focus::Composer);
         assert_eq!(sel(&app), None);
         assert_eq!(
@@ -915,7 +925,7 @@ mod tests {
     #[test]
     fn first_last_and_the_ends() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         press(&mut app, KeyCode::Home);
         assert_eq!(sel(&app), Some("m1"));
         press(&mut app, KeyCode::Up);
@@ -945,7 +955,7 @@ mod tests {
             MessageState::Failed("no".into()),
         ));
         let mut app = app_with(ChatKind::Direct, list);
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         assert_eq!(sel(&app), Some("m3"));
         press(&mut app, KeyCode::Down);
         assert_eq!(sel(&app), Some("m3"));
@@ -959,7 +969,7 @@ mod tests {
     fn the_view_follows_the_highlight() {
         let mut app = app_with(ChatKind::Direct, many(60));
         app.resize(80, 24);
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         assert!(in_view(&app));
         press(&mut app, KeyCode::Home);
         assert_eq!(sel(&app), Some("m0"));
@@ -978,7 +988,7 @@ mod tests {
     fn page_keys_move_about_a_screen() {
         let mut app = app_with(ChatKind::Direct, many(80));
         app.resize(80, 24);
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         press(&mut app, KeyCode::PageUp);
         let idx = |app: &App| -> usize { sel(app).unwrap()[1..].parse().unwrap() };
         let rows = app.convo_size(Network::Teams).1;
@@ -997,7 +1007,7 @@ mod tests {
     fn selection_survives_an_incoming_message_and_a_resize() {
         let mut app = app_with(ChatKind::Direct, many(40));
         app.resize(80, 24);
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         for _ in 0..6 {
             press(&mut app, KeyCode::Up);
         }
@@ -1023,7 +1033,7 @@ mod tests {
     fn wheel_scrolling_keeps_the_selection() {
         let mut app = app_with(ChatKind::Direct, many(60));
         app.resize(80, 24);
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         let held = sel(&app).map(str::to_string);
         let convo = app.layout_in(Rect::new(0, 0, 80, 24)).convo;
         for _ in 0..4 {
@@ -1042,7 +1052,7 @@ mod tests {
     #[test]
     fn i_goes_to_the_message_box_and_escape_h_and_left_to_the_chat_list() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'i');
         assert_eq!(app.active().focus, Focus::Composer);
         assert_eq!(sel(&app), None);
@@ -1050,7 +1060,7 @@ mod tests {
         typed(&mut app, "hi");
         assert_eq!(app.active().draft(), "hi");
         for back in [KeyCode::Esc, KeyCode::Char('h'), KeyCode::Left] {
-            ctrl_up(&mut app);
+            to_selection(&mut app);
             press(&mut app, back);
             assert_eq!(app.active().focus, Focus::List, "{back:?}");
             assert_eq!(sel(&app), None);
@@ -1074,7 +1084,7 @@ mod tests {
     #[test]
     fn y_copies_the_text_or_the_file_name() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'y');
         assert_eq!(
             app.take_copy(),
@@ -1107,7 +1117,7 @@ mod tests {
             ("[document: plan.pdf]", "plan.pdf"),
         ] {
             let mut app = app_with(ChatKind::Direct, vec![file(text)]);
-            ctrl_up(&mut app);
+            to_selection(&mut app);
             ch(&mut app, 'y');
             assert_eq!(
                 app.take_copy().map(|c| c.1).as_deref(),
@@ -1120,7 +1130,7 @@ mod tests {
     #[test]
     fn ctrl_o_in_one_chat_keeps_the_places_of_another() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         // A place in some other chat, then one in this chat.
         app.ns_mut(Network::Teams)
             .jumps
@@ -1143,7 +1153,7 @@ mod tests {
         let mut app = app_with(ChatKind::Direct, many);
         let ctrl_o =
             |app: &mut App| app.handle_key(key_with(KeyCode::Char('o'), KeyModifiers::CONTROL));
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'k');
         assert_eq!(sel(&app), Some("m38"));
         // g, then G: two places remembered.
@@ -1177,7 +1187,7 @@ mod tests {
             .map(|i| msg(&format!("m{i:02}"), 1000 + i, false, "x"))
             .collect();
         let mut app = app_with(ChatKind::Direct, many);
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         assert_eq!(sel(&app), Some("m39"));
         ch(&mut app, 'H');
         let top = sel(&app).unwrap().to_string();
@@ -1195,7 +1205,7 @@ mod tests {
     #[test]
     fn a_deleted_message_hands_the_highlight_to_its_neighbour() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         let mut gone = msg("m3", 3000, false, "");
         gone.state = MessageState::Deleted;
         app.handle_event(Event::MessageChanged(gone));
@@ -1231,7 +1241,7 @@ mod tests {
         let mut m3 = msg("m3", 3000, false, "third\nline with   spaces");
         m3.sender_id = "aad-1".into();
         let mut app = app_with(ChatKind::Direct, vec![msg("m1", 1000, false, "x"), m3]);
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'r');
         assert_eq!(app.active().focus, Focus::Composer, "back to typing");
         let want = QuotedRef {
@@ -1257,7 +1267,7 @@ mod tests {
     #[test]
     fn replying_to_your_own_message_is_quoted_as_you() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'k');
         ch(&mut app, 'r');
         match app.active().target() {
@@ -1271,7 +1281,7 @@ mod tests {
     #[test]
     fn escape_cancels_the_reply_first_and_then_leaves() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'r');
         press(&mut app, KeyCode::Esc);
         assert!(app.active().target().is_none());
@@ -1284,7 +1294,7 @@ mod tests {
     fn a_refused_reply_stays_a_failed_reply() {
         // The backend answers MessageFailed; the message keeps its quote and shows why.
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'r');
         typed(&mut app, "ok");
         let out = press(&mut app, KeyCode::Enter);
@@ -1308,7 +1318,7 @@ mod tests {
     #[test]
     fn react_opens_the_picker_and_choosing_sends_the_reaction() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'e');
         assert!(app.picker().is_some());
         let out = press(&mut app, KeyCode::Enter);
@@ -1334,7 +1344,7 @@ mod tests {
     fn choosing_your_own_reaction_again_removes_it() {
         let mut m3 = msg("m3", 3000, false, "third");
         let mut app = app_with(ChatKind::Direct, vec![m3.clone()]);
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'e');
         // Whatever the first cell is, make it already yours.
         let first = app
@@ -1381,7 +1391,7 @@ mod tests {
     fn edit_loads_the_text_and_enter_sends_the_change() {
         let mut app = app_with(ChatKind::Direct, three());
         typed(&mut app, "unsent draft");
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'k');
         assert_eq!(sel(&app), Some("m2"));
         ch(&mut app, 'c');
@@ -1411,7 +1421,7 @@ mod tests {
     fn escape_ends_an_edit_and_gives_the_draft_back() {
         let mut app = app_with(ChatKind::Direct, three());
         typed(&mut app, "unsent draft");
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'k');
         ch(&mut app, 'c');
         press(&mut app, KeyCode::Esc);
@@ -1423,13 +1433,13 @@ mod tests {
     #[test]
     fn an_unchanged_or_empty_edit_sends_nothing() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'k');
         ch(&mut app, 'c');
         assert!(press(&mut app, KeyCode::Enter).is_empty());
         assert!(app.active().target().is_none(), "unchanged ends the edit");
         // An empty edit is refused with the box kept.
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'k');
         ch(&mut app, 'c');
         ctrl_u(&mut app);
@@ -1442,7 +1452,7 @@ mod tests {
     #[test]
     fn edit_and_delete_are_for_your_own_messages_only() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         assert_eq!(sel(&app), Some("m3"));
         ch(&mut app, 'c');
         assert_eq!(app.active().focus, Focus::Select, "no edit of theirs");
@@ -1462,7 +1472,7 @@ mod tests {
     #[test]
     fn delete_asks_first_and_y_sends_it() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'k');
         ch(&mut app, 'd');
         assert_eq!(
@@ -1542,7 +1552,7 @@ mod tests {
         assert_eq!(app.ns(Network::WhatsApp).caps, Capabilities::default());
         // A dimmed action still works: before any Capabilities event, `r` replies.
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'r');
         assert!(matches!(app.active().target(), Some(Target::Reply(_))));
     }
@@ -1550,7 +1560,7 @@ mod tests {
     #[test]
     fn a_link_in_the_selected_message_opens_behind_the_question() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'u');
         assert!(matches!(app.prompt(), Some(Prompt::Confirm(_))));
         ch(&mut app, 'y');

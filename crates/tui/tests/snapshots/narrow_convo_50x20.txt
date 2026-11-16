@@ -17,7 +17,7 @@
 ╔ Message ═══════════════════════════════════════╗
 ║> typing a draft                                ║
 ╚════════════════════════════════════════════════╝
-Enter send  F1 help  Esc back  Shift+Up select
+Enter send  F1 help  Esc back  Ctrl+J newline
 --- styled runs (everything else is default style) ---
 row 0 cols 0-15: fg=Reset bg=Reset BOLD | REVERSED
 row 0 cols 18-25: fg=Reset bg=Reset BOLD
@@ -38,4 +38,4 @@ row 13 cols 21-46: fg=Red bg=Reset BOLD
 row 14 cols 21-36: fg=Red bg=Reset BOLD
 row 16 cols 1-9: fg=Reset bg=Reset BOLD
 row 17 cols 1-2: fg=Reset bg=Reset BOLD
-row 19 cols 0-45: fg=Reset bg=Reset DIM
+row 19 cols 0-44: fg=Reset bg=Reset DIM

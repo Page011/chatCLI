@@ -27,7 +27,7 @@
 │                            │╔ Message ═══════════════════════════════════════════════════════════╗
 │                            │║>                                                                   ║
 └────────────────────────────┘╚════════════════════════════════════════════════════════════════════╝
-Enter send  : commands  F1 help  Esc back  Shift+Up select  Ctrl+J newline  Ctrl+E emoji
+Enter send  : commands  F1 help  Esc back  Ctrl+J newline  Ctrl+E emoji  Ctrl+O attach
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -91,4 +91,4 @@ row 24 cols 31-35: fg=DarkGray bg=Reset NONE
 row 24 cols 37-48: fg=Reset bg=Reset BOLD
 row 26 cols 31-39: fg=Reset bg=Reset BOLD
 row 27 cols 31-32: fg=Reset bg=Reset BOLD
-row 29 cols 0-87: fg=Reset bg=Reset DIM
+row 29 cols 0-85: fg=Reset bg=Reset DIM

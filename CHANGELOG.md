@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `settings.toml`: one hand-edited file for key bindings, theme, layout, notifications, media limits, optional Teams scopes and WhatsApp privacy options. A broken section falls back to its defaults with one notice naming the line and key. `chatcli settings path` and `chatcli settings check`.
 - Keys are named actions in a keymap. Rebind them in `settings.toml` (`[keys.<context>]`), with a notice for every mistake and a suggested name. `?` opens a help screen generated from the active keys.
-- Message selection (`Enter` on a chat, or `Shift+Up` from the message box): reply with a quote, react, edit and delete your own messages, open links, open attachments.
+- Message selection (`Enter` on a chat, or `Esc` from the message box): reply with a quote, react, edit and delete your own messages, open links, open attachments.
 - Replies with a quote on Teams and WhatsApp. Teams needs the new `ChatMessage.Send` permission: log out of Teams and sign in again after upgrading.
 - Reactions on Teams and WhatsApp, shown as counts under each message, with an emoji picker (`Ctrl+E`, Recent first) and `:shortcode` completion.
 - Edit and delete your own messages on Teams and WhatsApp. Edits and deletes from other people update in place.
@@ -48,7 +48,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Tabs: signed-in networks come first and the ones waiting for a sign-in after, so a WhatsApp-only setup starts with WhatsApp in front; `Alt+1` / `Alt+2` follow the order shown. chatcli starts on the tab you used last (kept in the local store).
 - `:` opens the command bar and `/` filters the chat list. In the message box, `:word` runs a command only when `Enter` takes it from the list (a space or `Esc` first sends it as text); a message that starts with `/` is plain text, so `//` escaping is gone.
-- New default keys and chat flow, the same keys meaning the same thing everywhere. `Enter` (or `l`, `Right`) goes into a chat with its newest message selected, `i` goes to its message box; `Esc` steps back out: the message box to selection, selection (also `h`, `Left`) to the chat list, and on the list it clears the filter or closes the open chat. `j`/`k`, `g`/`G`, `H`/`L` (and `M` in selection) move in the chat list, message selection and help. `Shift+Up` selects from the message box. In selection `c` edits and `x` or `d` deletes. `Ctrl+O` jumps back to where the selection was before the last big jump. `y` copies the selected message (the system clipboard, and the terminal through OSC 52, which also works over SSH). `?` helps from anywhere outside a text box. Removed: `q` (use `Ctrl+C` or `:quit`), `Tab` to accept in popups (use `Enter`), and the help's `q`, `?` and `F1` to close it (use `Esc`). `open_link` in the chat list and `view_image` keep their actions with no default key.
+- New default keys and chat flow, the same keys meaning the same thing everywhere. `Enter` (or `l`, `Right`) goes into a chat with its newest message selected, `i` goes to its message box; `Esc` steps back out: the message box to selection, selection (also `h`, `Left`) to the chat list, and on the list it clears the filter or closes the open chat. `j`/`k`, `g`/`G`, `H`/`L` (and `M` in selection) move in the chat list, message selection and help. In selection `c` edits and `x` or `d` deletes. `Ctrl+O` jumps back to where the selection was before the last big jump. `y` copies the selected message (the system clipboard, and the terminal through OSC 52, which also works over SSH). `?` helps from anywhere outside a text box. Removed: `q` (use `Ctrl+C` or `:quit`), `Tab` to accept in popups (use `Enter`), and the help's `q`, `?` and `F1` to close it (use `Esc`). `open_link` in the chat list and `view_image` keep their actions with no default key.
 - Most default keys now live in `[keys.common]`, and `"key" = "unbound"` in a context's table stops a `common` key there.
 - `settings.toml` is no longer read-only to chatcli: the settings screen writes it (see Added).
 - WhatsApp read receipts are now off by default (`[whatsapp] send_read_receipts`). Before, they were always sent.
@@ -77,7 +77,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Cached downloads carry the Windows Mark of the Web (Office opens them in Protected View). Linux and macOS: the data folder is mode 0700.
 - `chatcli doctor` and `chatcli search` never upgrade the store. A pasted network path is text and is never probed.
 - Teams: an edit keeps the @mentions of the message, and `@Al` no longer matches inside `@Alex Example`.
-- Footer: a y/n question is bold, the footer keeps whole items (never `P...`), the newline hint is `Shift+Enter` where the terminal reports it (else `Ctrl+J`), and the chat list and message box show the help key and the message box `Shift+Up` select.
+- Footer: a y/n question is bold, the footer keeps whole items (never `P...`), the newline hint is `Shift+Enter` where the terminal reports it (else `Ctrl+J`), and the chat list and message box show the help key.
 - A skipped WhatsApp contact sync is logged as an error instead of "nothing failed".
 
 ## [0.1.0] - 2026-11-16

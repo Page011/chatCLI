@@ -997,9 +997,9 @@ mod tests {
         app
     }
 
-    /// Select the newest message (Shift+Up).
+    /// Select the newest message (Esc from the message box).
     fn select(app: &mut App) {
-        app.handle_key(key(KeyCode::Up, KeyModifiers::SHIFT));
+        app.handle_key(key(KeyCode::Esc, KeyModifiers::NONE));
         assert_eq!(app.active().focus, Focus::Select);
     }
 

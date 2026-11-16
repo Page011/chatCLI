@@ -19,7 +19,7 @@
 ║                                                                              ║
 ║Everywhere                                                                    ║
 ║Ctrl+C                 Quit              quit chatcli                         ║
-║lines 1-18 of 92                                                              ║
+║lines 1-18 of 91                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 Esc close  Up/Down scroll  PgUp/PgDn page
 --- styled runs (everything else is default style) ---

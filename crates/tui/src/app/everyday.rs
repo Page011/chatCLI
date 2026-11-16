@@ -1043,7 +1043,7 @@ mod tests {
         assert!(wheel(&mut app).is_empty(), "one at a time");
 
         let mut app = app_with_history(5);
-        app.handle_key(key_with(KeyCode::Up, KeyModifiers::SHIFT));
+        press(&mut app, KeyCode::Esc);
         assert_eq!(app.active().focus, Focus::Select);
         let out = press(&mut app, KeyCode::Home);
         assert_eq!(

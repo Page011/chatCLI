@@ -34,7 +34,7 @@ Right now you can host everything yourself.
 │                      │║> typing a draft                                      ║
 └──────────────────────┘╚══════════════════════════════════════════════════════╝
 
-Enter send  F1 help  Esc back  Shift+Up select  Ctrl+J newline  Ctrl+E emoji
+Enter send  F1 help  Esc back  Ctrl+J newline  Ctrl+E emoji  Ctrl+O attach
 ```
 
 ## Read this first
@@ -288,7 +288,6 @@ Message box:
 | `Enter` | Send the whole message |
 | `:command` | At the start of the box, `:` opens a list: the matching commands first (`:help`, `:settings`, `:keys`, `:signout`), then the matching emoji. `Enter` takes the highlighted item: a command runs, an emoji goes in. A space, punctuation or `Esc` closes the list, and the text stays text, so `:help` then a space or `Esc` and `Enter` sends `:help`. Only a lower-case word that is a whole command name (`:q`) or at least two letters of one opens commands, so `:P` and `:D` are never commands. Commands take no arguments here: use the command bar (`:theme dark`) |
 | `Esc` | Cancel a pending reply or edit; otherwise to message selection (to the chat list when the chat has no message yet) |
-| `Shift+Up` | Message selection |
 | `Left` / `Right`, `Ctrl+Left` / `Ctrl+Right` | Move the cursor by character, by word. These editing keys, down to `Ctrl+U`, work the same in every box you type in: the chat filter, the command bar, search, the emoji search and the file prompt (in the emoji picker `Left` and `Right` move through the grid) |
 | `Home` / `End` | Start / end of the line |
 | `Backspace` / `Delete` | Delete a character (an emoji goes whole) |
@@ -300,7 +299,7 @@ Message box:
 | `Ctrl+O` | Attach a file |
 | `Alt+V` or `Ctrl+Shift+V` | Attach the picture on the clipboard (Windows Terminal keeps `Ctrl+Shift+V` for its own text paste, so use `Alt+V` there) |
 
-Message selection (`Enter` on a chat, or `Shift+Up` from the message box). The footer lists the actions: the ones that apply are bold, the rest are dimmed (plain text in the high-contrast theme):
+Message selection (`Enter` on a chat, or `Esc` from the message box). The footer lists the actions: the ones that apply are bold, the rest are dimmed (plain text in the high-contrast theme):
 
 | Key | Does |
 |---|---|
@@ -317,17 +316,9 @@ Message selection (`Enter` on a chat, or `Shift+Up` from the message box). The f
 | `o` | Open the attachment (downloads first if needed) |
 | `y` | Copy the message's text (for an attachment with no caption, its file name). chatcli uses the system clipboard (on Linux the Wayland one natively, on wlroots compositors and KDE) and also asks the terminal to copy it (OSC 52), which is what works over SSH; some terminals must be told to allow that |
 
-Popups and pickers take `Enter` (not `Tab`) for the chosen item. `view_image` (a thumbnail of an image, in message selection) and `open_link` in the chat list (a link from the newest message) have no default key: bind one if you want them.
+Popups and pickers take `Enter` (not `Tab`) for the chosen item. `view_image` (a thumbnail of an image, in message selection), `open_link` in the chat list (a link from the newest message) and `select_messages` in the message box (selection even while a reply is pending) have no default key: bind one if you want them.
 
 The mouse works too: click a tab, click a chat (previews it, like moving the cursor), scroll the wheel. A preview does not mark the chat read: going into the chat, sending, or two seconds on it does. Unsent text is kept per chat. Times are local.
-
-If your terminal uses `Shift+Up` for its own scrollback, rebind it (see [Key bindings](#key-bindings)):
-
-```toml
-[keys.composer]
-"alt+up" = "select_messages"
-"shift+up" = "unbound"
-```
 
 ### Writing
 

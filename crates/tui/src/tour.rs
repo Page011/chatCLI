@@ -78,7 +78,6 @@ const UP: Act = key(KeyCode::Up);
 const DOWN: Act = key(KeyCode::Down);
 const LEFT: Act = key(KeyCode::Left);
 const RIGHT: Act = key(KeyCode::Right);
-const SHIFT_UP: Act = Act::Key(KeyCode::Up, KeyModifiers::SHIFT);
 
 const REFRESH_ROW: RowId = RowId::KeyAction(Context::List, Action::Refresh);
 
@@ -134,8 +133,8 @@ pub(crate) const STEPS: &[Step] = &[
         ],
     },
     Step {
-        caption: "Shift+Up selects a message; k and j move, i goes back to the box.",
-        acts: &[SHIFT_UP, Act::Wait(600), ch('k'), ch('k')],
+        caption: "Esc from the box selects a message; k and j move, i goes back to the box.",
+        acts: &[ESC, Act::Wait(600), ch('k'), ch('k')],
     },
     Step {
         caption: "r replies with a quote.",
@@ -143,12 +142,12 @@ pub(crate) const STEPS: &[Step] = &[
     },
     Step {
         caption: "e reacts to the selected message.",
-        acts: &[SHIFT_UP, UP, ch('e'), Act::Wait(900), ENTER],
+        acts: &[ESC, UP, ch('e'), Act::Wait(900), ENTER],
     },
     Step {
         caption: "c changes (edits) your own message.",
+        // Still selecting after the reaction.
         acts: &[
-            SHIFT_UP,
             ch('c'),
             ctrl(KeyCode::Char('u')),
             Act::Type("Edited by the tour"),
@@ -157,16 +156,11 @@ pub(crate) const STEPS: &[Step] = &[
     },
     Step {
         caption: "d (or x) deletes your message for everyone, after y/n.",
-        acts: &[SHIFT_UP, ch('d'), Act::Wait(1200), ch('y')],
+        acts: &[ESC, ch('d'), Act::Wait(1200), ch('y')],
     },
     Step {
         caption: "Attachments show as chips; o opens one in its app. Esc goes back to the chats.",
-        acts: &[
-            SHIFT_UP,
-            Act::SelectMsg("[image] sunset"),
-            Act::Wait(2500),
-            ESC,
-        ],
+        acts: &[Act::SelectMsg("[image] sunset"), Act::Wait(2500), ESC],
     },
     Step {
         caption: "Ctrl+F searches every message stored on this PC.",

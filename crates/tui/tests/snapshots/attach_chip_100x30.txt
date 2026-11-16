@@ -27,7 +27,7 @@
 │                            │║[photo.png 1 B]  Esc remove                                         ║
 │                            │║> look at this                                                      ║
 └────────────────────────────┘╚════════════════════════════════════════════════════════════════════╝
-Enter send  F1 help  Esc remove file  Shift+Up select  Ctrl+J newline  Ctrl+E emoji  Ctrl+O attach
+Enter send  F1 help  Esc remove file  Ctrl+J newline  Ctrl+E emoji  Ctrl+O attach  PgUp/PgDn scroll
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -76,4 +76,4 @@ row 25 cols 31-39: fg=Reset bg=Reset BOLD
 row 26 cols 31-45: fg=Reset bg=Reset BOLD
 row 26 cols 46-57: fg=Reset bg=Reset DIM
 row 27 cols 31-32: fg=Reset bg=Reset BOLD
-row 29 cols 0-97: fg=Reset bg=Reset DIM
+row 29 cols 0-98: fg=Reset bg=Reset DIM

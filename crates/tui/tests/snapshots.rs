@@ -1272,8 +1272,9 @@ fn rich_in(mut app: App, caps: bool) -> App {
     app
 }
 
-fn ctrl_up(app: &mut App) {
-    press_mod(app, KeyCode::Up, KeyModifiers::SHIFT);
+/// From the message box into message selection: Esc.
+fn to_selection(app: &mut App) {
+    press(app, KeyCode::Esc);
 }
 
 /// Selection on `id`: from the newest, Up past the messages that can be selected (the deleted
@@ -1284,7 +1285,7 @@ fn select_msg(app: &mut App, id: &str) {
         .iter()
         .position(|m| *m == id)
         .expect("a selectable id");
-    ctrl_up(app);
+    to_selection(app);
     for _ in 0..order.len() - 1 - at {
         press(app, KeyCode::Up);
     }
@@ -1299,7 +1300,7 @@ fn conversation_shows_quotes_reactions_edited_deleted_and_mentions() {
 fn select_newest_message() {
     both_sizes("select_newest", || {
         let mut app = rich_app(true);
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         app
     });
 }
@@ -1638,7 +1639,7 @@ fn open_media_in(mut app: App, depth: Depth) -> App {
 fn select_media(app: &mut App, id: &str) {
     let order = ["m1", "m2", "m3", "m4", "m5", "m6"];
     let at = order.iter().position(|m| *m == id).expect("an id");
-    ctrl_up(app);
+    to_selection(app);
     for _ in 0..order.len() - 1 - at {
         press(app, KeyCode::Up);
     }
@@ -2818,7 +2819,7 @@ fn footers_point_at_commands_and_help() {
     };
     let select = || {
         let mut app = open_chat_app();
-        press_mod(&mut app, KeyCode::Up, KeyModifiers::SHIFT);
+        to_selection(&mut app);
         app
     };
     let screens: [(&str, App, &str, &str); 4] = [

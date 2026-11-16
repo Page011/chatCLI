@@ -27,7 +27,7 @@
 │                            │║Editing: I shortened the introduction.  Esc cancel                  ║
 │                            │║> I shortened the introduction.                                     ║
 └────────────────────────────┘╚════════════════════════════════════════════════════════════════════╝
-Enter send  F1 help  Esc cancel edit  Shift+Up select  Ctrl+J newline  Ctrl+E emoji  Ctrl+O attach
+Enter send  F1 help  Esc cancel edit  Ctrl+J newline  Ctrl+E emoji  Ctrl+O attach  PgUp/PgDn scroll
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -79,5 +79,5 @@ row 25 cols 31-39: fg=Reset bg=Reset BOLD
 row 26 cols 31-68: fg=DarkGray bg=Reset NONE
 row 26 cols 69-80: fg=Reset bg=Reset DIM
 row 27 cols 31-32: fg=Reset bg=Reset BOLD
-row 29 cols 0-97: fg=Reset bg=Reset DIM
+row 29 cols 0-98: fg=Reset bg=Reset DIM
 cursor: 62,27

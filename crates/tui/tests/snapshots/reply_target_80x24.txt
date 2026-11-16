@@ -21,7 +21,7 @@
 │                          │║Replying to Alex Example: Great. The …  Esc cancel║
 │                          │║> agreed                                          ║
 └──────────────────────────┘╚══════════════════════════════════════════════════╝
-Enter send  F1 help  Esc cancel reply  Shift+Up select  Ctrl+J newline
+Enter send  F1 help  Esc cancel reply  Ctrl+J newline  Ctrl+E emoji
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -73,5 +73,5 @@ row 19 cols 29-37: fg=Reset bg=Reset BOLD
 row 20 cols 29-66: fg=DarkGray bg=Reset NONE
 row 20 cols 67-78: fg=Reset bg=Reset DIM
 row 21 cols 29-30: fg=Reset bg=Reset BOLD
-row 23 cols 0-69: fg=Reset bg=Reset DIM
+row 23 cols 0-66: fg=Reset bg=Reset DIM
 cursor: 37,21
