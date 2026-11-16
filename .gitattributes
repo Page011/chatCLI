@@ -1,0 +1,3 @@
+# Text files are stored and checked out with LF line endings on every OS, so Windows, Linux,
+# macOS and CI agree and git stops warning about CRLF conversion. Binary files are detected.
+* text=auto eol=lf

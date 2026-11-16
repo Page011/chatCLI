@@ -7,7 +7,7 @@
 │Teams           │║Density             cozy           cozy or compact                              ║
 │WhatsApp        │║Show previews       on             last message under each chat                 ║
 │Keys            │║Avatars             groups         groups, all or off                           ║
-│About           │║                                                                                ║
+│About           │║Photos              on             in avatars, Sixel/Kitty/iTerm2 only          ║
 │                │║                                                                                ║
 │                │║                                                                                ║
 │                │║                                                                                ║
@@ -44,5 +44,6 @@ row 5 cols 54-98: fg=Reset bg=Reset DIM
 row 6 cols 54-98: fg=Reset bg=Reset DIM
 row 7 cols 54-98: fg=Reset bg=Reset DIM
 row 8 cols 54-98: fg=Reset bg=Reset DIM
+row 9 cols 54-98: fg=Reset bg=Reset DIM
 row 27 cols 19-49: fg=Reset bg=Reset DIM
 row 29 cols 0-76: fg=Reset bg=Reset DIM

@@ -180,7 +180,9 @@ impl Graphics {
     /// picker to encode with. Each is asked for once.
     pub fn wanted(&mut self, vis: &[VisibleImage]) -> Vec<(GfxKey, Picker)> {
         if self.ready.len() > KEEP_MAX {
-            self.ready.clear();
+            // Drop only what is off screen, or a busy screen would re-encode for ever.
+            let on: std::collections::HashSet<GfxKey> = vis.iter().map(Self::key_of).collect();
+            self.ready.retain(|k, _| on.contains(k));
         }
         let mut jobs = Vec::new();
         for v in vis {
@@ -223,7 +225,8 @@ impl Graphics {
     /// True when the overlay differs from the last frame's: the caller clears the screen first.
     pub fn changed(&mut self, vis: &[VisibleImage]) -> bool {
         let now = self.overlay(vis);
-        let changed = now != self.last;
+        // Only a removed or moved image can leave a ghost; a new one draws over text.
+        let changed = self.last.iter().any(|e| !now.contains(e));
         self.last = now;
         changed
     }
@@ -357,8 +360,8 @@ mod tests {
         assert!(proto.size().width <= 6 && proto.size().height <= 3);
         g.store(key, Ok(proto));
         assert!(
-            g.changed(std::slice::from_ref(&v)),
-            "an image appeared: clear first"
+            !g.changed(std::slice::from_ref(&v)),
+            "an image appeared: it draws over text, no clear"
         );
         assert!(
             !g.changed(std::slice::from_ref(&v)),

@@ -172,25 +172,40 @@ fn seed_store(store: &Store, net: Network) {
     }
 }
 
+/// The fake network id of a demo sender, so the TUI can ask for their photo.
+fn demo_id(sender: &str) -> String {
+    format!("demo:{}", if sender == "You" { "you" } else { sender })
+}
+
+/// Gives every message a sender id (the TUI asks for photos by id).
+fn with_ids(mut list: Vec<ChatMessage>) -> Vec<ChatMessage> {
+    for m in &mut list {
+        m.sender_id = demo_id(&m.sender);
+    }
+    list
+}
+
 /// One page of older messages before `before_ts`, oldest first. `page` counts from 1.
 fn older_page(net: Network, chat: &str, before_ts: i64, page: u32) -> Vec<ChatMessage> {
-    (0..OLDER_PAGE)
-        .map(|i| {
-            // Newest of the page last; two hours apart so the day separators show.
-            let age = (OLDER_PAGE - i) as i64;
-            let number = (page as usize - 1) * OLDER_PAGE + (OLDER_PAGE - i);
-            ChatMessage {
-                network: net,
-                chat_id: chat.to_string(),
-                id: format!("{chat}-old{page}-{i:02}"),
-                ts: before_ts - age * 2 * 3_600_000,
-                sender: PEOPLE[i % PEOPLE.len()].to_string(),
-                text: format!("{} (earlier message {number})", LINES[i % LINES.len()]),
-                state: MessageState::Sent,
-                ..ChatMessage::blank(net)
-            }
-        })
-        .collect()
+    with_ids(
+        (0..OLDER_PAGE)
+            .map(|i| {
+                // Newest of the page last; two hours apart so the day separators show.
+                let age = (OLDER_PAGE - i) as i64;
+                let number = (page as usize - 1) * OLDER_PAGE + (OLDER_PAGE - i);
+                ChatMessage {
+                    network: net,
+                    chat_id: chat.to_string(),
+                    id: format!("{chat}-old{page}-{i:02}"),
+                    ts: before_ts - age * 2 * 3_600_000,
+                    sender: PEOPLE[i % PEOPLE.len()].to_string(),
+                    text: format!("{} (earlier message {number})", LINES[i % LINES.len()]),
+                    state: MessageState::Sent,
+                    ..ChatMessage::blank(net)
+                }
+            })
+            .collect(),
+    )
 }
 
 fn history(net: Network, chat: &ChatSummary) -> Vec<ChatMessage> {
@@ -278,7 +293,7 @@ fn history(net: Network, chat: &ChatSummary) -> Vec<ChatMessage> {
         // After the reply: the list stays in time order.
         out.extend(media_messages(net, chat, end));
     }
-    out
+    with_ids(out)
 }
 
 /// The demo's attachments: (kind, name, mime, size, fetch_ref, text). What each `fetch_ref`
@@ -412,6 +427,40 @@ fn demo_png() -> Vec<u8> {
     let _ = image::DynamicImage::ImageRgb8(img)
         .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png);
     bytes
+}
+
+/// A made-up 96x96 portrait for a demo id: a colour from the id, a head and shoulders.
+fn demo_avatar(id: &str) -> Vec<u8> {
+    // FNV-1a: the same id always gets the same colour.
+    let hash = id.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| {
+        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+    });
+    let base = [
+        60 + (hash & 0x7f) as u8,
+        60 + ((hash >> 8) & 0x7f) as u8,
+        60 + ((hash >> 16) & 0x7f) as u8,
+    ];
+    let light = base.map(|c| c.saturating_add(90));
+    let img = image::RgbImage::from_fn(96, 96, |x, y| {
+        let (fx, fy) = (x as f32, y as f32);
+        let head = ((fx - 48.0).powi(2) + (fy - 38.0).powi(2)).sqrt() < 16.0;
+        let shoulders = ((fx - 48.0).powi(2) + (fy - 100.0).powi(2)).sqrt() < 38.0;
+        image::Rgb(if head || shoulders { light } else { base })
+    });
+    let mut bytes = Vec::new();
+    // Writing a PNG into memory cannot fail.
+    let _ = image::DynamicImage::ImageRgb8(img)
+        .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png);
+    bytes
+}
+
+/// What the demo answers for one person: a portrait for a `demo:` id, nothing for Sam Sample
+/// (so the initials fallback can be seen) and for anything else.
+fn avatar_for(net: Network, media: &MediaCache, id: &str) -> Option<PathBuf> {
+    if !id.starts_with("demo:") || id == "demo:Sam Sample" {
+        return None;
+    }
+    media.store_avatar(net, id, &demo_avatar(id)).ok()
 }
 
 /// Puts `bytes` in the media cache like a real download (once: later asks find it).
@@ -580,6 +629,7 @@ async fn backend(
                         id: format!("demo-in-{next_id}"),
                         ts: now_ms(),
                         sender: "Alex Example".to_string(),
+                        sender_id: demo_id("Alex Example"),
                         from_me: false,
                         text: "demo message that just arrived".to_string(),
                         state: MessageState::Sent,
@@ -650,6 +700,7 @@ async fn backend(
                             id: format!("demo-out-{next_id}"),
                             ts: now_ms(),
                             sender: "You".to_string(),
+                            sender_id: demo_id("You"),
                             from_me: true,
                             text,
                             state: MessageState::Sent,
@@ -729,6 +780,17 @@ async fn backend(
                             let _ = events.send(fetch_answer(net, &media, chat_id, message_id, index, att));
                         });
                     }
+                    Command::FetchAvatars { people } => {
+                        let (events, media) = (events.clone(), media.clone());
+                        // A short wait, so the initials can be seen first.
+                        tokio::spawn(async move {
+                            sleep(Duration::from_millis(400)).await;
+                            for person_id in people {
+                                let path = avatar_for(net, &media, &person_id);
+                                let _ = events.send(Event::Avatar { network: net, person_id, path });
+                            }
+                        });
+                    }
                     Command::SendMedia { chat_id, client_id, path, kind, caption } => {
                         let events = events.clone();
                         if chat_id == REFUSING_CHAT {
@@ -771,6 +833,7 @@ async fn backend(
                             id: format!("demo-out-{next_id}"),
                             ts: now_ms(),
                             sender: "You".to_string(),
+                            sender_id: demo_id("You"),
                             from_me: true,
                             text: if caption.is_empty() { marker } else { format!("{marker} {caption}") },
                             state: MessageState::Sent,

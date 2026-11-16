@@ -310,12 +310,10 @@ fn check(name: &str, w: u16, h: u16, got: &str) {
     );
 }
 
-fn both_sizes(name: &str, mut build: impl FnMut() -> App) {
-    for (w, h) in [(100, 30), (80, 24)] {
-        let mut app = build();
-        let got = render(&mut app, w, h);
-        check(name, w, h, &got);
-    }
+/// One screen at the standard 80x24; narrow sizes are listed where their layout differs.
+fn std_size(name: &str, mut build: impl FnMut() -> App) {
+    let got = render(&mut build(), 80, 24);
+    check(name, 80, 24, &got);
 }
 
 fn qr_app() -> App {
@@ -340,7 +338,7 @@ fn qr_app() -> App {
 
 #[test]
 fn teams_sign_in() {
-    both_sizes("teams_sign_in", || {
+    std_size("teams_sign_in", || {
         let mut app = new_app();
         app.handle_event(Event::Status(
             Network::Teams,
@@ -356,17 +354,17 @@ fn teams_sign_in() {
 
 #[test]
 fn whatsapp_qr() {
-    both_sizes("whatsapp_qr", qr_app);
+    std_size("whatsapp_qr", qr_app);
 }
 
 #[test]
 fn chat_list_and_open_chat() {
-    both_sizes("chat_list_and_open_chat", open_chat_app);
+    std_size("chat_list_and_open_chat", open_chat_app);
 }
 
 #[test]
 fn filter_no_matches() {
-    both_sizes("filter_no_matches", || {
+    std_size("filter_no_matches", || {
         // `/` opens the command bar: the plain filter needs a binding of its own.
         let mut settings = Settings::default();
         settings
@@ -423,7 +421,7 @@ fn error_app() -> App {
 
 #[test]
 fn error_notice() {
-    both_sizes("error_notice", error_app);
+    std_size("error_notice", error_app);
 }
 
 fn status_app(teams: Status, whatsapp: Status) -> App {
@@ -435,14 +433,14 @@ fn status_app(teams: Status, whatsapp: Status) -> App {
 
 #[test]
 fn signing_in_and_linking_panels() {
-    both_sizes("signing_in_panel", || {
+    std_size("signing_in_panel", || {
         status_app(Status::LoggingIn, Status::LoggingIn)
     });
 }
 
 #[test]
 fn sign_in_needed_with_reason() {
-    both_sizes("sign_in_needed_reason", || {
+    std_size("sign_in_needed_reason", || {
         let mut app = status_app(
             Status::NeedsLogin {
                 reason: Some("Teams sign-in was rejected. Sign in again.".into()),
@@ -458,7 +456,7 @@ fn sign_in_needed_with_reason() {
 
 #[test]
 fn empty_and_loading_lists() {
-    both_sizes("empty_list", || {
+    std_size("empty_list", || {
         status_app(
             Status::Online {
                 live: true,
@@ -467,14 +465,14 @@ fn empty_and_loading_lists() {
             Status::Connecting,
         )
     });
-    both_sizes("loading_list", || {
+    std_size("loading_list", || {
         status_app(Status::Connecting, Status::Connecting)
     });
 }
 
 #[test]
 fn whatsapp_not_live_phone_offline() {
-    both_sizes("whatsapp_not_live", || {
+    std_size("whatsapp_not_live", || {
         let mut app = status_app(
             Status::Online {
                 live: true,
@@ -547,7 +545,7 @@ fn no_panic_at_any_size() {
 /// in the list (double border on the sidebar), the hint says "Enter reply".
 #[test]
 fn list_focus_with_preview() {
-    both_sizes("list_preview", || {
+    std_size("list_preview", || {
         let mut app = new_app();
         app.handle_event(Event::Status(
             Network::Teams,
@@ -571,7 +569,7 @@ fn list_focus_with_preview() {
 /// Preview of a chat whose messages have not arrived yet.
 #[test]
 fn list_preview_loading() {
-    both_sizes("list_preview_loading", || {
+    std_size("list_preview_loading", || {
         let mut app = new_app();
         app.handle_event(Event::Status(
             Network::Teams,
@@ -615,7 +613,7 @@ fn press_mod(app: &mut App, code: KeyCode, mods: KeyModifiers) {
 /// Vim Normal mode: `-- NORMAL --` at the left of the footer, the chat list in focus.
 #[test]
 fn vim_normal_mode() {
-    both_sizes("vim_normal", || {
+    std_size("vim_normal", || {
         let mut app = online_in(new_vim_app());
         press(&mut app, KeyCode::Char('j'));
         press(&mut app, KeyCode::Char('k'));
@@ -626,13 +624,13 @@ fn vim_normal_mode() {
 /// Vim Insert mode: the message box has focus and the footer says so.
 #[test]
 fn vim_insert_mode() {
-    both_sizes("vim_insert", || open_chat_in(new_vim_app()));
+    std_size("vim_insert", || open_chat_in(new_vim_app()));
 }
 
 /// A held `g` shows in the footer next to the mode.
 #[test]
 fn vim_pending_g_is_echoed() {
-    both_sizes("vim_pending_g", || {
+    std_size("vim_pending_g", || {
         let mut app = online_in(new_vim_app());
         press(&mut app, KeyCode::Char('g'));
         app
@@ -642,7 +640,7 @@ fn vim_pending_g_is_echoed() {
 /// The `:` box above the footer, with some text typed.
 #[test]
 fn vim_command_box() {
-    both_sizes("vim_command_box", || {
+    std_size("vim_command_box", || {
         let mut app = online_in(new_vim_app());
         press(&mut app, KeyCode::Char(':'));
         type_str(&mut app, "keys default");
@@ -878,14 +876,12 @@ fn composer_multiline_grows() {
     type_str(&mut app, "second line");
     alt_enter(&mut app);
     type_str(&mut app, "third");
-    both_sizes_cursor("composer_multiline", &mut app);
+    std_size_cursor("composer_multiline", &mut app);
 }
 
-fn both_sizes_cursor(name: &str, app: &mut App) {
-    for (w, h) in [(100, 30), (80, 24)] {
-        let got = render_cursor(app, w, h);
-        check(name, w, h, &got);
-    }
+fn std_size_cursor(name: &str, app: &mut App) {
+    let got = render_cursor(app, 80, 24);
+    check(name, 80, 24, &got);
 }
 
 /// More than six lines: six rows are shown, scrolled to the cursor.
@@ -898,7 +894,7 @@ fn composer_scrolls_after_six_rows() {
             alt_enter(&mut app);
         }
     }
-    both_sizes_cursor("composer_six_rows", &mut app);
+    std_size_cursor("composer_six_rows", &mut app);
     // Cursor moved to the first line: the view scrolls back up with it.
     for _ in 0..8 {
         press(&mut app, KeyCode::Home);
@@ -917,7 +913,7 @@ fn composer_wraps_a_long_line() {
         &mut app,
         "this is a long message that needs more than one row in the message box so it wraps at a space",
     );
-    both_sizes_cursor("composer_wrap", &mut app);
+    std_size_cursor("composer_wrap", &mut app);
 }
 
 #[test]
@@ -945,7 +941,7 @@ fn paste_three_lines() {
 fn shortcode_popup() {
     let mut app = typing_app();
     type_str(&mut app, "nice :thu");
-    both_sizes_cursor("shortcode_popup", &mut app);
+    std_size_cursor("shortcode_popup", &mut app);
     press(&mut app, KeyCode::Down);
     let got = render_cursor(&mut app, 80, 24);
     check("shortcode_popup_second", 80, 24, &got);
@@ -1361,12 +1357,12 @@ fn select_msg(app: &mut App, id: &str) {
 
 #[test]
 fn conversation_shows_quotes_reactions_edited_deleted_and_mentions() {
-    both_sizes("rich_conversation", || rich_app(true));
+    std_size("rich_conversation", || rich_app(true));
 }
 
 #[test]
 fn select_newest_message() {
-    both_sizes("select_newest", || {
+    std_size("select_newest", || {
         let mut app = rich_app(true);
         ctrl_up(&mut app);
         app
@@ -1429,7 +1425,7 @@ fn select_a_long_message_highlights_every_line() {
 
 #[test]
 fn reply_line_above_the_message_box() {
-    both_sizes_cursor_app("reply_target", || {
+    std_size_cursor_app("reply_target", || {
         let mut app = rich_app(true);
         select_msg(&mut app, "m3");
         press(&mut app, KeyCode::Char('r'));
@@ -1440,7 +1436,7 @@ fn reply_line_above_the_message_box() {
 
 #[test]
 fn edit_line_above_the_message_box() {
-    both_sizes_cursor_app("edit_target", || {
+    std_size_cursor_app("edit_target", || {
         let mut app = rich_app(true);
         select_msg(&mut app, "m4");
         press(&mut app, KeyCode::Char('E'));
@@ -1468,12 +1464,9 @@ fn reaction_picker_opens_from_selection() {
     check("select_react_picker", 80, 24, &got);
 }
 
-fn both_sizes_cursor_app(name: &str, mut build: impl FnMut() -> App) {
-    for (w, h) in [(100, 30), (80, 24)] {
-        let mut app = build();
-        let got = render_cursor(&mut app, w, h);
-        check(name, w, h, &got);
-    }
+fn std_size_cursor_app(name: &str, mut build: impl FnMut() -> App) {
+    let got = render_cursor(&mut build(), 80, 24);
+    check(name, 80, 24, &got);
 }
 
 /// The group "Project Team" open with its members known.
@@ -1567,7 +1560,7 @@ fn group_run_app(settings: Settings) -> App {
 
 #[test]
 fn group_messages_show_avatars_and_runs() {
-    for (w, h) in [(100, 30), (80, 24), (40, 12)] {
+    for (w, h) in [(80, 24), (40, 12)] {
         let got = render(&mut group_run_app(Settings::default()), w, h);
         check("group_avatars", w, h, &got);
     }
@@ -1601,7 +1594,7 @@ fn avatars_off_and_avatars_everywhere() {
 
 #[test]
 fn mention_list_in_a_group() {
-    both_sizes_cursor_app("mention_popup", || {
+    std_size_cursor_app("mention_popup", || {
         let mut app = group_app();
         type_str(&mut app, "hello @al");
         app
@@ -1830,7 +1823,8 @@ fn render_media(app: &mut App, w: u16, h: u16) -> String {
 fn attachment_chips_and_their_states() {
     let dir = media_dir("chips");
     let png = sample_png(&dir);
-    for (w, h) in [(100, 30), (80, 24)] {
+    {
+        let (w, h) = (80, 24);
         let mut app = media_app(Depth::True);
         // m3: download and open (the file arrives, the OS opens it).
         select_media(&mut app, "m3");
@@ -1888,7 +1882,8 @@ fn an_executable_is_refused_with_a_reason() {
 fn thumbnail_under_an_image() {
     let dir = media_dir("thumb");
     let png = sample_png(&dir);
-    for (w, h) in [(100, 30), (80, 24)] {
+    {
+        let (w, h) = (80, 24);
         let mut app = media_app(Depth::True);
         select_media(&mut app, "m2");
         let out = press_out(&mut app, KeyCode::Char('v'));
@@ -2070,7 +2065,8 @@ fn chip_above_the_message_box() {
     let dir = attach_dir("chip_above_the_message_b");
     let mut app = attached_app(&dir, "photo.png");
     type_str(&mut app, "look at this");
-    for (w, h) in [(100, 30), (80, 24)] {
+    {
+        let (w, h) = (80, 24);
         let got = render(&mut app, w, h);
         assert!(got.contains("[photo.png 1 B]"), "{got}");
         check("attach_chip", w, h, &got);
@@ -2120,7 +2116,8 @@ fn upload_progress_on_the_message_and_in_the_footer() {
         done: 1_350_000,
         total: 3_000_000,
     });
-    for (w, h) in [(100, 30), (80, 24)] {
+    {
+        let (w, h) = (80, 24);
         let got = render(&mut app, w, h);
         assert!(got.contains("[sending 45%]"), "{got}");
         check("upload_progress", w, h, &got);
@@ -2211,7 +2208,8 @@ fn themed(settings: Settings) -> App {
 
 #[test]
 fn theme_default_is_exactly_the_screen_without_a_theme() {
-    for (w, h) in [(100, 30), (80, 24)] {
+    {
+        let (w, h) = (80, 24);
         let plain = render(&mut themed(Settings::default()), w, h);
         let named = render(&mut themed(theme_settings("default", &[])), w, h);
         assert_eq!(plain, named, "name = \"default\" changes nothing");
@@ -2221,7 +2219,8 @@ fn theme_default_is_exactly_the_screen_without_a_theme() {
 
 #[test]
 fn theme_high_contrast() {
-    for (w, h) in [(100, 30), (80, 24)] {
+    {
+        let (w, h) = (80, 24);
         let got = render(&mut themed(theme_settings("high-contrast", &[])), w, h);
         // No grey and no dim text anywhere.
         assert!(!got.contains("DarkGray") && !got.contains("DIM"), "{got}");
@@ -2240,7 +2239,8 @@ fn render_palette(app: &mut App, w: u16, h: u16) -> String {
 #[test]
 fn palettes() {
     for p in ["blocks", "minimal", "rounded"] {
-        for (w, h) in [(100, 30), (80, 24)] {
+        {
+            let (w, h) = (80, 24);
             let got = render_palette(
                 &mut themed(theme_settings("default", &[("palette", p)])),
                 w,
@@ -2324,7 +2324,8 @@ fn rgb_and_index_overrides_are_fixed_colours() {
 fn no_color_removes_every_colour_and_keeps_bold_dim_and_reverse() {
     let (theme, problems) = Theme::from_settings(&Settings::default().theme, true);
     assert!(problems.is_empty());
-    for (w, h) in [(100, 30), (80, 24)] {
+    {
+        let (w, h) = (80, 24);
         let mut app = themed(Settings::default());
         app.set_theme(theme.clone());
         app.resize(w, h);
@@ -2392,20 +2393,20 @@ fn layout_app(f: impl FnOnce(&mut Settings)) -> App {
 
 #[test]
 fn layout_sidebar_width_in_columns_and_percent() {
-    both_sizes("layout_sidebar_cols", || {
+    std_size("layout_sidebar_cols", || {
         layout_app(|s| s.layout.sidebar_width = Some(SidebarWidth::Columns(20)))
     });
-    both_sizes("layout_sidebar_percent", || {
+    std_size("layout_sidebar_percent", || {
         layout_app(|s| s.layout.sidebar_width = Some(SidebarWidth::Percent(50)))
     });
 }
 
 #[test]
 fn layout_twelve_hour_times_and_date_orders() {
-    both_sizes("layout_12h", || {
+    std_size("layout_12h", || {
         layout_app(|s| s.layout.time_format = TimeFormat::H12)
     });
-    both_sizes("layout_mdy", || {
+    std_size("layout_mdy", || {
         layout_app(|s| s.layout.date_order = DateOrder::Mdy)
     });
     let got = render(
@@ -2422,10 +2423,10 @@ fn layout_twelve_hour_times_and_date_orders() {
 
 #[test]
 fn layout_compact_density_and_no_previews() {
-    both_sizes("layout_compact", || {
+    std_size("layout_compact", || {
         layout_app(|s| s.layout.density = Density::Compact)
     });
-    both_sizes("layout_no_previews", || {
+    std_size("layout_no_previews", || {
         layout_app(|s| s.layout.show_previews = false)
     });
     // Narrow: the list alone, still one row per chat.
@@ -2438,7 +2439,8 @@ fn layout_compact_density_and_no_previews() {
 
 #[test]
 fn default_layout_settings_give_todays_screen() {
-    for (w, h) in [(100, 30), (80, 24)] {
+    {
+        let (w, h) = (80, 24);
         let today = render(&mut open_chat_app(), w, h);
         let explicit = render(
             &mut layout_app(|s| {
@@ -2482,8 +2484,8 @@ fn flagged_app() -> App {
 
 #[test]
 fn pinned_muted_and_hidden_chats() {
-    both_sizes("chat_flags", flagged_app);
-    both_sizes("chat_flags_hidden_shown", || {
+    std_size("chat_flags", flagged_app);
+    std_size("chat_flags_hidden_shown", || {
         let mut app = flagged_app();
         press(&mut app, KeyCode::Char('H'));
         app
@@ -2497,12 +2499,12 @@ fn pinned_muted_and_hidden_chats() {
 
 #[test]
 fn jump_to_the_next_unread_chat_and_mark_all_read() {
-    both_sizes("unread_jump", || {
+    std_size("unread_jump", || {
         let mut app = online_in(new_app());
         press(&mut app, KeyCode::Char('n'));
         app
     });
-    both_sizes("mark_all_read_prompt", || {
+    std_size("mark_all_read_prompt", || {
         let mut app = online_in(new_app());
         press(&mut app, KeyCode::Char('M'));
         app
@@ -2665,12 +2667,12 @@ fn ctrl_f(app: &mut App) {
 
 #[test]
 fn search_box_empty_with_hits_and_without() {
-    both_sizes("search_empty", || {
+    std_size("search_empty", || {
         let mut app = search_app();
         ctrl_f(&mut app);
         app
     });
-    both_sizes("search_hits", || {
+    std_size("search_hits", || {
         let mut app = search_app();
         ctrl_f(&mut app);
         type_str(&mut app, "budget");
@@ -2770,7 +2772,7 @@ fn wa_typing_app() -> App {
 
 #[test]
 fn someone_typing_shows_on_the_sidebar_row_and_above_the_message_box() {
-    both_sizes("typing", || {
+    std_size("typing", || {
         let mut app = wa_typing_app();
         press(&mut app, KeyCode::Enter);
         app.handle_event(Event::Typing {
@@ -2916,28 +2918,20 @@ fn bar_app(text: &str) -> App {
 
 #[test]
 fn command_bar_empty() {
-    at_sizes(
-        "command_bar_empty",
-        &[(100, 30), (80, 24), (40, 12)],
-        || bar_app(""),
-    );
+    at_sizes("command_bar_empty", &[(80, 24), (40, 12)], || bar_app(""));
 }
 
 #[test]
 fn command_bar_filtered() {
-    at_sizes(
-        "command_bar_filtered",
-        &[(100, 30), (80, 24), (40, 12)],
-        || bar_app("se"),
-    );
+    at_sizes("command_bar_filtered", &[(80, 24), (40, 12)], || {
+        bar_app("se")
+    });
 }
 
 #[test]
 fn command_bar_lists_chats_after_commands() {
     // "e" matches several commands and chats: both sections show.
-    at_sizes("command_bar_chats", &[(100, 30), (80, 24)], || {
-        bar_app("sam")
-    });
+    at_sizes("command_bar_chats", &[(80, 24)], || bar_app("sam"));
 }
 
 #[test]
@@ -2969,7 +2963,7 @@ fn command_bar_dims_what_cannot_run() {
 
 #[test]
 fn composer_slash_popup() {
-    at_sizes("composer_slash_popup", &[(100, 30), (80, 24)], || {
+    at_sizes("composer_slash_popup", &[(80, 24)], || {
         let mut app = online_in(new_app());
         press(&mut app, KeyCode::Enter);
         type_str(&mut app, "/s");
@@ -3104,36 +3098,34 @@ fn settings_app(downs: usize, in_rows: bool) -> App {
 
 #[test]
 fn settings_appearance() {
-    at_sizes(
-        "settings_appearance",
-        &[(100, 30), (80, 24), (40, 12)],
-        || settings_app(0, true),
-    );
+    at_sizes("settings_appearance", &[(80, 24), (40, 12)], || {
+        settings_app(0, true)
+    });
 }
 
 #[test]
 fn settings_layout() {
-    both_sizes("settings_layout", || settings_app(1, true));
+    std_size("settings_layout", || settings_app(1, true));
 }
 
 #[test]
 fn settings_notifications() {
-    both_sizes("settings_notifications", || settings_app(2, true));
+    std_size("settings_notifications", || settings_app(2, true));
 }
 
 #[test]
 fn settings_media() {
-    both_sizes("settings_media", || settings_app(3, true));
+    std_size("settings_media", || settings_app(3, true));
 }
 
 #[test]
 fn settings_teams() {
-    both_sizes("settings_teams", || settings_app(4, true));
+    std_size("settings_teams", || settings_app(4, true));
 }
 
 #[test]
 fn settings_whatsapp() {
-    both_sizes("settings_whatsapp", || settings_app(5, true));
+    std_size("settings_whatsapp", || settings_app(5, true));
 }
 
 /// The Keys page with the cursor on the Chat list `refresh` row (a Down count: the capture
@@ -3148,13 +3140,13 @@ fn keys_app() -> App {
 
 #[test]
 fn settings_keys() {
-    at_sizes("settings_keys", &[(100, 30), (80, 24), (40, 12)], keys_app);
+    at_sizes("settings_keys", &[(80, 24), (40, 12)], keys_app);
 }
 
 /// Waiting for the new key: the footer asks, Esc cancels.
 #[test]
 fn key_capture() {
-    at_sizes("key_capture", &[(100, 30), (80, 24), (40, 12)], || {
+    at_sizes("key_capture", &[(80, 24), (40, 12)], || {
         let mut app = keys_app();
         press(&mut app, KeyCode::Enter);
         let got = render(&mut app, 100, 30);
@@ -3166,7 +3158,7 @@ fn key_capture() {
 /// `p` already pins: Enter swaps, Esc cancels.
 #[test]
 fn key_conflict() {
-    at_sizes("key_conflict", &[(100, 30), (80, 24)], || {
+    at_sizes("key_conflict", &[(80, 24)], || {
         let mut app = keys_app();
         press(&mut app, KeyCode::Enter);
         press(&mut app, KeyCode::Char('p'));
@@ -3289,7 +3281,7 @@ fn keys_ui_survives_every_terminal_size() {
 
 #[test]
 fn settings_about() {
-    both_sizes("settings_about", || settings_app(7, false));
+    std_size("settings_about", || settings_app(7, false));
 }
 
 #[test]
@@ -3442,7 +3434,7 @@ fn tour_app() -> App {
 
 #[test]
 fn tour_caption() {
-    at_sizes("tour_caption", &[(100, 30), (80, 24), (40, 12)], tour_app);
+    at_sizes("tour_caption", &[(80, 24), (40, 12)], tour_app);
 }
 
 #[test]

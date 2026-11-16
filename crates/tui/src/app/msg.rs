@@ -1512,4 +1512,172 @@ mod tests {
         assert_eq!(out.len(), 1, "one LoadMembers: {out:?}");
         assert_eq!(app.popup().unwrap().items[0].label, "Alex Example");
     }
+
+    // ---- profile photos in avatars ----
+
+    /// A message from a named person id.
+    fn from_id(id: &str, at: i64, who: &str) -> ChatMessage {
+        ChatMessage {
+            sender_id: who.into(),
+            ..msg(id, at, false, "hello")
+        }
+    }
+
+    fn group_app(messages: Vec<ChatMessage>) -> App {
+        let mut app = app_with(ChatKind::Group, messages);
+        app.resize(100, 30);
+        app
+    }
+
+    fn photo(app: &mut App, who: &str) {
+        app.ns_mut(Network::Teams)
+            .avatars
+            .insert(who.into(), Some(format!("{who}.png").into()));
+    }
+
+    #[test]
+    fn a_run_start_has_an_avatar_slot_at_its_name_row() {
+        let app = group_app(vec![
+            from_id("m1", 1000, "u1"),
+            from_id("m2", 2000, "u1"),
+            from_id("m3", 3000, ""),
+        ]);
+        let ns = app.ns(Network::Teams);
+        let (_, spans) = ui::message_layout(ns, &app.look(), 60);
+        let slot = spans[0].avatar.as_ref().expect("run start");
+        assert_eq!((slot.person.as_str(), slot.line), ("u1", spans[0].start));
+        assert!(spans[1].avatar.is_none(), "continuation");
+        assert!(spans[2].avatar.is_none(), "no sender id");
+        let (_, narrow) = ui::message_layout(ns, &app.look(), 20);
+        assert!(narrow.iter().all(|s| s.avatar.is_none()), "too narrow");
+        let direct = app_with(ChatKind::Direct, vec![from_id("m1", 1000, "u1")]);
+        let (_, spans) = ui::message_layout(direct.ns(Network::Teams), &direct.look(), 60);
+        assert!(spans[0].avatar.is_none(), "1:1 has no avatar by default");
+    }
+
+    #[test]
+    fn photos_are_drawn_at_the_avatar_cells_anchored_to_the_bottom() {
+        let mut app = group_app(vec![from_id("m1", 1000, "u1"), from_id("m2", 5000, "u2")]);
+        photo(&mut app, "u1");
+        photo(&mut app, "u2");
+        let lay = app.layout_in(Rect::new(0, 0, 100, 30));
+        let vis = ui::visible_images(&app, &lay);
+        assert_eq!(vis.people, ["u2", "u1"], "newest first");
+        assert_eq!(vis.images.len(), 2);
+        // Newest first: u2's box is the last two rows, as the short chat sits at the bottom.
+        let r = vis.images[0].rect;
+        assert_eq!(vis.images[0].path.to_str(), Some("u2.png"));
+        assert_eq!((r.x, r.width, r.height), (lay.messages.x, 4, 2));
+        assert_eq!(r.y + 2, lay.messages.y + lay.messages.height);
+        // u1 is 3 rows higher: a blank row, then name and text rows of u2's run.
+        assert_eq!(vis.images[1].rect.y + 3 + 2, r.y + 2);
+    }
+
+    #[test]
+    fn a_partly_scrolled_avatar_keeps_its_initials() {
+        let list = (0..40)
+            .map(|i| from_id(&format!("m{i}"), 1000 + i, &format!("u{i}")))
+            .collect();
+        let mut app = group_app(list);
+        photo(&mut app, "u39");
+        photo(&mut app, "u38");
+        let lay = app.layout_in(Rect::new(0, 0, 100, 30));
+        let vis = ui::visible_images(&app, &lay);
+        assert_eq!(vis.people[0], "u39");
+        assert_eq!(vis.images.len(), 2);
+        // One line up: u39's text row is gone, so its box is cut and nobody asks for it.
+        app.ns_mut(Network::Teams).scroll = 1;
+        let vis = ui::visible_images(&app, &lay);
+        assert_eq!(vis.people[0], "u38");
+        assert!(!vis.people.contains(&"u39".to_string()));
+        assert_eq!(vis.images.len(), 1);
+        assert_eq!(vis.images[0].path.to_str(), Some("u38.png"));
+    }
+
+    #[test]
+    fn photos_off_draws_and_asks_for_nothing() {
+        let mut app = group_app(vec![from_id("m1", 1000, "u1")]);
+        photo(&mut app, "u1");
+        app.layout.photos = false;
+        let lay = app.layout_in(Rect::new(0, 0, 100, 30));
+        let vis = ui::visible_images(&app, &lay);
+        assert!(vis.images.is_empty() && vis.people.is_empty());
+        assert!(app.avatar_requests(&["u1".to_string()]).is_empty());
+    }
+
+    #[test]
+    fn no_colour_draws_and_asks_for_no_photos() {
+        let mut app = group_app(vec![from_id("m1", 1000, "u1")]);
+        photo(&mut app, "u1");
+        app.no_colour = true;
+        let lay = app.layout_in(Rect::new(0, 0, 100, 30));
+        let vis = ui::visible_images(&app, &lay);
+        assert!(vis.images.is_empty() && vis.people.is_empty());
+        assert!(app.avatar_requests(&["u2".to_string()]).is_empty());
+    }
+
+    #[test]
+    fn an_answer_nobody_asked_for_is_dropped() {
+        let mut app = group_app(Vec::new());
+        app.ns_mut(Network::Teams).avatars.clear();
+        app.handle_event(Event::Avatar {
+            network: Network::Teams,
+            person_id: "late".to_string(),
+            path: Some("late.png".into()),
+        });
+        assert!(app.ns(Network::Teams).avatars.is_empty());
+    }
+
+    #[test]
+    fn each_person_is_asked_once_and_none_stops_the_asking() {
+        let mut app = group_app(Vec::new());
+        let ask = |app: &mut App, who: &[&str]| {
+            let people: Vec<String> = who.iter().map(|s| s.to_string()).collect();
+            app.avatar_requests(&people)
+        };
+        let out = ask(&mut app, &["u1", "u2"]);
+        assert_eq!(out.len(), 1);
+        assert!(
+            matches!(&out[0].1, Command::FetchAvatars { people } if people == &["u1", "u2"]),
+            "{out:?}"
+        );
+        assert!(ask(&mut app, &["u1", "u2"]).is_empty(), "never twice");
+        let out = ask(&mut app, &["u2", "u3"]);
+        assert!(matches!(&out[0].1, Command::FetchAvatars { people } if people == &["u3"]));
+        // The answer is stored; a None answer does not bring the question back.
+        app.handle_event(Event::Avatar {
+            network: Network::Teams,
+            person_id: "u1".into(),
+            path: Some("u1.png".into()),
+        });
+        app.handle_event(Event::Avatar {
+            network: Network::Teams,
+            person_id: "u2".into(),
+            path: None,
+        });
+        let ns = app.ns(Network::Teams);
+        assert_eq!(
+            ns.avatars["u1"].as_deref().and_then(|p| p.to_str()),
+            Some("u1.png")
+        );
+        assert_eq!(ns.avatars["u2"], None);
+        assert!(ask(&mut app, &["u1", "u2"]).is_empty());
+        // Signed out: the next account is asked afresh.
+        app.handle_event(Event::Status(
+            Network::Teams,
+            Status::NeedsLogin { reason: None },
+        ));
+        assert!(app.ns(Network::Teams).avatars.is_empty());
+    }
+
+    #[test]
+    fn nobody_is_asked_while_the_network_is_not_online() {
+        let mut app = App::new(clock());
+        let people = ["u1".to_string()];
+        assert!(app.avatar_requests(&people).is_empty());
+        assert!(
+            app.ns(Network::Teams).avatars.is_empty(),
+            "not marked asked"
+        );
+    }
 }

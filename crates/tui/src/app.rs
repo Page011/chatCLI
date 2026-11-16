@@ -125,6 +125,8 @@ pub(crate) struct NetState {
     pub members: HashMap<String, Vec<PersonRef>>,
     /// Chats whose members were asked for this session (once each: a Graph call per ask).
     members_asked: HashSet<String>,
+    /// Profile photos by person id: present = asked this session, None = pending or no photo.
+    pub(crate) avatars: HashMap<String, Option<std::path::PathBuf>>,
     /// Downloads and previews the user asked for, per attachment.
     pub media: MediaState,
     /// A file chosen for the next message, per chat id (the chip above the message box).
@@ -172,6 +174,7 @@ impl NetState {
             caps: Capabilities::default(),
             members: HashMap::new(),
             members_asked: HashSet::new(),
+            avatars: HashMap::new(),
             media: MediaState::default(),
             pending: HashMap::new(),
             progress: HashMap::new(),
@@ -1039,6 +1042,10 @@ impl App {
                     // to ask again.
                     ns.older.retain(|_, o| *o != Older::Loading);
                 }
+                // Signed out: the next sign-in may be another account, so photos are asked afresh.
+                if matches!(status, Status::NeedsLogin { .. }) {
+                    ns.avatars.clear();
+                }
                 ns.status = status;
                 // A sign-in panel appearing or going away changes what is on screen.
                 self.sync_read_timers();
@@ -1156,6 +1163,16 @@ impl App {
                 }
             }
             Event::Capabilities { network, caps } => self.ns_mut(network).caps = caps,
+            Event::Avatar {
+                network,
+                person_id,
+                path,
+            } => {
+                // Only an answer to a pending ask: a late one after sign-out is dropped.
+                if let Some(slot) = self.ns_mut(network).avatars.get_mut(&person_id) {
+                    *slot = path;
+                }
+            }
             Event::Members {
                 network,
                 chat_id,

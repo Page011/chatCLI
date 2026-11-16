@@ -60,6 +60,20 @@ pub fn http_client() -> UreqHttpClient {
     UreqHttpClient::with_agent(agent)
 }
 
+/// Agent for profile photos: https only, no redirects, a hard overall timeout.
+pub fn photo_agent(timeout: std::time::Duration) -> ureq::Agent {
+    let tls = ureq::tls::TlsConfig::builder()
+        .root_certs(ureq::tls::RootCerts::PlatformVerifier)
+        .build();
+    ureq::config::Config::builder()
+        .tls_config(tls)
+        .https_only(true)
+        .max_redirects(0)
+        .timeout_global(Some(timeout))
+        .build()
+        .into()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -104,6 +104,11 @@ impl App {
     /// at once. The backends get a copy when something they read changed.
     pub(crate) fn apply_settings(&mut self, new: Settings) -> Out {
         let old = &self.settings;
+        if old.teams.photos && !new.teams.photos {
+            // Off hides what is already drawn, not only what is asked next.
+            self.ns_mut(Network::Teams).avatars.clear();
+        }
+        let old = &self.settings;
         let backend =
             old.teams != new.teams || old.whatsapp != new.whatsapp || old.media != new.media;
         if old.keys != new.keys {

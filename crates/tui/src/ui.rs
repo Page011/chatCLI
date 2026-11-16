@@ -1325,6 +1325,15 @@ pub(crate) struct MsgSpan {
     pub end: usize,
     /// Thumbnails drawn under this message, for the terminal graphics overlay.
     pub images: Vec<ImageSlot>,
+    /// The initials avatar beside the name row, where a profile photo can be drawn over it.
+    pub avatar: Option<AvatarSlot>,
+}
+
+/// An avatar box (`AVATAR_W` x 2 at column 0) whose top row is conversation line `line`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AvatarSlot {
+    pub person: String,
+    pub line: usize,
 }
 
 /// Where a thumbnail sits in the conversation lines: `rows` lines from `line`, `cols` wide,
@@ -1690,6 +1699,13 @@ pub(crate) fn message_layout(
             start: first_line,
             end: lines.len(),
             images: slots,
+            // Only when both halves were placed (a message with no body row has no bottom half).
+            avatar: (starts_run && avatars && !av_pending && !m.sender_id.is_empty()).then(|| {
+                AvatarSlot {
+                    person: m.sender_id.clone(),
+                    line: first_line,
+                }
+            }),
         });
     }
     (lines, spans)
@@ -1861,23 +1877,54 @@ pub(crate) struct VisibleImage {
     pub rect: Rect,
 }
 
-pub(crate) fn visible_images(app: &App, lay: &Layout) -> Vec<VisibleImage> {
+/// What the overlay draws, and the people whose avatars are fully on screen (newest first), whose
+/// photos the TUI may ask for.
+#[derive(Default)]
+pub(crate) struct Visible {
+    pub images: Vec<VisibleImage>,
+    pub people: Vec<String>,
+}
+
+pub(crate) fn visible_images(app: &App, lay: &Layout) -> Visible {
     let ns = app.active();
     // Something drawn over the conversation (help, a list, a question) must stay on top.
     if ns.panel() || ns.open.is_none() || app.overlay_open() || app.popup().is_some() {
-        return Vec::new();
+        return Visible::default();
     }
     // A terminal too small to draw the conversation, or one that hides it (narrow list).
     let drawn_height = lay.header.height + lay.body.height + lay.footer.height;
     if lay.header.width < MIN_W || drawn_height < MIN_H || lay.messages.width == 0 {
-        return Vec::new();
+        return Visible::default();
     }
     let (lines, spans) = message_layout(ns, &app.look(), lay.messages.width as usize);
     let height = lay.messages.height as usize;
     let end = lines.len() - ns.scroll.min(lines.len().saturating_sub(height));
     let start = end.saturating_sub(height);
     let area = bottom_anchored(lay.messages, end - start);
-    let mut out = Vec::new();
+    let mut out = Visible::default();
+    // A partly visible avatar keeps its initials.
+    if app.photos() {
+        for slot in spans.iter().rev().filter_map(|s| s.avatar.as_ref()) {
+            if slot.line < start || slot.line + 2 > end {
+                continue;
+            }
+            if !out.people.contains(&slot.person) {
+                out.people.push(slot.person.clone());
+            }
+            if let Some(Some(path)) = ns.avatars.get(&slot.person) {
+                out.images.push(VisibleImage {
+                    path: path.clone(),
+                    rect: Rect::new(
+                        area.x,
+                        area.y + (slot.line - start) as u16,
+                        AVATAR_W as u16,
+                        2,
+                    )
+                    .intersection(lay.messages),
+                });
+            }
+        }
+    }
     for slot in spans.iter().flat_map(|s| &s.images) {
         if slot.line < start || slot.line + slot.rows > end || slot.cols == 0 {
             continue;
@@ -1886,7 +1933,7 @@ pub(crate) fn visible_images(app: &App, lay: &Layout) -> Vec<VisibleImage> {
         else {
             continue;
         };
-        out.push(VisibleImage {
+        out.images.push(VisibleImage {
             path,
             rect: Rect::new(
                 area.x + slot.indent as u16,

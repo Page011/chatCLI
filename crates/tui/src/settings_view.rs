@@ -139,6 +139,7 @@ pub(crate) enum RowId {
     Density,
     ShowPreviews,
     Avatars,
+    Photos,
     NotifEnabled,
     NotifPreview,
     NotifSound,
@@ -149,6 +150,7 @@ pub(crate) enum RowId {
     ImageProtocol,
     FilesRead,
     FilesWrite,
+    TeamsPhotos,
     SendReadReceipts,
     SendTyping,
     /// A read-only line (About, the problems header, the Keys note).
@@ -551,6 +553,13 @@ pub(crate) fn rows(
                 "groups, all or off",
                 l.avatars != d.layout.avatars,
             ));
+            out.push(row(
+                RowId::Photos,
+                "Photos",
+                on_off(l.photos),
+                "in avatars, Sixel/Kitty/iTerm2 only",
+                l.photos != d.layout.photos,
+            ));
         }
         Section::Notifications => {
             let n = &s.notifications;
@@ -629,6 +638,13 @@ pub(crate) fn rows(
                 on_off(s.teams.files_write),
                 "needs a new sign-in: /signout then /signin",
                 s.teams.files_write != d.teams.files_write,
+            ));
+            out.push(row(
+                RowId::TeamsPhotos,
+                "Profile photos",
+                on_off(s.teams.photos),
+                "needs a new sign-in: /signout then /signin",
+                s.teams.photos != d.teams.photos,
             ));
         }
         Section::WhatsApp => {
@@ -954,6 +970,11 @@ pub(crate) fn change(s: &Settings, id: RowId, c: Change) -> Done {
             n.layout.avatars = v;
             one(n, mk("layout", "avatars", reset, v.to_setting()))
         }
+        RowId::Photos => {
+            let v = flip(s.layout.photos, d.layout.photos, &c)?;
+            n.layout.photos = v;
+            one(n, mk("layout", "photos", reset, SettingValue::Bool(v)))
+        }
         RowId::ShowPreviews => {
             let v = flip(s.layout.show_previews, d.layout.show_previews, &c)?;
             n.layout.show_previews = v;
@@ -1069,6 +1090,11 @@ pub(crate) fn change(s: &Settings, id: RowId, c: Change) -> Done {
             n.teams.files_write = v;
             one(n, mk("teams", "files_write", reset, SettingValue::Bool(v)))
         }
+        RowId::TeamsPhotos => {
+            let v = flip(s.teams.photos, d.teams.photos, &c)?;
+            n.teams.photos = v;
+            one(n, mk("teams", "photos", reset, SettingValue::Bool(v)))
+        }
         RowId::SendReadReceipts => {
             let v = flip(
                 s.whatsapp.send_read_receipts,
@@ -1135,7 +1161,7 @@ mod tests {
     #[test]
     fn every_selectable_row_survives_every_change() {
         let ids = all_ids();
-        assert_eq!(ids.len(), 20 + 1 + 4 + 6 + ROLES.len());
+        assert_eq!(ids.len(), 22 + 1 + 4 + 6 + ROLES.len());
         for id in ids {
             for c in [Change::Prev, Change::Next, Change::Toggle, Change::Reset] {
                 let (_, edits) = run(&Settings::default(), id, c.clone());
@@ -1367,6 +1393,7 @@ mod tests {
         assert!(hint(Section::Media, RowId::ImageProtocol).starts_with("NEXT START"));
         assert!(hint(Section::Teams, RowId::FilesRead).contains("sign-in"));
         assert!(hint(Section::Teams, RowId::FilesWrite).contains("sign-in"));
+        assert!(hint(Section::Teams, RowId::TeamsPhotos).contains("sign-in"));
     }
 
     #[test]

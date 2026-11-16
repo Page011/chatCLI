@@ -55,6 +55,12 @@ const LINK_FILE_BUSY: &str = "The old WhatsApp link file is still in use, so it 
 /// Deleting the session file is retried this often, this many times (5 s in all).
 const DELETE_TRIES: u32 = 25;
 const DELETE_STEP: Duration = Duration::from_millis(200);
+/// Profile photo lookups: at most this many a minute, this far apart, this many waiting.
+const AVATAR_PER_MIN: usize = 10;
+const AVATAR_GAP: Duration = Duration::from_secs(2);
+const AVATAR_QUEUE_MAX: usize = 64;
+/// Most lookups in one run: past this, everyone is answered with no photo.
+const AVATAR_SESSION_MAX: usize = 200;
 
 /// `HistorySyncType::ON_DEMAND`: the answer to a `fetch_message_history` request.
 const ON_DEMAND_SYNC: i32 = 6;
@@ -84,6 +90,13 @@ pub async fn run(ctx: BackendCtx, mut commands: CommandRx, events: EventTx) {
                 None => std::future::pending().await,
             }
         };
+        let avatar_at = b.avatar_at;
+        let avatar = async {
+            match avatar_at {
+                Some(t) => tokio::time::sleep_until(t).await,
+                None => std::future::pending().await,
+            }
+        };
         let connect_by = b.connect_by;
         let connect_wait = async {
             match connect_by {
@@ -101,6 +114,7 @@ pub async fn run(ctx: BackendCtx, mut commands: CommandRx, events: EventTx) {
                 b.retitle_at = None;
                 b.retitle();
             }
+            _ = avatar => b.schedule_avatar(),
             _ = connect_wait => {
                 b.connect_by = None;
                 b.connect_timeout();
@@ -182,6 +196,11 @@ pub(crate) enum Done {
         chat_id: String,
         prior: ChatFlags,
         result: Result<(), String>,
+    },
+    /// One profile photo lookup finished: the stored picture, or None.
+    Avatar {
+        person_id: String,
+        path: Option<PathBuf>,
     },
 }
 
@@ -273,6 +292,16 @@ pub(crate) struct Backend {
     names: Names,
     senders: HashMap<String, VecDeque<(String, Jid)>>,
     pub(crate) retitle_at: Option<Instant>,
+    /// Profile photo ids waiting for a lookup, oldest first.
+    avatar_queue: VecDeque<String>,
+    /// Ids queued or looked up this session: never asked twice.
+    avatar_seen: HashSet<String>,
+    /// When the lookups of the last minute started.
+    avatar_sent: VecDeque<Instant>,
+    /// Lookups started this run (one past the cap once the cap was logged).
+    avatar_total: usize,
+    /// When the next lookup may start (the run loop wakes then).
+    pub(crate) avatar_at: Option<Instant>,
     /// When a connection attempt counts as stuck; None while connected or not trying.
     pub(crate) connect_by: Option<Instant>,
     undecryptable: u64,
@@ -304,6 +333,11 @@ impl Backend {
             names: Names::default(),
             senders: HashMap::new(),
             retitle_at: None,
+            avatar_queue: VecDeque::new(),
+            avatar_seen: HashSet::new(),
+            avatar_sent: VecDeque::new(),
+            avatar_total: 0,
+            avatar_at: None,
             connect_by: None,
             undecryptable: 0,
             open_chat: None,
@@ -441,6 +475,7 @@ impl Backend {
                 before_id,
             } => self.load_older(chat_id, before_ts, before_id),
             Command::LoadMembers { chat_id } => self.load_members(chat_id),
+            Command::FetchAvatars { people } => self.fetch_avatars(people),
             Command::Typing { chat_id, active } => self.typing(chat_id, active).await,
             Command::SetChatFlag { chat_id, flag, on } => self.set_chat_flag(chat_id, flag, on),
             Command::Settings(s) => {
@@ -871,6 +906,7 @@ impl Backend {
     pub(crate) async fn stop_session(&mut self) {
         self.gen += 1;
         self.connect_by = None;
+        self.drop_avatar_queue();
         // The queue ends once its pending sends are answered; the transfers on their own tasks
         // fail by themselves on the dead client and report it.
         self.link = None;
@@ -922,6 +958,9 @@ impl Backend {
         let own = self.link.as_ref().map(|l| l.wa.own_users());
         self.names = Names::default();
         self.retitle_at = None;
+        // Photos of the unlinked account's contacts are personal data too.
+        self.media.clear_avatars();
+        self.avatar_seen.clear();
         if let Some(own) = own {
             self.names.set_own(own);
         }

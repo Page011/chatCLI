@@ -2,7 +2,7 @@
 ┌ Settings ──────┐╔ Teams ═════════════════════════════════════════════════════╗
 │Appearance      │║File downloads      off                                     ║
 │Layout          │║Sending files       off                                     ║
-│Notifications   │║                                                            ║
+│Notifications   │║Profile photos      off                                     ║
 │Media           │║                                                            ║
 │Teams           │║                                                            ║
 │WhatsApp        │║                                                            ║

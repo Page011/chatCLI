@@ -5,7 +5,7 @@
 //! `App` stays pure: a toast is queued for the run loop to hand to the notifier, a request for
 //! the backend is returned as an `Out`, and the clock is the one `tick` sets.
 
-use chatcli_core::model::{ChatFlag, ChatMessage, Command, Event, Network};
+use chatcli_core::model::{ChatFlag, ChatMessage, Command, Event, Network, Status};
 use chatcli_core::runtime::Toast;
 use chatcli_core::store::SearchHit;
 
@@ -39,6 +39,35 @@ impl App {
             clock: &self.clock,
             fmt: self.fmt,
             avatars: self.layout.avatars,
+        }
+    }
+
+    /// `[layout] photos`: profile photos drawn over the initials avatars.
+    pub(crate) fn photos(&self) -> bool {
+        self.layout.photos && !self.no_colour
+    }
+
+    /// FetchAvatars for on-screen people not asked yet this session: only with `[layout] photos`
+    /// on and the network Online. Marks each as asked, so nobody is asked twice (a None answer
+    /// stops the asking too).
+    pub fn avatar_requests(&mut self, people: &[String]) -> Out {
+        let net = self.active;
+        if !self.photos() || !matches!(self.ns(net).status, Status::Online { .. }) {
+            return Vec::new();
+        }
+        let ns = self.ns_mut(net);
+        let asked: Vec<String> = people
+            .iter()
+            .filter(|p| !ns.avatars.contains_key(*p))
+            .cloned()
+            .collect();
+        for p in &asked {
+            ns.avatars.insert(p.clone(), None);
+        }
+        if asked.is_empty() {
+            Vec::new()
+        } else {
+            vec![(net, Command::FetchAvatars { people: asked })]
         }
     }
 

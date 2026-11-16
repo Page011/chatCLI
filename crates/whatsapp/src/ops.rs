@@ -10,7 +10,7 @@ use std::io::Write;
 use std::sync::Mutex;
 
 use chatcli_core::limits;
-use chatcli_core::media::{kind_for_path, prepare_image, safe_extension};
+use chatcli_core::media::{kind_for_path, prepare_image, safe_extension, AvatarLookup};
 use chatcli_core::model::{MediaKind, MUTE_FOREVER};
 use chatcli_core::store::REACTOR_ME;
 use sha2::{Digest, Sha256};
@@ -25,6 +25,8 @@ const MIB: u64 = 1024 * 1024;
 const OLDER_PAGE: u32 = 50;
 /// How long the phone gets to answer an older-history request. One shot per user request.
 const OLDER_WAIT: Duration = Duration::from_secs(30);
+/// A whole profile photo lookup (the request and the download) gets this long.
+const AVATAR_WAIT: Duration = Duration::from_secs(40);
 /// At most one "typing" stanza per chat in this time.
 const TYPING_EVERY: Duration = Duration::from_secs(5);
 /// A typing stanza is one socket write: give up quickly rather than hold the command loop.
@@ -273,6 +275,14 @@ impl Backend {
                 Err(reason) => self.media_failed(chat_id, message_id, index, reason),
             },
             Done::Members { chat_id, result } => self.on_members(chat_id, result),
+            Done::Avatar { person_id, path } => {
+                self.emit(Out::Avatar {
+                    network: NET,
+                    person_id,
+                    path,
+                });
+                self.schedule_avatar();
+            }
             Done::OlderAsked {
                 chat_id,
                 token,
@@ -990,6 +1000,114 @@ impl Backend {
         }
     }
 
+    // -- profile photos ---------------------------------------------------------------------
+
+    fn avatar_none(&self, person_id: String, path: Option<PathBuf>) {
+        self.emit(Out::Avatar {
+            network: NET,
+            person_id,
+            path,
+        });
+    }
+
+    /// Answers every person: from the cache when it is fresh, otherwise by queueing one lookup
+    /// each. Only what the TUI asked for is ever looked up (never a loop over contacts), each id
+    /// once a session, behind the rate limit in `schedule_avatar`.
+    pub(super) fn fetch_avatars(&mut self, people: Vec<String>) {
+        let now = now_ms();
+        for id in people {
+            let usable = id.parse::<Jid>().is_ok_and(|j| j.is_pn() || j.is_lid());
+            if !usable {
+                self.avatar_none(id, None);
+                continue;
+            }
+            let stale = match self.media.avatar_lookup(NET, &id, now) {
+                AvatarLookup::Fresh(p) => {
+                    self.avatar_none(id, Some(p));
+                    continue;
+                }
+                AvatarLookup::NoPhoto => {
+                    self.avatar_none(id, None);
+                    continue;
+                }
+                AvatarLookup::Stale(p) => Some(p),
+                AvatarLookup::Missing => None,
+            };
+            if self.avatar_seen.contains(&id)
+                || self.link.is_none()
+                || self.avatar_queue.len() >= AVATAR_QUEUE_MAX
+            {
+                self.avatar_none(id, stale);
+                continue;
+            }
+            self.avatar_seen.insert(id.clone());
+            self.avatar_queue.push_back(id);
+        }
+        self.schedule_avatar();
+    }
+
+    /// Starts the next queued lookup when the limits allow, else sets `avatar_at` to when one
+    /// will. One lookup per call: the answer calls this again.
+    pub(super) fn schedule_avatar(&mut self) {
+        self.avatar_at = None;
+        let now = Instant::now();
+        let minute = Duration::from_secs(60);
+        while self
+            .avatar_sent
+            .front()
+            .is_some_and(|t| now.duration_since(*t) >= minute)
+        {
+            self.avatar_sent.pop_front();
+        }
+        if self.avatar_queue.is_empty() {
+            return;
+        }
+        if self.avatar_total >= AVATAR_SESSION_MAX {
+            if self.avatar_total == AVATAR_SESSION_MAX {
+                self.avatar_total += 1;
+                log::info(AREA, "profile photo lookup limit for this run reached");
+            }
+            return self.drop_avatar_queue();
+        }
+        let mut at = now;
+        if self.avatar_sent.len() >= AVATAR_PER_MIN {
+            if let Some(first) = self.avatar_sent.front() {
+                at = at.max(*first + minute);
+            }
+        }
+        if let Some(last) = self.avatar_sent.back() {
+            at = at.max(*last + AVATAR_GAP);
+        }
+        if at > now {
+            self.avatar_at = Some(at);
+            return;
+        }
+        let Some(id) = self.avatar_queue.pop_front() else {
+            return;
+        };
+        let (Some(wa), Ok(jid)) = (self.wa(), id.parse::<Jid>()) else {
+            return self.avatar_none(id, None);
+        };
+        self.avatar_sent.push_back(now);
+        self.avatar_total += 1;
+        let cache = self.media.clone();
+        self.spawn_done(async move {
+            let path = avatar_job(wa, &cache, &id, jid).await;
+            Done::Avatar {
+                person_id: id,
+                path,
+            }
+        });
+    }
+
+    /// Logout or stop: every waiting person is answered with no photo.
+    pub(super) fn drop_avatar_queue(&mut self) {
+        self.avatar_at = None;
+        while let Some(id) = self.avatar_queue.pop_front() {
+            self.avatar_none(id, None);
+        }
+    }
+
     // -- members ----------------------------------------------------------------------------
 
     pub(super) fn load_members(&mut self, chat_id: String) {
@@ -1143,6 +1261,37 @@ impl Backend {
 /// Library error text with URLs removed, for logs and notices.
 fn wa_log(text: &str) -> String {
     crate::wa::redact_urls(text)
+}
+
+/// One profile photo lookup, stored in the cache. No photo, a picture over the cap or one that
+/// will not decode all write the "no photo" marker; a network failure writes nothing and keeps
+/// an older photo.
+async fn avatar_job(wa: Arc<dyn Wa>, cache: &MediaCache, id: &str, jid: Jid) -> Option<PathBuf> {
+    let stale = || match cache.avatar_lookup(NET, id, now_ms()) {
+        AvatarLookup::Stale(p) => Some(p),
+        _ => None,
+    };
+    let no_photo = || {
+        let _ = cache.store_no_avatar(NET, id);
+        None
+    };
+    match within(AVATAR_WAIT, wa.profile_picture(jid)).await {
+        Ok(Some(bytes)) => {
+            let c = cache.clone();
+            let i = id.to_string();
+            match tokio::task::spawn_blocking(move || c.store_avatar(NET, &i, &bytes)).await {
+                Ok(Ok(p)) => Some(p),
+                _ => no_photo(),
+            }
+        }
+        Ok(None) => no_photo(),
+        Err(e) if e == crate::wa::AVATAR_TOO_BIG => no_photo(),
+        Err(_) => {
+            // Fixed text only: library errors can carry server nodes.
+            log::info(AREA, "profile photo lookup failed");
+            stale()
+        }
+    }
 }
 
 /// `fut` or a one-sentence timeout, so one dead call never hangs a task for ever.

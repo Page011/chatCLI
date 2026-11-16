@@ -394,7 +394,11 @@ pub async fn run(
             // when the set of images changed so no Sixel pixels are left behind.
             let visible = if graphics.is_some() {
                 let lay = app.layout_in(area);
-                ui::visible_images(&app, &lay)
+                let vis = ui::visible_images(&app, &lay);
+                // Photos for the avatars on screen, once per person (no graphics, no asking).
+                let asks = app.avatar_requests(&vis.people);
+                deliver(&mut app, &commands, asks);
+                vis.images
             } else {
                 Vec::new()
             };

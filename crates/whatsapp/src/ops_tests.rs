@@ -3,6 +3,7 @@
 
 use std::sync::Mutex;
 
+use chatcli_core::media::AvatarLookup;
 use chatcli_core::model::{Attachment, ChatKind, EventRx, MediaKind, MUTE_FOREVER};
 use chatcli_core::settings::MediaSettings;
 use whatsapp_rust::wacore::types::events as wev;
@@ -41,6 +42,7 @@ enum Call {
     MarkRead(Jid),
     Receipts(Jid, Option<Jid>, Vec<String>),
     Flag(Jid, ChatFlag, bool),
+    Photo(Jid),
 }
 
 #[derive(Clone)]
@@ -58,6 +60,10 @@ struct FakeWa {
     download: Mutex<Plan>,
     /// True: `react` never returns.
     hang: Mutex<bool>,
+    /// What `profile_picture` answers.
+    photo: Mutex<Result<Option<Vec<u8>>, String>>,
+    /// When each `profile_picture` call came.
+    photo_at: Mutex<Vec<tokio::time::Instant>>,
 }
 
 impl FakeWa {
@@ -68,6 +74,8 @@ impl FakeWa {
             members: Mutex::new(Vec::new()),
             download: Mutex::new(Plan::Fail("no plan".into())),
             hang: Mutex::new(false),
+            photo: Mutex::new(Ok(Some(photo_png()))),
+            photo_at: Mutex::new(Vec::new()),
         })
     }
 
@@ -199,6 +207,23 @@ impl Wa for FakeWa {
     async fn set_flag(&self, chat: Jid, flag: ChatFlag, on: bool) -> Result<(), String> {
         self.record(Call::Flag(chat, flag, on))
     }
+
+    async fn profile_picture(&self, jid: Jid) -> Result<Option<Vec<u8>>, String> {
+        self.photo_at
+            .lock()
+            .unwrap()
+            .push(tokio::time::Instant::now());
+        self.record(Call::Photo(jid))?;
+        self.photo.lock().unwrap().clone()
+    }
+}
+
+fn photo_png() -> Vec<u8> {
+    let mut v = Vec::new();
+    image::RgbImage::from_pixel(20, 10, image::Rgb([5, 6, 7]))
+        .write_to(&mut std::io::Cursor::new(&mut v), image::ImageFormat::Png)
+        .unwrap();
+    v
 }
 
 /// A backend linked to a fresh fake.
@@ -2856,4 +2881,197 @@ async fn a_file_that_lies_about_its_size_is_stopped_at_the_limit_while_downloadi
         "{evs:?}"
     );
     assert!(!evs.iter().any(|e| matches!(e, Out::MediaReady { .. })));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Profile photos
+// ---------------------------------------------------------------------------------------------
+
+fn avatar_cmd(ids: &[String]) -> Command {
+    Command::FetchAvatars {
+        people: ids.to_vec(),
+    }
+}
+
+fn phone(i: u32) -> String {
+    format!("1555010{i:04}@s.whatsapp.net")
+}
+
+fn avatar_events(erx: &mut EventRx) -> Vec<(String, Option<PathBuf>)> {
+    drain(erx)
+        .into_iter()
+        .filter_map(|e| match e {
+            Out::Avatar {
+                person_id, path, ..
+            } => Some((person_id, path)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Runs the backend like the run loop does until `count` answers came: a finished lookup is
+/// handled, then the wake-up the rate limit asked for. The clock is paused, so waits are free.
+async fn run_avatars(
+    b: &mut Backend,
+    erx: &mut EventRx,
+    rx: &mut mpsc::UnboundedReceiver<Msg>,
+    count: usize,
+) -> Vec<(String, Option<PathBuf>)> {
+    let mut got = avatar_events(erx);
+    while got.len() < count {
+        if let Some(t) = b.avatar_at {
+            if let Ok(m) = rx.try_recv() {
+                b.on_msg(m).await;
+            } else {
+                tokio::time::sleep_until(t).await;
+                b.schedule_avatar();
+            }
+        } else {
+            let m = rx.recv().await.expect("channel open");
+            b.on_msg(m).await;
+        }
+        got.extend(avatar_events(erx));
+    }
+    got
+}
+
+#[tokio::test(start_paused = true)]
+async fn avatar_lookups_obey_ten_a_minute_and_two_seconds_apart() {
+    let (mut b, mut erx, mut rx) = backend();
+    let fake = linked(&mut b);
+    let ids: Vec<String> = (0..15).map(phone).collect();
+    let start = tokio::time::Instant::now();
+    b.on_command(avatar_cmd(&ids)).await;
+    let got = run_avatars(&mut b, &mut erx, &mut rx, 15).await;
+    assert_eq!(got.len(), 15);
+    assert!(got.iter().all(|(_, p)| p.is_some()));
+    let at = fake.photo_at.lock().unwrap().clone();
+    assert_eq!(at.len(), 15);
+    let in_first_minute = at
+        .iter()
+        .filter(|t| t.duration_since(start) < Duration::from_secs(60))
+        .count();
+    assert_eq!(in_first_minute, 10);
+    for w in at.windows(2) {
+        assert!(w[1].duration_since(w[0]) >= Duration::from_secs(2));
+    }
+    assert!(at[10].duration_since(at[0]) >= Duration::from_secs(60));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_stored_photo_is_a_square_png_in_the_avatars_folder() {
+    let (mut b, mut erx, mut rx) = backend();
+    let fake = linked(&mut b);
+    b.on_command(avatar_cmd(&[phone(1)])).await;
+    let got = run_avatars(&mut b, &mut erx, &mut rx, 1).await;
+    assert!(matches!(&fake.calls()[..], [Call::Photo(j)] if j.to_string() == phone(1)));
+    let path = got[0].1.clone().expect("a photo");
+    assert_eq!(path.parent().unwrap(), b.media.root().join("avatars"));
+    assert_eq!(image::open(&path).unwrap().width(), 96);
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_same_id_is_never_looked_up_twice_in_a_session() {
+    let (mut b, mut erx, mut rx) = backend();
+    let fake = linked(&mut b);
+    fake.fail_with("socket closed");
+    b.on_command(avatar_cmd(&[phone(1)])).await;
+    let got = run_avatars(&mut b, &mut erx, &mut rx, 1).await;
+    assert_eq!(
+        got[0].1, None,
+        "a failure answers None and writes no marker"
+    );
+    assert_eq!(fake.calls().len(), 1);
+    b.on_command(avatar_cmd(&[phone(1)])).await;
+    assert_eq!(avatar_events(&mut erx).len(), 1, "answered at once");
+    assert_eq!(fake.calls().len(), 1, "no second lookup");
+}
+
+#[tokio::test(start_paused = true)]
+async fn junk_ids_groups_and_a_missing_link_answer_none_without_a_lookup() {
+    let (mut b, mut erx, _rx) = backend();
+    // Not connected: answered None, and not remembered as asked.
+    b.on_command(avatar_cmd(&[phone(1)])).await;
+    assert_eq!(avatar_events(&mut erx), vec![(phone(1), None)]);
+    assert!(b.avatar_seen.is_empty());
+    let fake = linked(&mut b);
+    let ids: Vec<String> = [TEAM, "not a jid", "", "status@broadcast"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    b.on_command(avatar_cmd(&ids)).await;
+    let got = avatar_events(&mut erx);
+    assert_eq!(got.len(), 4);
+    assert!(got.iter().all(|(_, p)| p.is_none()));
+    assert!(fake.calls().is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_fresh_cache_entry_makes_no_lookup() {
+    let (mut b, mut erx, _rx) = backend();
+    let fake = linked(&mut b);
+    let path = b.media.store_avatar(NET, &phone(1), &photo_png()).unwrap();
+    b.media.store_no_avatar(NET, &phone(2)).unwrap();
+    b.on_command(avatar_cmd(&[phone(1), phone(2)])).await;
+    assert_eq!(
+        avatar_events(&mut erx),
+        vec![(phone(1), Some(path)), (phone(2), None)]
+    );
+    assert!(fake.calls().is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_oversized_or_missing_photo_writes_the_marker() {
+    let (mut b, mut erx, mut rx) = backend();
+    let fake = linked(&mut b);
+    *fake.photo.lock().unwrap() = Err(crate::wa::AVATAR_TOO_BIG.to_string());
+    b.on_command(avatar_cmd(&[phone(1)])).await;
+    let got = run_avatars(&mut b, &mut erx, &mut rx, 1).await;
+    assert_eq!(got[0].1, None);
+    assert_eq!(
+        b.media.avatar_lookup(NET, &phone(1), now_ms()),
+        AvatarLookup::NoPhoto
+    );
+    *fake.photo.lock().unwrap() = Ok(None);
+    b.on_command(avatar_cmd(&[phone(2)])).await;
+    run_avatars(&mut b, &mut erx, &mut rx, 1).await;
+    assert_eq!(
+        b.media.avatar_lookup(NET, &phone(2), now_ms()),
+        AvatarLookup::NoPhoto
+    );
+    // Bytes that are not a picture: the same marker.
+    *fake.photo.lock().unwrap() = Ok(Some(b"junk".to_vec()));
+    b.on_command(avatar_cmd(&[phone(3)])).await;
+    run_avatars(&mut b, &mut erx, &mut rx, 1).await;
+    assert_eq!(
+        b.media.avatar_lookup(NET, &phone(3), now_ms()),
+        AvatarLookup::NoPhoto
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn logout_answers_the_waiting_people_with_none() {
+    let (mut b, mut erx, _rx) = backend();
+    let _fake = linked(&mut b);
+    let ids: Vec<String> = (0..4).map(phone).collect();
+    b.on_command(avatar_cmd(&ids)).await;
+    assert!(avatar_events(&mut erx).is_empty(), "all four are pending");
+    b.on_command(Command::Logout).await;
+    let got = avatar_events(&mut erx);
+    assert_eq!(got.len(), 3, "one lookup is in flight, three were waiting");
+    assert!(got.iter().all(|(_, p)| p.is_none()));
+    assert!(b.avatar_queue.is_empty() && b.avatar_at.is_none());
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_avatar_queue_is_capped() {
+    let (mut b, mut erx, _rx) = backend();
+    let _fake = linked(&mut b);
+    let ids: Vec<String> = (0..70).map(phone).collect();
+    b.on_command(avatar_cmd(&ids)).await;
+    // 64 fit, one of them already started; the other 6 were answered None at once.
+    let got = avatar_events(&mut erx);
+    assert_eq!(b.avatar_queue.len(), 63);
+    assert_eq!(got.len(), 6);
+    assert!(got.iter().all(|(_, p)| p.is_none()));
 }

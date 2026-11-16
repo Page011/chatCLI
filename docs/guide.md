@@ -422,6 +422,7 @@ image_protocol = "auto"     # "auto", "sixel", "kitty", "iterm2", "halfblocks" o
 [teams]
 files_read = false          # Files.Read.All: download linked files (see Optional file permissions)
 files_write = false         # Files.ReadWrite: send files through your OneDrive
+photos = false              # User.ReadBasic.All: profile photos in avatars (needs no admin; sign in again)
 
 [whatsapp]
 send_read_receipts = false  # blue ticks for the sender when you read a chat

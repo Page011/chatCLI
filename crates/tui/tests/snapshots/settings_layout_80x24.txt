@@ -6,7 +6,7 @@
 │Media           │║Density             cozy                                    ║
 │Teams           │║Show previews       on                                      ║
 │WhatsApp        │║Avatars             groups                                  ║
-│Keys            │║                                                            ║
+│Keys            │║Photos              on                                      ║
 │About           │║                                                            ║
 │                │║                                                            ║
 │                │║                                                            ║
