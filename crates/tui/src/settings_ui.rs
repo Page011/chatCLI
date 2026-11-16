@@ -9,7 +9,7 @@ use ratatui::Frame;
 use crate::app::{App, NARROW};
 use crate::settings_view::{fit_top, Kind, PageEdit, Row, RowId, Section, SettingsPage};
 use crate::text::{fit, sw, tail, truncate, wrap};
-use crate::theme::Theme;
+use crate::theme::{Panel, Theme};
 use crate::ui::{bold, centered_note, pane};
 
 const SECTIONS_W: u16 = 18;
@@ -79,17 +79,28 @@ pub(crate) fn draw(f: &mut Frame, app: &App, body: Rect) {
     let rows = app.page_rows();
     match g.left {
         Some(left) => {
-            f.render_widget(pane("Settings", !page.in_rows), left);
+            f.render_widget(pane(t, Panel::Sidebar, "Settings", !page.in_rows), left);
             draw_sections(f, page, left.inner(Margin::new(1, 1)), t, !page.in_rows);
-            f.render_widget(pane(&pane_title(page, &rows, &g), page.in_rows), g.right);
+            f.render_widget(
+                pane(
+                    t,
+                    Panel::Messages,
+                    &pane_title(page, &rows, &g),
+                    page.in_rows,
+                ),
+                g.right,
+            );
             draw_rows(f, app, page, &rows, &g);
         }
         None if page.in_rows => {
-            f.render_widget(pane(&pane_title(page, &rows, &g), true), g.right);
+            f.render_widget(
+                pane(t, Panel::Messages, &pane_title(page, &rows, &g), true),
+                g.right,
+            );
             draw_rows(f, app, page, &rows, &g);
         }
         None => {
-            f.render_widget(pane("Settings", true), g.right);
+            f.render_widget(pane(t, Panel::Sidebar, "Settings", true), g.right);
             draw_sections(f, page, g.list, t, true);
             draw_status(f, page, &rows, &g, t);
         }
@@ -224,7 +235,12 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
         // The `selected` role is not shown in its own style: reversed text would read as a
         // second cursor.
         if let RowId::Role(name) = row.id {
-            if name != "selected" {
+            if name.ends_with("_background") {
+                // A swatch: the value drawn on the colour it names.
+                if let Ok(Some(c)) = crate::theme::background(&row.value) {
+                    value_style = value_style.bg(c);
+                }
+            } else if name != "selected" {
                 value_style = value_style.patch(t.role(name).unwrap_or_default());
             }
         }

@@ -1,24 +1,24 @@
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ┌ Settings ──────┐╔ Appearance ════════════════════════════════════════════════╗
 │Appearance      │║Theme               default                                 ║
-│Layout          │║Text                default                                 ║
-│Notifications   │║Dim text            default                                 ║
-│Media           │║Hints               default                                 ║
-│Teams           │║Accent              default                                 ║
-│WhatsApp        │║Your name           default                                 ║
-│Keys            │║Unread count        default                                 ║
-│About           │║Errors              default                                 ║
-│                │║Warnings            default                                 ║
-│                │║OK and progress     default                                 ║
-│                │║Selected row        default                                 ║
-│                │║Status: live        default                                 ║
-│                │║Status: attention   default                                 ║
-│                │║Teams tab           default                                 ║
-│                │║WhatsApp tab        default                                 ║
-│                │║Preview Teams LIVE  WhatsApp SIGN-IN NEEDED                 ║
-│                │║[Alex Morgan             ] 3                                ║
-│                │║You 09:30  See you at ten                                   ║
-│                │║NOT SENT slow 45% Enter                                     ║
+│Layout          │║Palette             lines                                   ║
+│Notifications   │║Sidebar outline     default                                 ║
+│Media           │║Sidebar fill        default                                 ║
+│Teams           │║Messages outline    default                                 ║
+│WhatsApp        │║Messages fill       default                                 ║
+│Keys            │║Message box outline default                                 ║
+│About           │║Message box fill    default                                 ║
+│                │║Popups outline      default                                 ║
+│                │║Popups fill         default                                 ║
+│                │║Top bar fill        default                                 ║
+│                │║Footer fill         default                                 ║
+│                │║Text                default                                 ║
+│                │║Dim text            default                                 ║
+│                │║Hints               default                                 ║
+│                │║Accent              default                                 ║
+│                │║Your name           default                                 ║
+│                │║Unread count        default                                 ║
+│                │║Errors              default                                 ║
 │                │║default, high-contrast, light, dark                         ║
 └────────────────┘╚════════════════════════════════════════════════════════════╝
 Up/Down move  Esc close  Left/Right change  Enter edit  r reset  Tab sections
@@ -31,23 +31,10 @@ row 0 cols 69-79: fg=Reset bg=Reset DIM
 row 1 cols 19-30: fg=Reset bg=Reset BOLD
 row 2 cols 1-16: fg=Reset bg=Reset BOLD
 row 2 cols 19-78: fg=Reset bg=Reset BOLD | REVERSED
-row 4 cols 39-78: fg=Reset bg=Reset DIM
-row 5 cols 39-78: fg=Reset bg=Reset DIM
-row 7 cols 39-78: fg=Reset bg=Reset BOLD
-row 8 cols 39-78: fg=Reset bg=Reset BOLD
-row 9 cols 39-78: fg=Reset bg=Reset BOLD
-row 10 cols 39-78: fg=Reset bg=Reset BOLD
-row 11 cols 39-78: fg=Reset bg=Reset BOLD
-row 14 cols 39-78: fg=Reset bg=Reset BOLD
-row 17 cols 19-26: fg=Reset bg=Reset BOLD
-row 17 cols 48-61: fg=Reset bg=Reset BOLD
-row 18 cols 20-43: fg=Reset bg=Reset BOLD | REVERSED
-row 18 cols 46-46: fg=Reset bg=Reset BOLD
-row 19 cols 19-21: fg=Reset bg=Reset BOLD
-row 19 cols 22-27: fg=Reset bg=Reset DIM
-row 20 cols 19-26: fg=Reset bg=Reset BOLD
-row 20 cols 28-31: fg=Reset bg=Reset BOLD
-row 20 cols 33-35: fg=Reset bg=Reset BOLD
-row 20 cols 37-41: fg=Reset bg=Reset DIM
+row 15 cols 39-78: fg=Reset bg=Reset DIM
+row 16 cols 39-78: fg=Reset bg=Reset DIM
+row 18 cols 39-78: fg=Reset bg=Reset BOLD
+row 19 cols 39-78: fg=Reset bg=Reset BOLD
+row 20 cols 39-78: fg=Reset bg=Reset BOLD
 row 21 cols 19-53: fg=Reset bg=Reset DIM
 row 23 cols 0-76: fg=Reset bg=Reset DIM

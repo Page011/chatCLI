@@ -1,12 +1,12 @@
  Teams 103 LIVE   WhatsApp CONN…
 ╔ Appearance ══════════════════════════╗
 ║Theme               default           ║
-║Text                default           ║
-║Dim text            default           ║
-║Hints               default           ║
-║Accent              default           ║
-║Your name           default           ║
-║Unread count        default           ║
+║Palette             lines             ║
+║Sidebar outline     default           ║
+║Sidebar fill        default           ║
+║Messages outline    default           ║
+║Messages fill       default           ║
+║Message box outline default           ║
 ║default, high-contrast, light, dark   ║
 ╚══════════════════════════════════════╝
 Up/Down move  Esc close
@@ -16,10 +16,5 @@ row 0 cols 18-25: fg=Reset bg=Reset BOLD
 row 0 cols 27-31: fg=Reset bg=Reset BOLD | DIM
 row 1 cols 1-12: fg=Reset bg=Reset BOLD
 row 2 cols 1-38: fg=Reset bg=Reset BOLD | REVERSED
-row 4 cols 21-38: fg=DarkGray bg=Reset NONE
-row 5 cols 21-38: fg=Reset bg=Reset DIM
-row 6 cols 21-38: fg=Cyan bg=Reset NONE
-row 7 cols 21-38: fg=Cyan bg=Reset BOLD
-row 8 cols 21-38: fg=Reset bg=Reset BOLD
 row 9 cols 1-35: fg=Reset bg=Reset DIM
 row 11 cols 0-22: fg=Reset bg=Reset DIM

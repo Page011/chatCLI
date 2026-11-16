@@ -33,6 +33,180 @@ pub const ROLES: [&str; 14] = [
 /// Built-in theme names.
 pub const THEMES: [&str; 4] = ["default", "high-contrast", "light", "dark"];
 
+/// Palettes: how panels are drawn (outlines and background shades), on top of the colour theme.
+pub const PALETTES: [&str; 4] = ["lines", "blocks", "minimal", "rounded"];
+
+/// Panels a palette styles, as named in `[theme]` keys (`sidebar_outline`, `popup_background`).
+pub const PANELS: [&str; 6] = [
+    "sidebar", "messages", "composer", "popup", "header", "footer",
+];
+
+/// Outline names for `<panel>_outline`.
+pub const OUTLINES: [&str; 6] = ["none", "rule", "single", "rounded", "double", "thick"];
+
+/// The panels a palette styles. `Header` and `Footer` are one-line bars: background only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Panel {
+    Sidebar,
+    Messages,
+    Composer,
+    Popup,
+    Header,
+    Footer,
+}
+
+impl Panel {
+    fn index(self) -> usize {
+        self as usize
+    }
+
+    /// Whether `<panel>_outline` means anything (the bars have no outline).
+    pub fn has_outline(name: &str) -> bool {
+        !matches!(name, "header" | "footer")
+    }
+
+    pub fn label(name: &str) -> &'static str {
+        match name {
+            "sidebar" => "Sidebar",
+            "messages" => "Messages",
+            "composer" => "Message box",
+            "popup" => "Popups",
+            "header" => "Top bar",
+            "footer" => "Footer",
+            _ => "?",
+        }
+    }
+}
+
+/// How a panel's edge is drawn. Every outline keeps the same one-cell frame, so text sits in
+/// the same place in every palette; `None` fills the frame with the panel's background.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Outline {
+    None,
+    /// A line along the top only, with the title in it.
+    Rule,
+    Single,
+    Rounded,
+    Double,
+    Thick,
+}
+
+impl Outline {
+    pub fn from_name(name: &str) -> Option<Outline> {
+        Some(match name.trim().to_ascii_lowercase().as_str() {
+            "none" => Outline::None,
+            "rule" => Outline::Rule,
+            "single" => Outline::Single,
+            "rounded" => Outline::Rounded,
+            "double" => Outline::Double,
+            "thick" => Outline::Thick,
+            _ => return None,
+        })
+    }
+
+    pub fn set(self) -> ratatui::symbols::border::Set<'static> {
+        use ratatui::symbols::border;
+        match self {
+            Outline::None => border::EMPTY,
+            Outline::Rule => border::Set {
+                top_left: "─",
+                top_right: "─",
+                horizontal_top: "─",
+                ..border::EMPTY
+            },
+            Outline::Single => border::PLAIN,
+            Outline::Rounded => border::ROUNDED,
+            Outline::Double => border::DOUBLE,
+            Outline::Thick => border::THICK,
+        }
+    }
+}
+
+/// One panel's look, unfocused and focused.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PanelLook {
+    pub outline: Outline,
+    pub focus_outline: Outline,
+    pub bg: Option<Color>,
+    pub focus_bg: Option<Color>,
+    /// The focused panel's outline takes the accent colour.
+    pub focus_tint: bool,
+}
+
+impl PanelLook {
+    const LINES: PanelLook = PanelLook {
+        outline: Outline::Single,
+        focus_outline: Outline::Double,
+        bg: None,
+        focus_bg: None,
+        focus_tint: false,
+    };
+    const BAR: PanelLook = PanelLook {
+        outline: Outline::None,
+        focus_outline: Outline::None,
+        bg: None,
+        focus_bg: None,
+        focus_tint: false,
+    };
+
+    fn plain(outline: Outline, focus_tint: bool) -> PanelLook {
+        PanelLook {
+            outline,
+            focus_outline: outline,
+            focus_tint,
+            ..PanelLook::LINES
+        }
+    }
+
+    fn shaded(bg: u8, focus_bg: u8) -> PanelLook {
+        PanelLook {
+            outline: Outline::None,
+            focus_outline: Outline::None,
+            bg: Some(Color::Indexed(bg)),
+            focus_bg: Some(Color::Indexed(focus_bg)),
+            focus_tint: false,
+        }
+    }
+}
+
+/// The looks of every panel for a palette, in `Panel` order. Shades are from the 256-colour grey
+/// ramp (232 near black to 255 near white), which every current terminal draws the same.
+fn palette_looks(name: &str, light: bool) -> Option<[PanelLook; 6]> {
+    let bar = PanelLook::BAR;
+    Some(match name.trim().to_ascii_lowercase().as_str() {
+        "lines" => same(PanelLook::LINES),
+        "blocks" => {
+            // Sidebar, messages, message box, popups, top bar: darker to lighter on a dark
+            // terminal, the other way on a light one. The focused panel is one step lighter.
+            let (s, m, c, p, h) = if light {
+                ((254, 253), (255, 254), (253, 252), (252, 252), 253)
+            } else {
+                ((234, 236), (233, 235), (235, 237), (236, 236), 235)
+            };
+            [
+                PanelLook::shaded(s.0, s.1),
+                PanelLook::shaded(m.0, m.1),
+                PanelLook::shaded(c.0, c.1),
+                PanelLook::shaded(p.0, p.1),
+                PanelLook {
+                    bg: Some(Color::Indexed(h)),
+                    focus_bg: Some(Color::Indexed(h)),
+                    ..bar
+                },
+                bar,
+            ]
+        }
+        "minimal" => same(PanelLook::plain(Outline::Rule, true)),
+        "rounded" => same(PanelLook::plain(Outline::Rounded, true)),
+        _ => return None,
+    })
+}
+
+/// One look for the four framed panels; the two bars stay plain.
+fn same(p: PanelLook) -> [PanelLook; 6] {
+    [p, p, p, p, PanelLook::BAR, PanelLook::BAR]
+}
+
 /// One style per role; the doc on each field says what it colours.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Theme {
@@ -65,6 +239,8 @@ pub struct Theme {
     pub network_teams: Style,
     /// The WhatsApp tab name.
     pub network_whatsapp: Style,
+    /// Panel outlines and backgrounds, in `Panel` order (the palette plus per-panel keys).
+    pub panels: [PanelLook; 6],
 }
 
 fn fg(c: Color) -> Style {
@@ -98,6 +274,7 @@ impl Default for Theme {
             chip_attention: fg(Color::Yellow),
             network_teams: Style::new(),
             network_whatsapp: Style::new(),
+            panels: palette_looks("lines", false).expect("lines is built in"),
         }
     }
 }
@@ -186,12 +363,29 @@ impl Theme {
         ]
     }
 
+    pub fn panel(&self, p: Panel) -> PanelLook {
+        self.panels[p.index()]
+    }
+
     /// `NO_COLOR`: every foreground and background goes. Roles that were only a colour keep a
-    /// signal as an attribute: secondary text dims, errors and warnings go bold.
+    /// signal as an attribute: secondary text dims, errors and warnings go bold. A panel that
+    /// was told apart by its shade alone gets a line instead.
     pub fn without_colour(mut self) -> Theme {
         for s in self.roles_mut() {
             s.fg = None;
             s.bg = None;
+        }
+        for p in &mut self.panels[..4] {
+            if p.bg.is_some() && p.outline == Outline::None {
+                p.outline = Outline::Single;
+                p.focus_outline = Outline::Double;
+            }
+            p.bg = None;
+            p.focus_bg = None;
+        }
+        for p in &mut self.panels[4..] {
+            p.bg = None;
+            p.focus_bg = None;
         }
         self.dim = self.dim.add_modifier(Modifier::DIM);
         self.error = self.error.add_modifier(Modifier::BOLD);
@@ -222,7 +416,59 @@ impl Theme {
             ));
             Theme::default()
         });
-        for (role, value) in &s.overrides {
+        let light = s.name.trim().eq_ignore_ascii_case("light");
+        if let Some(name) = s.overrides.get("palette") {
+            match palette_looks(name, light) {
+                Some(looks) => theme.panels = looks,
+                None => problems.push(problem(
+                    Some("palette"),
+                    format!(
+                        "unknown palette \"{name}\": use {}. Using \"lines\".",
+                        PALETTES.join(", ")
+                    ),
+                )),
+            }
+        }
+        for (key, value) in &s.overrides {
+            if key == "palette" {
+                continue;
+            }
+            if let Some((panel, part)) = panel_key(key) {
+                let look = &mut theme.panels[panel];
+                match part {
+                    "outline" => match Outline::from_name(value) {
+                        Some(o) => {
+                            look.outline = o;
+                            // Lines' double-when-focused stays for a single outline.
+                            look.focus_outline =
+                                if o == Outline::Single && look.focus_outline == Outline::Double {
+                                    Outline::Double
+                                } else {
+                                    o
+                                };
+                        }
+                        None => problems.push(problem(
+                            Some(key),
+                            format!(
+                                "unknown outline \"{value}\": use {}. Keeping the palette's.",
+                                OUTLINES.join(", ")
+                            ),
+                        )),
+                    },
+                    _ => match background(value) {
+                        Ok(bg) => {
+                            look.bg = bg;
+                            look.focus_bg = bg;
+                        }
+                        Err(e) => problems.push(problem(
+                            Some(key),
+                            format!("{e} Keeping the palette's background."),
+                        )),
+                    },
+                }
+                continue;
+            }
+            let role = key;
             let Some(slot) = theme.role_mut(role) else {
                 let hint = crate::keymap::closest(role, ROLES.iter().copied())
                     .map_or(format!("use one of {}", ROLES.join(", ")), |c| {
@@ -247,6 +493,25 @@ impl Theme {
         }
         (theme, problems)
     }
+}
+
+/// `sidebar_outline` -> (0, "outline"). Bars take a background only.
+fn panel_key(key: &str) -> Option<(usize, &str)> {
+    let (panel, part) = key.rsplit_once('_')?;
+    let i = PANELS.iter().position(|p| *p == panel)?;
+    match part {
+        "background" => Some((i, "background")),
+        "outline" if Panel::has_outline(panel) => Some((i, "outline")),
+        _ => None,
+    }
+}
+
+/// A panel background: `none` (the terminal's own) or any colour `parse_colour` takes.
+pub fn background(value: &str) -> Result<Option<Color>, String> {
+    if value.trim().eq_ignore_ascii_case("none") {
+        return Ok(None);
+    }
+    parse_colour(value).map(Some)
 }
 
 /// Problems with the `[theme]` section: what `chatcli settings check` prints for it.
@@ -436,5 +701,104 @@ mod tests {
             );
             assert!(t.unread.add_modifier.contains(Modifier::BOLD), "{name}");
         }
+    }
+
+    #[test]
+    fn palettes_set_panel_looks() {
+        let (t, p) = Theme::from_settings(&settings("default", &[("palette", "blocks")]), false);
+        assert!(p.is_empty(), "{p:?}");
+        let side = t.panel(Panel::Sidebar);
+        assert_eq!(side.outline, Outline::None);
+        assert_eq!(side.bg, Some(Color::Indexed(234)));
+        assert_ne!(
+            side.focus_bg, side.bg,
+            "the focused panel is a shade lighter"
+        );
+        let (light, _) = Theme::from_settings(&settings("light", &[("palette", "blocks")]), false);
+        assert_eq!(light.panel(Panel::Messages).bg, Some(Color::Indexed(255)));
+        let (lines, _) = Theme::from_settings(&settings("default", &[("palette", "lines")]), false);
+        assert_eq!(
+            lines,
+            Theme::default(),
+            "lines is the look without a palette"
+        );
+        for name in PALETTES {
+            assert!(palette_looks(name, false).is_some(), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_bad_palette_or_panel_value_is_one_problem_and_keeps_the_rest() {
+        let s = settings(
+            "default",
+            &[
+                ("palette", "neon"),
+                ("sidebar_outline", "wiggly"),
+                ("popup_background", "banana"),
+                ("header_outline", "single"),
+                ("messages_outline", "rounded"),
+            ],
+        );
+        let (t, p) = Theme::from_settings(&s, false);
+        let keys: Vec<_> = p.iter().map(|x| x.key.clone().unwrap()).collect();
+        assert_eq!(
+            keys,
+            [
+                "palette",
+                "header_outline",
+                "popup_background",
+                "sidebar_outline"
+            ],
+            "{p:?}"
+        );
+        assert!(
+            p.iter().all(|x| x.line.is_some()),
+            "every problem names its line"
+        );
+        assert_eq!(t.panel(Panel::Sidebar), PanelLook::LINES);
+        assert_eq!(t.panel(Panel::Messages).outline, Outline::Rounded);
+    }
+
+    #[test]
+    fn panel_overrides_apply_on_top_of_the_palette() {
+        let s = settings(
+            "default",
+            &[
+                ("palette", "blocks"),
+                ("sidebar_outline", "single"),
+                ("sidebar_background", "none"),
+                ("header_background", "#102030"),
+            ],
+        );
+        let (t, p) = Theme::from_settings(&s, false);
+        assert!(p.is_empty(), "{p:?}");
+        let side = t.panel(Panel::Sidebar);
+        assert_eq!(
+            (side.outline, side.bg, side.focus_bg),
+            (Outline::Single, None, None)
+        );
+        assert_eq!(
+            t.panel(Panel::Header).bg,
+            Some(Color::Rgb(0x10, 0x20, 0x30))
+        );
+        assert_eq!(t.panel(Panel::Messages).bg, Some(Color::Indexed(233)));
+    }
+
+    #[test]
+    fn no_colour_turns_shaded_panels_into_lines() {
+        let (t, _) = Theme::from_settings(&settings("default", &[("palette", "blocks")]), true);
+        for p in [
+            Panel::Sidebar,
+            Panel::Messages,
+            Panel::Composer,
+            Panel::Popup,
+        ] {
+            let look = t.panel(p);
+            assert_eq!(
+                (look.outline, look.bg, look.focus_bg),
+                (Outline::Single, None, None)
+            );
+        }
+        assert_eq!(t.panel(Panel::Header).bg, None);
     }
 }

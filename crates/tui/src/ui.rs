@@ -8,7 +8,7 @@ use qrcode::{Color as QrColor, EcLevel, QrCode};
 use ratatui::layout::{Alignment, Margin, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Clear, Paragraph, Wrap};
+use ratatui::widgets::{Block, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
 use crate::app::msg::Target;
@@ -24,7 +24,7 @@ use crate::media_view::{
 use crate::older::Older;
 use crate::settings_view::RowId;
 use crate::text::{clean_line, fit, sw, tail, truncate, wrap, wrap_pieces, Clock, Fmt, Piece};
-use crate::theme::Theme;
+use crate::theme::{Outline, Panel, Theme};
 use std::path::PathBuf;
 
 const MIN_W: u16 = 30;
@@ -249,6 +249,7 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
     if area.height == 0 {
         return;
     }
+    bar_background(f, t, Panel::Header, area);
     if area.width >= NARROW {
         f.render_widget(Paragraph::new(Span::styled(BRAND, bold())), area);
     }
@@ -856,6 +857,7 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect, screen_height: u16) {
     if area.height == 0 {
         return;
     }
+    bar_background(f, t, Panel::Footer, area);
     let w = area.width as usize;
     let mode = mode_spans(app);
     let mode_w: usize = mode.iter().map(Span::width).sum();
@@ -998,7 +1000,7 @@ fn draw_help(f: &mut Frame, app: &App, area: Rect, body: Rect) {
         return;
     }
     let b = help_box(body);
-    f.render_widget(pane("Help", true), b);
+    f.render_widget(pane(app.theme(), Panel::Popup, "Help", true), b);
     let inner = b.inner(Margin::new(1, 1));
     let w = inner.width as usize;
     let user = app.keys().user_bindings();
@@ -1083,15 +1085,35 @@ fn draw_help(f: &mut Frame, app: &App, area: Rect, body: Rect) {
 
 // ---- panes ----
 
-pub(crate) fn pane(title: &str, focused: bool) -> Block<'static> {
-    let b = Block::bordered().title(Span::styled(
-        format!(" {title} "),
-        if focused { bold() } else { Style::new() },
-    ));
-    if focused {
-        b.border_type(BorderType::Double)
+/// A framed panel in the palette's look. Every outline keeps the one-cell frame, so the text
+/// inside sits in the same place whatever the palette.
+pub(crate) fn pane(t: &Theme, panel: Panel, title: &str, focused: bool) -> Block<'static> {
+    let look = t.panel(panel);
+    let (outline, bg) = if focused {
+        (look.focus_outline, look.focus_bg)
     } else {
-        b
+        (look.outline, look.bg)
+    };
+    let mut b = Block::bordered()
+        .border_set(outline.set())
+        .title(Span::styled(
+            format!(" {title} "),
+            if focused { bold() } else { Style::new() },
+        ));
+    if let Some(c) = bg {
+        b = b.style(Style::new().bg(c));
+    }
+    match outline {
+        Outline::Rule if !focused => b.border_style(t.dim),
+        _ if focused && look.focus_tint => b.border_style(t.accent),
+        _ => b,
+    }
+}
+
+/// Fills a one-line bar (top bar, footer) with its palette background, if it has one.
+fn bar_background(f: &mut Frame, t: &Theme, panel: Panel, area: Rect) {
+    if let Some(c) = t.panel(panel).bg {
+        f.render_widget(Block::new().style(Style::new().bg(c)), area);
     }
 }
 
@@ -1126,7 +1148,10 @@ fn draw_sidebar(f: &mut Frame, app: &App, lay: &Layout) {
     } else {
         "Chats"
     };
-    f.render_widget(pane(title, focused), lay.sidebar);
+    f.render_widget(
+        pane(app.theme(), Panel::Sidebar, title, focused),
+        lay.sidebar,
+    );
     if let Some(r) = lay.filter_row {
         f.render_widget(
             Paragraph::new(Line::from(vec![
@@ -1643,7 +1668,10 @@ fn draw_convo(f: &mut Frame, app: &App, lay: &Layout) {
     let t = app.theme();
     let ns = app.active();
     let Some(open) = ns.open.as_ref() else {
-        f.render_widget(pane("Conversation", false), lay.convo);
+        f.render_widget(
+            pane(app.theme(), Panel::Messages, "Conversation", false),
+            lay.convo,
+        );
         centered_note(
             f,
             lay.messages,
@@ -1667,7 +1695,15 @@ fn draw_convo(f: &mut Frame, app: &App, lay: &Layout) {
             (lay.convo.width as usize).saturating_sub(4),
         );
     }
-    f.render_widget(pane(&title, ns.focus == Focus::Select), lay.convo);
+    f.render_widget(
+        pane(
+            app.theme(),
+            Panel::Messages,
+            &title,
+            ns.focus == Focus::Select,
+        ),
+        lay.convo,
+    );
     if !ns.messages.contains_key(open) {
         centered_note(f, lay.messages, "Loading messages...", t);
         return;
@@ -1793,7 +1829,7 @@ fn draw_attach(f: &mut Frame, app: &App, lay: &Layout) {
     let Some(a) = app.attach_prompt() else { return };
     let r = lay.composer;
     f.render_widget(Clear, r);
-    f.render_widget(pane("Attach file", true), r);
+    f.render_widget(pane(app.theme(), Panel::Composer, "Attach file", true), r);
     let inner = r.inner(Margin::new(1, 1));
     if inner.height == 0 {
         return;
@@ -1825,7 +1861,7 @@ fn draw_attach(f: &mut Frame, app: &App, lay: &Layout) {
         h,
     );
     f.render_widget(Clear, list);
-    f.render_widget(pane("Files", false), list);
+    f.render_widget(pane(app.theme(), Panel::Popup, "Files", false), list);
     let rows = list.inner(Margin::new(1, 1));
     if a.cands.is_empty() {
         f.render_widget(
@@ -1860,7 +1896,7 @@ fn draw_composer(f: &mut Frame, app: &App, lay: &Layout) {
     let t = app.theme();
     let ns = app.active();
     let focused = ns.focus == Focus::Composer;
-    let mut block = pane("Message", focused);
+    let mut block = pane(app.theme(), Panel::Composer, "Message", focused);
     // Someone is typing in this chat: on the box's top edge, right-aligned (WhatsApp only).
     if let Some(text) = ns
         .open
@@ -1984,7 +2020,7 @@ fn draw_popup(f: &mut Frame, app: &App, lay: &Layout) {
         h,
     );
     f.render_widget(Clear, r);
-    f.render_widget(pane(p.title, false), r);
+    f.render_widget(pane(app.theme(), Panel::Popup, p.title, false), r);
     let inner = r.inner(Margin::new(1, 1));
     // A list longer than the box scrolls to keep the chosen row in view.
     let start = (p.selected + 1).saturating_sub(n);
@@ -2109,7 +2145,7 @@ fn draw_picker(f: &mut Frame, app: &App, body: Rect) {
         PickerFor::Compose => "Emoji",
         PickerFor::React { .. } => "React",
     };
-    f.render_widget(pane(title, true), g.outer);
+    f.render_widget(pane(app.theme(), Panel::Popup, title, true), g.outer);
     f.render_widget(
         Paragraph::new(Line::from(category_spans(
             p.cat,
@@ -2319,7 +2355,7 @@ fn draw_panel(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(
         Paragraph::new(lines)
             .alignment(Alignment::Center)
-            .block(pane(name, true)),
+            .block(pane(app.theme(), Panel::Popup, name, true)),
         r,
     );
 }
@@ -2427,7 +2463,7 @@ fn draw_palette(f: &mut Frame, app: &App, body: Rect) {
         centered_note(f, body, PALETTE_TOO_SMALL, t);
         return;
     };
-    f.render_widget(pane("Commands", true), g.outer);
+    f.render_widget(pane(app.theme(), Panel::Popup, "Commands", true), g.outer);
     let shown = tail(
         &clean_line(&p.query),
         (g.query.width as usize).saturating_sub(2),
@@ -2555,7 +2591,7 @@ fn draw_search(f: &mut Frame, app: &App, body: Rect) {
         centered_note(f, body, SEARCH_TOO_SMALL, t);
         return;
     };
-    f.render_widget(pane("Search", true), g.outer);
+    f.render_widget(pane(app.theme(), Panel::Popup, "Search", true), g.outer);
     let query_line = if s.query.is_empty() {
         Line::from(vec![
             Span::styled("/", bold()),

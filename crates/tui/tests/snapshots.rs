@@ -2141,6 +2141,63 @@ fn theme_high_contrast() {
     }
 }
 
+/// Palettes may use the 256-colour grey ramp for panel shades, so they skip the ANSI-16 check.
+fn render_palette(app: &mut App, w: u16, h: u16) -> String {
+    app.resize(w, h);
+    let mut term = Terminal::new(TestBackend::new(w, h)).unwrap();
+    term.draw(|f| draw(f, app)).unwrap();
+    dump_with(&term, true)
+}
+
+#[test]
+fn palettes() {
+    for p in ["blocks", "minimal", "rounded"] {
+        for (w, h) in [(100, 30), (80, 24)] {
+            let got = render_palette(
+                &mut themed(theme_settings("default", &[("palette", p)])),
+                w,
+                h,
+            );
+            check(&format!("palette_{p}"), w, h, &got);
+        }
+    }
+    let got = render_palette(
+        &mut themed(theme_settings("light", &[("palette", "blocks")])),
+        100,
+        30,
+    );
+    check("palette_blocks_light", 100, 30, &got);
+}
+
+#[test]
+fn palette_lines_is_the_screen_without_a_palette() {
+    let plain = render(&mut themed(Settings::default()), 100, 30);
+    let lines = render(
+        &mut themed(theme_settings("default", &[("palette", "lines")])),
+        100,
+        30,
+    );
+    assert_eq!(plain, lines);
+}
+
+#[test]
+fn panel_overrides() {
+    let got = render_palette(
+        &mut themed(theme_settings(
+            "default",
+            &[
+                ("palette", "blocks"),
+                ("sidebar_outline", "rounded"),
+                ("messages_background", "none"),
+                ("composer_outline", "rule"),
+            ],
+        )),
+        100,
+        30,
+    );
+    check("palette_panel_overrides", 100, 30, &got);
+}
+
 #[test]
 fn theme_light_and_dark() {
     for name in ["light", "dark"] {
@@ -3174,7 +3231,10 @@ fn settings_number_error() {
 fn settings_colour_entry() {
     at_sizes("settings_colour_entry", &[(80, 24)], || {
         let mut app = settings_app(0, true);
-        press(&mut app, KeyCode::Down);
+        // Past Theme, Palette and the ten panel rows to the first colour role (Text).
+        for _ in 0..12 {
+            press(&mut app, KeyCode::Down);
+        }
         press(&mut app, KeyCode::Enter);
         type_str(&mut app, "#12ab");
         app

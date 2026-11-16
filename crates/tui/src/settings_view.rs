@@ -11,7 +11,7 @@ use chatcli_core::settings::{
 use crate::keymap::{
     actions_for, parse_key, preset_keys, Action, Context, KeyChord, Keymap, Preset,
 };
-use crate::theme::{parse_colour, ROLES, THEMES};
+use crate::theme::{background, parse_colour, Outline, PALETTES, ROLES, THEMES};
 
 /// A page of the settings screen, opened by `/settings`, `/theme`, `/keys`, `/layout`,
 /// `/notifications` and `/about`.
@@ -127,6 +127,10 @@ impl SettingsPage {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RowId {
     ThemeName,
+    /// `[theme] palette`: lines, blocks, minimal, rounded.
+    Palette,
+    /// `[theme] <panel>_outline`.
+    Outline(&'static str),
     /// One of `theme::ROLES`.
     Role(&'static str),
     SidebarWidth,
@@ -260,8 +264,46 @@ pub(crate) fn role_label(role: &str) -> &'static str {
         "chip_attention" => "Status: attention",
         "network_teams" => "Teams tab",
         "network_whatsapp" => "WhatsApp tab",
+        "sidebar_background" => "Sidebar fill",
+        "messages_background" => "Messages fill",
+        "composer_background" => "Message box fill",
+        "popup_background" => "Popups fill",
+        "header_background" => "Top bar fill",
+        "footer_background" => "Footer fill",
+        "sidebar_outline" => "Sidebar outline",
+        "messages_outline" => "Messages outline",
+        "composer_outline" => "Message box outline",
+        "popup_outline" => "Popups outline",
         _ => "?",
     }
+}
+
+/// `[theme]` keys for each panel's outline (the bars have none) and background, in screen order.
+const PANEL_ROWS: [(&str, Option<&str>); 6] = [
+    ("sidebar_background", Some("sidebar_outline")),
+    ("messages_background", Some("messages_outline")),
+    ("composer_background", Some("composer_outline")),
+    ("popup_background", Some("popup_outline")),
+    ("header_background", None),
+    ("footer_background", None),
+];
+
+/// Outline choices for Left/Right: `default` removes the override (the palette decides).
+const OUTLINE_CHOICES: [&str; 7] = [
+    "default", "none", "rule", "single", "rounded", "double", "thick",
+];
+
+fn is_background(key: &str) -> bool {
+    key.ends_with("_background")
+}
+
+/// Left/Right choices for a colour row; a background can also be `none`.
+fn colour_choices(key: &str) -> Vec<&'static str> {
+    let mut out = COLOURS.to_vec();
+    if is_background(key) {
+        out.insert(1, "none");
+    }
+    out
 }
 
 fn row(id: RowId, label: &str, value: String, hint: &'static str, custom: bool) -> Row {
@@ -425,6 +467,34 @@ pub(crate) fn rows(
                 "default, high-contrast, light, dark",
                 s.theme.name != d.theme.name,
             ));
+            let palette = s.theme.overrides.get("palette");
+            out.push(row(
+                RowId::Palette,
+                "Palette",
+                palette.cloned().unwrap_or_else(|| "lines".to_string()),
+                "lines, blocks, minimal, rounded",
+                palette.is_some(),
+            ));
+            for (bg, outline) in PANEL_ROWS {
+                if let Some(key) = outline {
+                    let v = s.theme.overrides.get(key);
+                    out.push(row(
+                        RowId::Outline(key),
+                        role_label(key),
+                        v.cloned().unwrap_or_else(|| "default".to_string()),
+                        "default, none, rule, single, rounded, double, thick",
+                        v.is_some(),
+                    ));
+                }
+                let v = s.theme.overrides.get(bg);
+                out.push(row(
+                    RowId::Role(bg),
+                    role_label(bg),
+                    v.cloned().unwrap_or_else(|| "default".to_string()),
+                    "default, none, a name or #rrggbb",
+                    v.is_some(),
+                ));
+            }
             for r in ROLES {
                 let custom = s.theme.overrides.get(r);
                 out.push(row(
@@ -729,6 +799,75 @@ pub(crate) fn change(s: &Settings, id: RowId, c: Change) -> Done {
             };
             one(n, edit)
         }
+        RowId::Palette => {
+            let cur = s
+                .theme
+                .overrides
+                .get("palette")
+                .map(|v| v.trim().to_ascii_lowercase());
+            let name = match &c {
+                Change::Reset => None,
+                Change::Text(t) => Some(
+                    PALETTES
+                        .iter()
+                        .find(|n| n.eq_ignore_ascii_case(t.trim()))
+                        .ok_or_else(|| format!("unknown palette: use {}", PALETTES.join(", ")))?
+                        .to_string(),
+                ),
+                _ => {
+                    let i = cur
+                        .as_deref()
+                        .and_then(|v| PALETTES.iter().position(|p| *p == v))
+                        .unwrap_or(0);
+                    let k = PALETTES.len();
+                    Some(
+                        PALETTES[if c == Change::Prev { i + k - 1 } else { i + 1 } % k].to_string(),
+                    )
+                }
+            };
+            // `lines` is the default look: saved as no key at all.
+            let name = name.filter(|n| n != "lines");
+            match &name {
+                Some(v) => n.theme.overrides.insert("palette".to_string(), v.clone()),
+                None => n.theme.overrides.remove("palette"),
+            };
+            one(
+                n,
+                set_or_remove("theme", "palette", name.map(SettingValue::Str)),
+            )
+        }
+        RowId::Outline(key) => {
+            let cur = s
+                .theme
+                .overrides
+                .get(key)
+                .map_or("default".to_string(), |v| v.trim().to_ascii_lowercase());
+            let value = match &c {
+                Change::Reset => None,
+                Change::Text(t) => {
+                    let t = t.trim().to_ascii_lowercase();
+                    if t.is_empty() || t == "default" {
+                        None
+                    } else {
+                        Outline::from_name(&t).ok_or_else(|| {
+                            format!("unknown outline: use {}", OUTLINE_CHOICES.join(", "))
+                        })?;
+                        Some(t)
+                    }
+                }
+                _ => {
+                    let k = OUTLINE_CHOICES.len();
+                    let i = OUTLINE_CHOICES.iter().position(|o| *o == cur).unwrap_or(0);
+                    let j = if c == Change::Prev { i + k - 1 } else { i + 1 } % k;
+                    (j != 0).then(|| OUTLINE_CHOICES[j].to_string())
+                }
+            };
+            match &value {
+                Some(v) => n.theme.overrides.insert(key.to_string(), v.clone()),
+                None => n.theme.overrides.remove(key),
+            };
+            one(n, set_or_remove("theme", key, value.map(SettingValue::Str)))
+        }
         RowId::Role(role) => {
             let value: Option<String> = match &c {
                 Change::Reset => None,
@@ -737,7 +876,11 @@ pub(crate) fn change(s: &Settings, id: RowId, c: Change) -> Done {
                     if t.is_empty() || t.eq_ignore_ascii_case("default") {
                         None
                     } else {
-                        parse_colour(t)?;
+                        if is_background(role) {
+                            background(t)?;
+                        } else {
+                            parse_colour(t)?;
+                        }
                         Some(t.to_string())
                     }
                 }
@@ -747,10 +890,11 @@ pub(crate) fn change(s: &Settings, id: RowId, c: Change) -> Done {
                         .overrides
                         .get(role)
                         .map_or("default".to_string(), |v| v.trim().to_ascii_lowercase());
-                    let k = COLOURS.len();
-                    let i = COLOURS.iter().position(|n| *n == cur).unwrap_or(0);
+                    let choices = colour_choices(role);
+                    let k = choices.len();
+                    let i = choices.iter().position(|n| *n == cur).unwrap_or(0);
                     let j = if c == Change::Prev { i + k - 1 } else { i + 1 } % k;
-                    (j != 0).then(|| COLOURS[j].to_string())
+                    (j != 0).then(|| choices[j].to_string())
                 }
             };
             match &value {
@@ -978,7 +1122,7 @@ mod tests {
     #[test]
     fn every_selectable_row_survives_every_change() {
         let ids = all_ids();
-        assert_eq!(ids.len(), 19 + ROLES.len());
+        assert_eq!(ids.len(), 19 + 1 + 4 + 6 + ROLES.len());
         for id in ids {
             for c in [Change::Prev, Change::Next, Change::Toggle, Change::Reset] {
                 let (_, edits) = run(&Settings::default(), id, c.clone());
