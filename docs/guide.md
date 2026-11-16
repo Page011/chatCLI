@@ -5,9 +5,11 @@
 [![License](https://img.shields.io/github/license/Page011/chatCLI)](https://github.com/Page011/chatCLI/blob/main/LICENSE)
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-4c1d95)](https://github.com/Page011/chatCLI/blob/main/docs/guide.md#linux-and-macos-experimental)
 
-A terminal chat client for WhatsApp and Microsoft Teams. One full-screen app, one tab per network, every chat in a sidebar. You read and reply to both with the desktop apps closed.
+A terminal chat client for WhatsApp and Microsoft Teams.
 
-You run everything yourself: your own Teams app registration, your own optional Cloudflare Worker, your own WhatsApp link. Nothing is hosted for you, and nothing is shared with anyone else.
+Right now you can host everything yourself. 
+ - Azure Registration for Teams
+ - Cloudflare worker for Teams
 
 ```
  chatcli  Teams 101 LIVE   WhatsApp SIGN-IN NEEDED                   Ctrl+C quit
@@ -35,15 +37,13 @@ You run everything yourself: your own Teams app registration, your own optional 
 Enter send  Ctrl+Up select  Ctrl+J newline  Ctrl+E emoji  Esc back to list
 ```
 
-That is `chatcli --demo`: fake data, no accounts, no network.
-
 ## Read this first
 
 - **Early release.** chatcli works day to day but has rough edges. Please [open an issue](https://github.com/Page011/chatCLI/issues) when something breaks. Live Teams updates through the relay are the newest and least tested part.
 - **WhatsApp support is unofficial.** chatcli links to your account as a WhatsApp Web linked device, using [whatsapp-rust](https://github.com/oxidezap/whatsapp-rust). WhatsApp's terms forbid unofficial clients. WhatsApp can suspend an account that uses one. Use it for personal, low-volume chatting only. Never automate sending. You accept this risk.
 - **Teams needs a work or school account.** Microsoft Graph chat APIs do not work with personal Microsoft accounts. Your tenant must also allow you to register an app (or an admin must do it for you).
 - **Windows 10 or 11 is the tested platform.** Secrets are kept in Windows Credential Manager. Linux and macOS are experimental: see [Linux and macOS](#linux-and-macos-experimental).
-- **Scope.** Teams 1:1 and group chats (no channels, no meeting chats). WhatsApp direct and group chats. Text, replies, reactions, mentions, edit and delete, pictures and files. Nothing is downloaded until you ask for it.
+- **Scope.** Teams 1:1 and group chats (no channels, no meeting chats). WhatsApp direct and group chats. Text, replies, reactions, mentions, edit and delete, pictures and files. Images are not downloaded automatically.
 - **Not every feature is checked against a live account yet.** Anything that talks to the real services (reactions, edits, files, older history, toasts) is built and unit tested, but the release notes say what has been tried by hand.
 
 ## Download
