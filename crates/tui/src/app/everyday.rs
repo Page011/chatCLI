@@ -598,7 +598,7 @@ mod tests {
 
     /// Teams online with chats a (2 unread), b (0), c (1), newest first.
     fn app_with(settings: &Settings) -> App {
-        let mut app = App::with_settings(clock(), settings, None);
+        let mut app = App::with_settings(clock(), settings);
         online_status(&mut app, Network::Teams);
         app.handle_event(Event::Chats(
             Network::Teams,
@@ -1478,7 +1478,7 @@ mod tests {
     // ---- typing ----
 
     fn wa_app(settings: &Settings) -> App {
-        let mut app = App::with_settings(clock(), settings, None);
+        let mut app = App::with_settings(clock(), settings);
         online_status(&mut app, Network::WhatsApp);
         app.handle_event(Event::Chats(
             Network::WhatsApp,

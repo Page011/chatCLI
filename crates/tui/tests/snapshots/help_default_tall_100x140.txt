@@ -1,6 +1,6 @@
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                                           Ctrl+C quit
 ╔ Help ════════════════════════════════════════════════════════════════════════════════════════════╗
-║default preset, no user bindings                                                                  ║
+║No user bindings                                                                                  ║
 ║Commands                                                                                          ║
 ║/help          F1                keys and commands                                                ║
 ║/settings      F2                theme, layout, keys and more                                     ║
@@ -57,8 +57,8 @@
 ║Filter box                                                                                        ║
 ║Up        List up           previous chat (scrolls up in help)                                    ║
 ║Down      List down         next chat (scrolls down in help)                                      ║
-║Enter     Filter accept     keep the filter, or run the : command                                 ║
-║Esc       Filter cancel     clear the filter, or cancel the : command                             ║
+║Enter     Filter accept     keep the filter, back to the chat list                                ║
+║Esc       Filter cancel     clear the filter, back to the chat list                               ║
 ║                                                                                                  ║
 ║Message box                                                                                       ║
 ║Enter                          Send              send the message                                 ║
@@ -99,10 +99,6 @@
 ║?         Help              show this help                                                        ║
 ║/         Command bar       open the / command bar: commands and chats                            ║
 ║                                                                                                  ║
-║Command box                                                                                       ║
-║Enter     Filter accept     keep the filter, or run the : command                                 ║
-║Esc       Filter cancel     clear the filter, or cancel the : command                             ║
-║                                                                                                  ║
 ║Suggestions, pickers and search                                                                   ║
 ║Up         Popup up          previous suggestion (emoji picker: up one row)                       ║
 ║Down       Popup down        next suggestion (emoji picker: down one row)                         ║
@@ -135,7 +131,11 @@
 ║                                                                                                  ║
 ║                                                                                                  ║
 ║                                                                                                  ║
-║lines 1-123 of 123                                                                                ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║lines 1-119 of 119                                                                                ║
 ╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
 Esc close  Up/Down scroll  PgUp/PgDn page
 --- styled runs (everything else is default style) ---
@@ -145,7 +145,7 @@ row 0 cols 27-34: fg=Reset bg=Reset BOLD
 row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
 row 0 cols 89-99: fg=Reset bg=Reset DIM
 row 1 cols 1-6: fg=Reset bg=Reset BOLD
-row 2 cols 1-32: fg=Reset bg=Reset DIM
+row 2 cols 1-16: fg=Reset bg=Reset DIM
 row 3 cols 1-8: fg=Reset bg=Reset BOLD
 row 4 cols 1-14: fg=Reset bg=Reset BOLD
 row 4 cols 32-50: fg=DarkGray bg=Reset NONE
@@ -246,9 +246,9 @@ row 57 cols 27-62: fg=DarkGray bg=Reset NONE
 row 58 cols 1-9: fg=Reset bg=Reset BOLD
 row 58 cols 27-60: fg=DarkGray bg=Reset NONE
 row 59 cols 1-9: fg=Reset bg=Reset BOLD
-row 59 cols 27-65: fg=DarkGray bg=Reset NONE
+row 59 cols 27-66: fg=DarkGray bg=Reset NONE
 row 60 cols 1-9: fg=Reset bg=Reset BOLD
-row 60 cols 27-69: fg=DarkGray bg=Reset NONE
+row 60 cols 27-67: fg=DarkGray bg=Reset NONE
 row 62 cols 1-11: fg=Reset bg=Reset BOLD
 row 63 cols 1-30: fg=Reset bg=Reset BOLD
 row 63 cols 48-65: fg=DarkGray bg=Reset NONE
@@ -321,45 +321,40 @@ row 98 cols 1-9: fg=Reset bg=Reset BOLD
 row 98 cols 27-42: fg=DarkGray bg=Reset NONE
 row 99 cols 1-9: fg=Reset bg=Reset BOLD
 row 99 cols 27-70: fg=DarkGray bg=Reset NONE
-row 101 cols 1-11: fg=Reset bg=Reset BOLD
-row 102 cols 1-9: fg=Reset bg=Reset BOLD
-row 102 cols 27-65: fg=DarkGray bg=Reset NONE
-row 103 cols 1-9: fg=Reset bg=Reset BOLD
-row 103 cols 27-69: fg=DarkGray bg=Reset NONE
-row 105 cols 1-31: fg=Reset bg=Reset BOLD
+row 101 cols 1-31: fg=Reset bg=Reset BOLD
+row 102 cols 1-10: fg=Reset bg=Reset BOLD
+row 102 cols 28-75: fg=DarkGray bg=Reset NONE
+row 103 cols 1-10: fg=Reset bg=Reset BOLD
+row 103 cols 28-73: fg=DarkGray bg=Reset NONE
+row 104 cols 1-10: fg=Reset bg=Reset BOLD
+row 104 cols 28-66: fg=DarkGray bg=Reset NONE
+row 105 cols 1-10: fg=Reset bg=Reset BOLD
+row 105 cols 28-70: fg=DarkGray bg=Reset NONE
 row 106 cols 1-10: fg=Reset bg=Reset BOLD
-row 106 cols 28-75: fg=DarkGray bg=Reset NONE
+row 106 cols 28-93: fg=DarkGray bg=Reset NONE
 row 107 cols 1-10: fg=Reset bg=Reset BOLD
-row 107 cols 28-73: fg=DarkGray bg=Reset NONE
+row 107 cols 28-95: fg=DarkGray bg=Reset NONE
 row 108 cols 1-10: fg=Reset bg=Reset BOLD
-row 108 cols 28-66: fg=DarkGray bg=Reset NONE
+row 108 cols 28-89: fg=DarkGray bg=Reset NONE
 row 109 cols 1-10: fg=Reset bg=Reset BOLD
-row 109 cols 28-70: fg=DarkGray bg=Reset NONE
+row 109 cols 28-91: fg=DarkGray bg=Reset NONE
 row 110 cols 1-10: fg=Reset bg=Reset BOLD
-row 110 cols 28-93: fg=DarkGray bg=Reset NONE
-row 111 cols 1-10: fg=Reset bg=Reset BOLD
-row 111 cols 28-95: fg=DarkGray bg=Reset NONE
-row 112 cols 1-10: fg=Reset bg=Reset BOLD
-row 112 cols 28-89: fg=DarkGray bg=Reset NONE
-row 113 cols 1-10: fg=Reset bg=Reset BOLD
-row 113 cols 28-91: fg=DarkGray bg=Reset NONE
-row 114 cols 1-10: fg=Reset bg=Reset BOLD
-row 114 cols 28-91: fg=DarkGray bg=Reset NONE
-row 116 cols 1-33: fg=Reset bg=Reset BOLD
-row 117 cols 1-9: fg=Reset bg=Reset BOLD
-row 117 cols 27-98: fg=DarkGray bg=Reset NONE
-row 118 cols 1-9: fg=Reset bg=Reset BOLD
-row 118 cols 27-68: fg=DarkGray bg=Reset NONE
-row 120 cols 1-9: fg=Reset bg=Reset BOLD
+row 110 cols 28-91: fg=DarkGray bg=Reset NONE
+row 112 cols 1-33: fg=Reset bg=Reset BOLD
+row 113 cols 1-9: fg=Reset bg=Reset BOLD
+row 113 cols 27-98: fg=DarkGray bg=Reset NONE
+row 114 cols 1-9: fg=Reset bg=Reset BOLD
+row 114 cols 27-68: fg=DarkGray bg=Reset NONE
+row 116 cols 1-9: fg=Reset bg=Reset BOLD
+row 117 cols 1-13: fg=Reset bg=Reset BOLD
+row 117 cols 31-47: fg=DarkGray bg=Reset NONE
+row 118 cols 1-13: fg=Reset bg=Reset BOLD
+row 118 cols 31-66: fg=DarkGray bg=Reset NONE
+row 119 cols 1-13: fg=Reset bg=Reset BOLD
+row 119 cols 31-64: fg=DarkGray bg=Reset NONE
+row 120 cols 1-13: fg=Reset bg=Reset BOLD
+row 120 cols 31-92: fg=DarkGray bg=Reset NONE
 row 121 cols 1-13: fg=Reset bg=Reset BOLD
-row 121 cols 31-47: fg=DarkGray bg=Reset NONE
-row 122 cols 1-13: fg=Reset bg=Reset BOLD
-row 122 cols 31-66: fg=DarkGray bg=Reset NONE
-row 123 cols 1-13: fg=Reset bg=Reset BOLD
-row 123 cols 31-64: fg=DarkGray bg=Reset NONE
-row 124 cols 1-13: fg=Reset bg=Reset BOLD
-row 124 cols 31-92: fg=DarkGray bg=Reset NONE
-row 125 cols 1-13: fg=Reset bg=Reset BOLD
-row 125 cols 31-94: fg=DarkGray bg=Reset NONE
+row 121 cols 31-94: fg=DarkGray bg=Reset NONE
 row 137 cols 1-18: fg=Reset bg=Reset DIM
 row 139 cols 0-40: fg=Reset bg=Reset DIM

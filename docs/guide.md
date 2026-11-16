@@ -78,7 +78,7 @@ Try it with no accounts:
 chatcli --demo
 ```
 
-Press `Ctrl+C` to leave the demo. The demo shows every feature below on fake data: replies, reactions, edits, mentions, attachments and thumbnails, older history, pin/mute/hide, search, typing, and a footer line where a toast would be. It starts from a copy of your `settings.toml` (so you can try a theme, a layout or `--keys vim`), keeps its messages, its downloads and that copy in a temporary folder that is deleted on exit, and never touches your real data, your real `settings.toml` or the network.
+Press `Ctrl+C` to leave the demo. The demo shows every feature below on fake data: replies, reactions, edits, mentions, attachments and thumbnails, older history, pin/mute/hide, search, typing, and a footer line where a toast would be. It starts from a copy of your `settings.toml` (so you can try a theme or a layout), keeps its messages, its downloads and that copy in a temporary folder that is deleted on exit, and never touches your real data, your real `settings.toml` or the network.
 
 Want it shown instead of reading about it? `chatcli --demo --tour` plays a guided tour: it signs in, opens a chat, sends, replies, reacts, edits, deletes, searches, opens the settings screen and rebinds a key, with a caption on the top row. `Space` pauses, `n` skips to the next step, `Esc` ends it (`/tour` in the demo plays it again). The tour starts from the default settings and puts everything back.
 
@@ -249,7 +249,7 @@ Start it with `chatcli`. Press `?` in the chat list for a help screen generated 
 
 ### Keys
 
-These are the default keys. The vim preset and your own bindings are below.
+These are the default keys. Your own bindings are below.
 
 | Key | Does |
 |---|---|
@@ -284,7 +284,7 @@ Message box:
 | Key | Does |
 |---|---|
 | `Enter` | Send the whole message |
-| `/command` | A message that starts with `/` is a command, not text: `/help`, `/settings`, `/keys vim`, `/signout`. A list of commands opens as you type; `Enter` runs the chosen one. An unknown word shows `UNKNOWN COMMAND` and keeps your text. Start with `//` to send a message that begins with a slash (`//usr/bin` sends `/usr/bin`) |
+| `/command` | A message that starts with `/` is a command, not text: `/help`, `/settings`, `/keys`, `/signout`. A list of commands opens as you type; `Enter` runs the chosen one. An unknown word shows `UNKNOWN COMMAND` and keeps your text. Start with `//` to send a message that begins with a slash (`//usr/bin` sends `/usr/bin`) |
 | `Esc` | Cancel a pending reply or edit; otherwise back to the chat list |
 | `Left` / `Right`, `Ctrl+Left` / `Ctrl+Right` | Move the cursor by character, by word |
 | `Home` / `End` | Start / end of the line |
@@ -331,18 +331,6 @@ If your terminal uses `Ctrl+Up` for its own scrollback, rebind it (see [Key bind
 - **Replies** show the quoted message dimmed above the reply. An edited message shows `(edited)`, a deleted one `[message deleted]`. Reactions show as counts under a message, yours in bold.
 - **Links** are underlined. `u` asks `Open <host>? y/n` (the real host, whatever the link text says); several links get a `1`-`9` choice first. Only `http` and `https` open.
 
-### Vim preset
-
-Switch it on with `[keys] preset = "vim"` in `settings.toml`, with `chatcli --keys vim` (wins over the file), or with `/keys vim` (or `:keys vim`) for one session. The left of the footer shows `-- NORMAL --`, `-- INSERT --` or `-- SELECT --`.
-
-| Mode | Keys |
-|---|---|
-| Normal (chat list) | `j` `k` `Up` `Down` move; `gg` first, `G` last; `Home` `End`; `Ctrl+D` / `Ctrl+U` half a page; `gt` / `gT` next / previous network; `Enter` open; `i` `a` `o` open the chat and type; `v` select a message; `/` command bar; `r` refresh; `q` quit; `Esc` clear the filter; `?` help; `:` command box (runs the same commands: `:settings`, `:keys vim`, `:q`). The list keys `n N M p m x H u` work as in the default preset |
-| Insert (message box) | everything types; `Enter` sends; `Esc` back to Normal; `PgUp` / `PgDn` scroll |
-| Select | as in the default preset, plus `gg`, `Ctrl+D`, `Ctrl+U`; `Esc` back |
-
-A held `g` shows in the footer (`-- NORMAL -- g`) and waits with no timer. The `:` box takes `q`, `quit`, `refresh`, `keys default` and `keys vim`.
-
 ### Status chips
 
 Each tab shows a chip next to its name. In a narrow window the chip is shortened: `CONNECT`, `SIGN-IN`, `SIGNING`, `QR`.
@@ -362,8 +350,7 @@ A failed send stays in the chat marked `NOT SENT` with the reason. Nothing looks
 ### Commands without the full screen
 
 ```
-chatcli --demo [--tour] [--keys vim]      the full screen with fake data; --tour plays a guided tour
-chatcli --keys <default|vim>              the full screen with a key preset (wins over settings.toml)
+chatcli --demo [--tour]                   the full screen with fake data; --tour plays a guided tour
 chatcli teams setup <client-id> <tenant>  save your Entra app ids
 chatcli teams login                       sign in through the browser
 chatcli teams chats                       list chats, newest first
@@ -427,8 +414,6 @@ files_write = false         # Files.ReadWrite: send files through your OneDrive
 send_read_receipts = false  # blue ticks for the sender when you read a chat
 send_typing = false         # tell the other side when you type (showing theirs is always on)
 
-[keys]
-preset = "default"          # "default" or "vim"
 # [keys.list] and the other context tables: see Key bindings
 
 [theme]
@@ -438,31 +423,28 @@ name = "default"            # "default", "high-contrast", "light" or "dark"
 
 ### Key bindings
 
-The `/keys` page (or the Keys section of `F2`) lists every action with its keys: `Enter` on an action, then press the new key. If the key already runs another action you are asked whether to swap; `Backspace` removes a key. An action can have several keys: `a` adds one and keeps the others (a key another action of the same context holds is refused with its name, and a key that would hide or be hidden by an `Everywhere` key, or a vim key sequence, asks first), and `d` lets you choose one of its keys with `Left` / `Right` and deletes it with `Enter`. The key you set last is the one the footer shows. `r` resets one action, the last row resets them all, and the top row switches the preset. `Ctrl+C` and the `Esc` that backs out of a screen cannot be changed. What follows is the same thing as a file.
+The `/keys` page (or the Keys section of `F2`) lists every action with its keys: `Enter` on an action, then press the new key. If the key already runs another action you are asked whether to swap; `Backspace` removes a key. An action can have several keys: `a` adds one and keeps the others (a key another action of the same context holds is refused with its name, and a key that would hide or be hidden by an `Everywhere` key, or a two-key sequence, asks first), and `d` lets you choose one of its keys with `Left` / `Right` and deletes it with `Enter`. The key you set last is the one the footer shows. `r` resets one action, and the last row resets them all. `Ctrl+C` and the `Esc` that backs out of a screen cannot be changed. What follows is the same thing as a file.
 
-`[keys] preset` picks the base. Your own bindings sit in one table per context, `key = "action"`:
+Your own bindings sit in one table per context, `key = "action"`, over the built-in keys:
 
 ```toml
-[keys]
-preset = "default"
-
 [keys.list]
 "ctrl+n" = "list_down"
 "ctrl+p" = "list_up"
-"x" = "unbound"        # removes the preset's binding of x
+"x" = "unbound"        # removes the built-in binding of x
 
 [keys.composer]
 "ctrl+s" = "send"
 ```
 
 - **Key strings:** a single character (`a`, `G`, `/`), or `enter` `esc` `tab` `up` `down` `left` `right` `home` `end` `pgup` `pgdn` `backspace` `delete` `insert` `space` `f1` to `f24`, with `ctrl+`, `alt+` or `shift+` in front (`shift+tab`).
-- **Contexts:** `global` (everywhere except help), `panel` (sign-in), `list` (chat list, default preset), `filter`, `composer` (message box, default preset), `select`, `normal` (chat list, vim), `insert` (message box, vim), `popup` (suggestions, emoji picker, file prompt, search box), `confirm` (the `y/n` questions), `command` (the `:` box), `help`. `[keys.normal]` and `[keys.insert]` only apply with the vim preset, `[keys.list]` and `[keys.composer]` only with the default one; `/keys vim` and `/keys default` switch between them and keep your tables.
-- **Text contexts** (`global`, `filter`, `composer`, `insert`, `command`, `popup`) refuse plain letters and `Backspace` as bindings, because that would stop you typing. Use `ctrl+` or `alt+`.
+- **Contexts:** `global` (everywhere except help, popups and the `y/n` questions), `panel` (sign-in), `list` (chat list), `filter`, `composer` (message box), `select` (message selection), `popup` (suggestions, emoji picker, file prompt, search box, command bar), `confirm` (the `y/n` questions), `help`.
+- **Text contexts** (`global`, `filter`, `composer`, `popup`) refuse plain letters and `Backspace` as bindings, because that would stop you typing. Use `ctrl+` or `alt+`.
 - `Ctrl+C` always quits and cannot be rebound or unbound.
 - A bad binding (unknown action, unreadable key, the same key twice in one table) is skipped with one notice, and the rest load. The notice suggests the closest name. Some terminals send `Ctrl+I` as `Tab`, `Ctrl+M` and `Ctrl+J` as `Enter`, `Ctrl+[` as `Esc` and `Ctrl+H` as `Backspace`: these are warned about and still applied.
-- User key sequences (like `gg`) are not supported. Binding `g` in the vim preset replaces its sequences, with a warning.
+- User key sequences (like `gg`) are not supported.
 
-Actions (the names are stable): `quit` `next_network` `prev_network` `goto_network_1` `goto_network_2` `toggle_preset` `command_bar` `settings` `search` `sign_in` `help` `close_help` `list_up` `list_down` `list_top` `list_bottom` `half_page_up` `half_page_down` `scroll_up` `scroll_down` `open_chat` `enter_insert` `filter_start` `filter_accept` `filter_cancel` `clear_filter` `refresh` `send` `leave_composer` `leave_insert` `command_box` `open_link` `next_unread` `prev_unread` `mark_all_read` `pin` `mute` `hide` `show_hidden` `cursor_left` `cursor_right` `word_left` `word_right` `line_start` `line_end` `delete_back` `delete_forward` `delete_word_back` `clear_line` `insert_newline` `emoji_picker` `attach` `paste_image` `select_messages` `select_up` `select_down` `select_page_up` `select_page_down` `select_first` `select_last` `leave_select` `reply` `cancel_reply` `react` `edit` `delete` `open_media` `view_image` `popup_up` `popup_down` `popup_accept` `popup_close` `confirm_yes` `confirm_no`, and `unbound`. The `?` screen lists every action next to its keys. The footer hints follow your bindings too. A binding on an action that makes no sense in that context is accepted and does nothing.
+Actions (the names are stable): `quit` `next_network` `prev_network` `goto_network_1` `goto_network_2` `command_bar` `settings` `search` `sign_in` `help` `close_help` `list_up` `list_down` `list_top` `list_bottom` `scroll_up` `scroll_down` `open_chat` `filter_start` `filter_accept` `filter_cancel` `clear_filter` `refresh` `send` `leave_composer` `open_link` `next_unread` `prev_unread` `mark_all_read` `pin` `mute` `hide` `show_hidden` `cursor_left` `cursor_right` `word_left` `word_right` `line_start` `line_end` `delete_back` `delete_forward` `delete_word_back` `clear_line` `insert_newline` `emoji_picker` `attach` `paste_image` `select_messages` `select_up` `select_down` `select_page_up` `select_page_down` `select_first` `select_last` `leave_select` `reply` `cancel_reply` `react` `edit` `delete` `open_media` `view_image` `popup_up` `popup_down` `popup_accept` `popup_close` `confirm_yes` `confirm_no`, and `unbound`. The `?` screen lists every action next to its keys. The footer hints follow your bindings too. A binding on an action that makes no sense in that context is accepted and does nothing.
 
 ### Themes
 

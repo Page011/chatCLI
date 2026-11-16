@@ -75,31 +75,6 @@ pub fn fit(s: &str, width: usize) -> String {
     pad(&truncate(s, width), width)
 }
 
-/// Last `max` columns of `s`, with a leading ellipsis when cut. Used by the filter and command
-/// boxes so the end of what is being typed stays visible. Never cuts inside a cluster.
-pub fn tail(s: &str, max: usize) -> String {
-    if sw(s) <= max {
-        return s.to_string();
-    }
-    if max == 0 {
-        return String::new();
-    }
-    let mut kept: Vec<&str> = Vec::new();
-    let mut used = 0;
-    for g in graphemes(s).rev() {
-        let w = cluster_width(g);
-        if used + w + 1 > max {
-            break;
-        }
-        kept.push(g);
-        used += w;
-    }
-    kept.reverse();
-    let mut out = String::from('\u{2026}');
-    out.extend(kept);
-    out
-}
-
 fn is_bidi_control(c: char) -> bool {
     matches!(c, '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
 }
@@ -388,12 +363,6 @@ mod tests {
     }
 
     #[test]
-    fn tail_keeps_the_end() {
-        assert_eq!(tail("abcdef", 4), "\u{2026}def");
-        assert_eq!(tail("abc", 4), "abc");
-    }
-
-    #[test]
     fn wrap_breaks_on_words_then_hard() {
         assert_eq!(wrap("one two three", 7), vec!["one two", "three"]);
         assert_eq!(wrap("abcdefghij", 4), vec!["abcd", "efgh", "ij"]);
@@ -466,7 +435,7 @@ mod tests {
         );
     }
 
-    /// No cluster is split by truncation, tail or wrapping, for any limit.
+    /// No cluster is split by truncation or wrapping, for any limit.
     #[test]
     fn cutting_never_splits_a_cluster() {
         let all: String = WIDTHS.iter().map(|w| w.1).collect::<Vec<_>>().join(" ");
@@ -479,9 +448,6 @@ mod tests {
                 assert!(sw(&t) <= max, "truncate width {t:?}");
                 let kept: Vec<&str> = graphemes(t.trim_end_matches('\u{2026}')).collect();
                 assert_eq!(kept, want[..kept.len()], "truncate {s:?} to {max}");
-                let tl = tail(s, max);
-                let kept: Vec<&str> = graphemes(tl.trim_start_matches('\u{2026}')).collect();
-                assert_eq!(kept, want[want.len() - kept.len()..], "tail {s:?} to {max}");
             }
             for width in 1..=14 {
                 // Without whitespace in the sample, wrapping only hard-splits: the clusters
@@ -506,11 +472,10 @@ mod tests {
     }
 
     #[test]
-    fn truncate_and_tail_of_emoji_stay_aligned() {
+    fn truncate_of_emoji_stays_aligned() {
         // A family emoji is 2 columns: 3 of them need 6, so 5 columns keep one plus the ellipsis.
         let fam = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
         assert_eq!(truncate(&fam.repeat(3), 5), format!("{fam}{fam}\u{2026}"));
-        assert_eq!(tail(&fam.repeat(3), 5), format!("\u{2026}{fam}{fam}"));
         assert_eq!(sw(&fit(&format!("{fam}{fam}{fam}"), 5)), 5);
     }
 

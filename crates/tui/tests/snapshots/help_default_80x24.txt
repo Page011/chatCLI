@@ -1,6 +1,6 @@
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ╔ Help ════════════════════════════════════════════════════════════════════════╗
-║default preset, no user bindings                                              ║
+║No user bindings                                                              ║
 ║Commands                                                                      ║
 ║/help          F1                keys and commands                            ║
 ║/settings      F2                theme, layout, keys and more                 ║
@@ -19,7 +19,7 @@
 ║Everywhere                                                                    ║
 ║Ctrl+C    Quit              quit chatcli                                      ║
 ║Tab       Next network      switch to the next network tab                    ║
-║lines 1-18 of 123                                                             ║
+║lines 1-18 of 119                                                             ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 Esc close  Up/Down scroll  PgUp/PgDn page
 --- styled runs (everything else is default style) ---
@@ -29,7 +29,7 @@ row 0 cols 27-34: fg=Reset bg=Reset BOLD
 row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
 row 0 cols 69-79: fg=Reset bg=Reset DIM
 row 1 cols 1-6: fg=Reset bg=Reset BOLD
-row 2 cols 1-32: fg=Reset bg=Reset DIM
+row 2 cols 1-16: fg=Reset bg=Reset DIM
 row 3 cols 1-8: fg=Reset bg=Reset BOLD
 row 4 cols 1-14: fg=Reset bg=Reset BOLD
 row 4 cols 32-50: fg=DarkGray bg=Reset NONE

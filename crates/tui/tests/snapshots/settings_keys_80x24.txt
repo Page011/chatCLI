@@ -1,11 +1,11 @@
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ┌ Settings ──────┐╔ Keys - Everywhere ═════════════════════════════════════════╗
-│Appearance      │║Jump to tab 1       Alt+1                                   ║
-│Layout          │║Jump to tab 2       Alt+2                                   ║
-│Notifications   │║Help                F1                                      ║
-│Media           │║Settings            F2                                      ║
-│Teams           │║Search              Ctrl+F                                  ║
-│WhatsApp        │║Toggle preset       -                                       ║
+│Appearance      │║Prev network        Shift+Tab                               ║
+│Layout          │║Jump to tab 1       Alt+1                                   ║
+│Notifications   │║Jump to tab 2       Alt+2                                   ║
+│Media           │║Help                F1                                      ║
+│Teams           │║Settings            F2                                      ║
+│WhatsApp        │║Search              Ctrl+F                                  ║
 │Keys            │║Sign-in panel                                               ║
 │About           │║Sign in             Enter                                   ║
 │                │║Command bar         /                                       ║

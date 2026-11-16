@@ -11,7 +11,7 @@ use chatcli_core::settings::{SettingEdit, Settings};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::{App, Out, Prompt};
-use crate::keymap::{Action, Context, KeyChord, Keymap, Preset, CTRL_C};
+use crate::keymap::{Action, Context, KeyChord, Keymap, CTRL_C};
 use crate::keys_edit::{self, Adding, Captured};
 use crate::settings_view::{self, Change, Kind, PageEdit, Row, RowId, Section, SettingsPage};
 
@@ -107,11 +107,7 @@ impl App {
         let backend =
             old.teams != new.teams || old.whatsapp != new.whatsapp || old.media != new.media;
         if old.keys != new.keys {
-            let named = (old.keys.preset != new.keys.preset)
-                .then(|| crate::keymap::Preset::from_name(&new.keys.preset))
-                .flatten();
-            let preset = named.unwrap_or(self.keys.preset());
-            self.keys = Keymap::build(preset, &new.keys).0;
+            self.keys = Keymap::build(&new.keys).0;
             self.pending = None;
         }
         self.apply_view(&new);
@@ -212,9 +208,8 @@ impl App {
             return Vec::new();
         };
         match row.id {
-            RowId::KeyPreset => return self.change_preset(c == Change::Reset),
             RowId::KeyAction(ctx, action) if c == Change::Reset => {
-                let done = keys_edit::reset_action(&self.keys, &self.settings.keys, ctx, action);
+                let done = keys_edit::reset_action(&self.settings.keys, ctx, action);
                 return self.key_result(done);
             }
             _ => {}
@@ -240,38 +235,6 @@ impl App {
         }
     }
 
-    /// The key preset row: Left/Right/Space/Enter switch to the other preset (from the one that
-    /// is live, which `--keys` may have set), `r` goes back to the default. Saved as
-    /// `[keys] preset`.
-    fn change_preset(&mut self, reset: bool) -> Out {
-        let target = if reset {
-            Preset::Default
-        } else {
-            self.keys.preset().other()
-        };
-        let c = if reset {
-            Change::Reset
-        } else {
-            Change::Text(target.name().to_string())
-        };
-        match settings_view::change(&self.settings, RowId::KeyPreset, c) {
-            Ok((new, edits)) => {
-                let out = self.commit_change(new, edits);
-                // The file may already name this preset while `--keys` held the other one.
-                if self.keys.preset() != target {
-                    self.keys = Keymap::build(target, &self.settings.keys).0;
-                    self.pending = None;
-                }
-                self.keep_row(RowId::KeyPreset);
-                out
-            }
-            Err(msg) => {
-                self.set_error(Some(msg));
-                Vec::new()
-            }
-        }
-    }
-
     /// A key edit from the keys page: applied at once and queued for the file, or the red line.
     fn key_result(&mut self, done: keys_edit::Done) -> Out {
         match done {
@@ -287,7 +250,7 @@ impl App {
         }
     }
 
-    /// The y of "Reset every key to the preset? y/n".
+    /// The y of "Reset every key to its default? y/n".
     pub(super) fn reset_all_keys(&mut self) -> Out {
         let done = keys_edit::reset_all(&self.settings.keys);
         self.key_result(done)
@@ -331,8 +294,7 @@ impl App {
                     })),
                     Adding::Free => {
                         self.set_edit(None);
-                        let done =
-                            keys_edit::add(&self.keys, &self.settings.keys, ctx, action, chord);
+                        let done = keys_edit::add(&self.settings.keys, ctx, action, chord);
                         return self.key_result(done);
                     }
                 }
@@ -342,7 +304,7 @@ impl App {
             }) => match code {
                 KeyCode::Enter => {
                     self.set_edit(None);
-                    let done = keys_edit::add(&self.keys, &self.settings.keys, ctx, action, key);
+                    let done = keys_edit::add(&self.settings.keys, ctx, action, key);
                     return self.key_result(done);
                 }
                 KeyCode::Esc => self.set_edit(None),
@@ -410,13 +372,7 @@ impl App {
             (KeyCode::Left | KeyCode::Char('h'), true) => self.set_edit(moved((index + n - 1) % n)),
             (KeyCode::Right | KeyCode::Char('l'), true) => self.set_edit(moved((index + 1) % n)),
             (KeyCode::Enter | KeyCode::Char('d'), true) => {
-                match keys_edit::remove_key(
-                    &self.keys,
-                    &self.settings.keys,
-                    ctx,
-                    action,
-                    keys[index],
-                ) {
+                match keys_edit::remove_key(&self.settings.keys, ctx, action, keys[index]) {
                     Ok(done) => {
                         self.set_edit(None);
                         return self.key_result(Ok(done));
@@ -751,7 +707,7 @@ mod tests {
             .entry("global".to_string())
             .or_default()
             .insert("enter".to_string(), "quit".to_string());
-        a.keys = Keymap::build(Preset::Default, &user).0;
+        a.keys = Keymap::build(&user).0;
         press(&mut a, KeyCode::Enter);
         assert!(!a.should_quit());
     }
@@ -977,15 +933,18 @@ mod tests {
     #[test]
     fn the_keys_page_lists_actions_by_context_with_their_keys() {
         let mut a = in_section(Section::Keys);
-        assert_eq!(row_id(&a), RowId::KeyPreset);
+        assert_eq!(row_id(&a), keys_row(Context::Global, Action::Quit));
         let rows = a.page_rows();
-        assert_eq!(value_of(&a, RowId::KeyPreset), "default");
+        assert_eq!(
+            rows[0].value, "* marks a key you changed",
+            "the legend comes first"
+        );
         assert!(rows.iter().any(|r| r.id == RowId::KeyHeading(Context::List)
             && r.label == "Chat list"
             && !r.selectable()));
         assert_eq!(value_of(&a, keys_row(Context::List, Action::Refresh)), "r");
         assert_eq!(
-            value_of(&a, keys_row(Context::Global, Action::TogglePreset)),
+            value_of(&a, keys_row(Context::List, Action::FilterStart)),
             "-",
             "an action with no key still has a row"
         );
@@ -1192,12 +1151,12 @@ mod tests {
         );
         assert!(a.take_setting_edits().is_empty());
         press(&mut a, KeyCode::Esc);
-        goto(&mut a, keys_row(Context::Global, Action::TogglePreset));
+        goto(&mut a, keys_row(Context::List, Action::FilterStart));
         press(&mut a, KeyCode::Char('d'));
         let p = a.settings_page().unwrap();
         assert_eq!(
             p.error.as_deref(),
-            Some("Toggle preset has no keys to delete")
+            Some("Filter start has no keys to delete")
         );
         assert!(p.edit.is_none());
     }
@@ -1214,7 +1173,7 @@ mod tests {
     }
 
     #[test]
-    fn r_resets_one_action_to_the_preset() {
+    fn r_resets_one_action_to_its_default() {
         let mut a = on_key_row(Context::List, Action::Refresh);
         press(&mut a, KeyCode::Enter);
         press(&mut a, KeyCode::F(5));
@@ -1341,7 +1300,6 @@ mod tests {
                 tz: chrono::FixedOffset::east_opt(0),
             },
             &s,
-            None,
         );
         a.open_settings(Section::Keys);
         press(&mut a, KeyCode::Enter);
@@ -1395,29 +1353,6 @@ mod tests {
     }
 
     #[test]
-    fn the_preset_row_switches_the_keys_and_saves_the_preset() {
-        use crate::keymap::{Mode, Preset};
-        let mut a = in_section(Section::Keys);
-        let out = press(&mut a, KeyCode::Right);
-        assert!(out.is_empty());
-        assert_eq!(a.keys.preset(), Preset::Vim);
-        assert_eq!(a.settings.keys.preset, "vim");
-        assert_eq!(a.take_setting_edits(), vec![kset("keys", "preset", "vim")]);
-        assert_eq!(row_id(&a), RowId::KeyPreset, "the cursor stays on the row");
-        assert_eq!(a.mode(), Some(Mode::Normal), "-- NORMAL -- shows");
-        assert!(a
-            .page_rows()
-            .iter()
-            .any(|r| r.id == RowId::KeyHeading(Context::Normal)));
-        press(&mut a, KeyCode::Char('r'));
-        assert_eq!(a.keys.preset(), Preset::Default);
-        assert_eq!(
-            a.take_setting_edits(),
-            vec![SettingEdit::remove("keys", "preset")]
-        );
-    }
-
-    #[test]
     fn a_key_edit_under_a_broken_file_still_applies_for_the_session() {
         let mut a = on_key_row(Context::List, Action::Refresh);
         press(&mut a, KeyCode::Enter);
@@ -1438,6 +1373,6 @@ mod tests {
         press(&mut a, KeyCode::Enter);
         assert_eq!(a.settings_page().unwrap().section, Section::Keys);
         press(&mut a, KeyCode::Enter);
-        assert_eq!(row_id(&a), RowId::KeyPreset);
+        assert_eq!(row_id(&a), keys_row(Context::Global, Action::Quit));
     }
 }

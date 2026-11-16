@@ -1,8 +1,7 @@
 //! Key bindings: what a key does (`Action`) is separate from which key it is (`KeyChord`).
 //!
-//! The keymap maps `(Context, KeyChord)` to an `Action`. Two built-in presets exist (`default`
-//! is today's keys, `vim` adds Normal and Insert modes) and `[keys]` in `settings.toml` layers
-//! user bindings over the active preset. `Keymap::build` validates the user's entries and
+//! The keymap maps `(Context, KeyChord)` to an `Action`. chatcli has one set of built-in keys,
+//! and `[keys]` in `settings.toml` layers the user's bindings over them. `Keymap::build` validates the user's entries and
 //! reports every problem; a bad binding is skipped and the rest still load.
 //!
 //! Typed characters, Backspace and the mouse are not actions: the app handles them itself in
@@ -15,53 +14,44 @@
 use chatcli_core::settings::{KeySettings, Settings, SettingsProblem, Severity};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-/// Where a key is read. `Normal` and `Insert` exist in the vim preset only, `List` and
-/// `Composer` in the default preset only; the rest are shared.
+/// Where a key is read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Context {
-    /// Fallback for every context except `Help`.
+    /// Fallback for every context except the modal ones.
     Global,
     /// The sign-in panel that replaces the chat view.
     Panel,
-    /// Chat list focus (default preset).
+    /// Chat list focus.
     List,
     /// The chat filter box.
     Filter,
-    /// The message box (default preset).
+    /// The message box.
     Composer,
-    /// Chat list focus (vim preset).
-    Normal,
-    /// The message box (vim preset).
-    Insert,
-    /// The help overlay. Modal: no `Global` fallback.
-    Help,
-    /// The `:` command box.
-    Command,
-    /// The emoji picker, the file path prompt (Ctrl+O) and the search box (Ctrl+F). (The `:shortcode` list above the
-    /// message box reads only the four
-    /// `popup_*` actions of this table, so every other key still edits the draft.)
+    /// Message selection: one message in the open chat is highlighted and keys act on it.
+    Select,
+    /// The emoji picker, the file path prompt (Ctrl+O), the search box (Ctrl+F) and the command
+    /// bar. (The `:shortcode` list above the message box reads only the four `popup_*` actions
+    /// of this table, so every other key still edits the draft.)
     Popup,
     /// The "Open <host>? y/n" line for a link, "Delete for everyone? y/n", or the y/n before a
     /// file is sent.
     Confirm,
-    /// Message selection: one message in the open chat is highlighted and keys act on it.
-    Select,
+    /// The help overlay. Modal: no `Global` fallback.
+    Help,
 }
 
 impl Context {
-    pub const ALL: [Context; 12] = [
+    /// Every context, in help and keys-page order.
+    pub const ALL: [Context; 9] = [
         Context::Global,
         Context::Panel,
         Context::List,
         Context::Filter,
         Context::Composer,
-        Context::Normal,
-        Context::Insert,
-        Context::Help,
-        Context::Command,
+        Context::Select,
         Context::Popup,
         Context::Confirm,
-        Context::Select,
+        Context::Help,
     ];
 
     /// The name used for the `[keys.<name>]` table.
@@ -72,13 +62,10 @@ impl Context {
             Context::List => "list",
             Context::Filter => "filter",
             Context::Composer => "composer",
-            Context::Normal => "normal",
-            Context::Insert => "insert",
-            Context::Help => "help",
-            Context::Command => "command",
+            Context::Select => "select",
             Context::Popup => "popup",
             Context::Confirm => "confirm",
-            Context::Select => "select",
+            Context::Help => "help",
         }
     }
 
@@ -94,13 +81,10 @@ impl Context {
             Context::List => "Chat list",
             Context::Filter => "Filter box",
             Context::Composer => "Message box",
-            Context::Normal => "Normal mode (chat list)",
-            Context::Insert => "Insert mode (message box)",
-            Context::Help => "This help",
-            Context::Command => "Command box",
+            Context::Select => "Message selection",
             Context::Popup => "Suggestions, pickers and search",
             Context::Confirm => "Confirm (link, delete, mark read)",
-            Context::Select => "Message selection",
+            Context::Help => "This help",
         }
     }
 
@@ -109,12 +93,7 @@ impl Context {
     pub fn types_text(self) -> bool {
         matches!(
             self,
-            Context::Global
-                | Context::Filter
-                | Context::Composer
-                | Context::Insert
-                | Context::Command
-                | Context::Popup
+            Context::Global | Context::Filter | Context::Composer | Context::Popup
         )
     }
 
@@ -124,72 +103,13 @@ impl Context {
     }
 }
 
-/// Vim modes. Derived from focus (Insert while the message box has focus, Select while a
-/// message is highlighted), so it cannot drift.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Mode {
-    Normal,
-    Insert,
-    Select,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Preset {
-    Default,
-    Vim,
-}
-
-impl Preset {
-    pub fn name(self) -> &'static str {
-        match self {
-            Preset::Default => "default",
-            Preset::Vim => "vim",
-        }
-    }
-
-    pub fn from_name(s: &str) -> Option<Preset> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "default" => Some(Preset::Default),
-            "vim" => Some(Preset::Vim),
-            _ => None,
-        }
-    }
-
-    pub fn other(self) -> Preset {
-        match self {
-            Preset::Default => Preset::Vim,
-            Preset::Vim => Preset::Default,
-        }
-    }
-
-    /// Contexts this preset uses, in help order.
-    pub(crate) fn contexts(self) -> [Context; 10] {
-        let (list, composer) = match self {
-            Preset::Default => (Context::List, Context::Composer),
-            Preset::Vim => (Context::Normal, Context::Insert),
-        };
-        [
-            Context::Global,
-            Context::Panel,
-            list,
-            Context::Filter,
-            composer,
-            Context::Select,
-            Context::Command,
-            Context::Popup,
-            Context::Confirm,
-            Context::Help,
-        ]
-    }
-}
-
 macro_rules! actions {
     ($($variant:ident $name:literal $doc:literal,)*) => {
         /// What a key does. `name()` is the stable snake_case name used in `settings.toml`.
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub enum Action {
             $(#[doc = $doc] $variant,)*
-            /// Pseudo-action for `settings.toml`: remove the preset's binding of this key.
+            /// Pseudo-action for `settings.toml`: remove the built-in binding of this key.
             /// Never stored in a keymap.
             Unbound,
         }
@@ -210,7 +130,7 @@ macro_rules! actions {
             pub fn doc(self) -> &'static str {
                 match self {
                     $(Action::$variant => $doc,)*
-                    Action::Unbound => "remove the preset's binding of this key",
+                    Action::Unbound => "remove the built-in binding of this key",
                 }
             }
         }
@@ -223,29 +143,23 @@ actions! {
     PrevNetwork "prev_network" "switch to the previous network tab",
     GotoNetwork1 "goto_network_1" "jump to the first network tab",
     GotoNetwork2 "goto_network_2" "jump to the second network tab",
-    TogglePreset "toggle_preset" "switch between the default and vim key presets (no default key: /keys vim)",
     Help "help" "show this help",
     CloseHelp "close_help" "close this help",
     ListUp "list_up" "previous chat (scrolls up in help)",
     ListDown "list_down" "next chat (scrolls down in help)",
     ListTop "list_top" "first chat",
     ListBottom "list_bottom" "last chat",
-    HalfPageUp "half_page_up" "half a page up the chat list",
-    HalfPageDown "half_page_down" "half a page down the chat list",
     ScrollUp "scroll_up" "page up: the chat list, or the messages from the message box",
     ScrollDown "scroll_down" "page down: the chat list, or the messages from the message box",
     OpenChat "open_chat" "open the selected chat and move to its message box",
-    EnterInsert "enter_insert" "open the selected chat and start typing (vim i, a, o)",
     SignIn "sign_in" "start sign-in (sign-in panel)",
     FilterStart "filter_start" "filter the chat list (no default key: / opens the command bar)",
-    FilterAccept "filter_accept" "keep the filter, or run the : command",
-    FilterCancel "filter_cancel" "clear the filter, or cancel the : command",
+    FilterAccept "filter_accept" "keep the filter, back to the chat list",
+    FilterCancel "filter_cancel" "clear the filter, back to the chat list",
     ClearFilter "clear_filter" "clear the chat filter",
     Refresh "refresh" "ask the network for a fresh chat list",
     Send "send" "send the message",
     LeaveComposer "leave_composer" "leave the message box, back to the chat list",
-    LeaveInsert "leave_insert" "leave Insert mode, back to Normal",
-    CommandBox "command_box" "open the : command box",
     CursorLeft "cursor_left" "move the cursor one character left (emoji picker: one cell left)",
     CursorRight "cursor_right" "move the cursor one character right (emoji picker: one cell right)",
     WordLeft "word_left" "move the cursor to the start of the word before it",
@@ -596,11 +510,11 @@ fn ambiguous(chord: &KeyChord) -> Option<&'static str> {
     }
 }
 
-// ---- built-in presets ----
+// ---- built-in keys ----
 
 type Row = (Context, &'static str, Action);
 
-/// Shared by both presets.
+/// Everywhere, the sign-in panel, the boxes and overlays, and message selection.
 const COMMON: &[Row] = &[
     (Context::Global, "ctrl+c", Action::Quit),
     (Context::Global, "tab", Action::NextNetwork),
@@ -618,8 +532,6 @@ const COMMON: &[Row] = &[
     (Context::Filter, "down", Action::ListDown),
     (Context::Filter, "enter", Action::FilterAccept),
     (Context::Filter, "esc", Action::FilterCancel),
-    (Context::Command, "enter", Action::FilterAccept),
-    (Context::Command, "esc", Action::FilterCancel),
     (Context::Help, "esc", Action::CloseHelp),
     (Context::Help, "f1", Action::CloseHelp),
     (Context::Help, "q", Action::CloseHelp),
@@ -642,7 +554,7 @@ const COMMON: &[Row] = &[
     (Context::Confirm, "y", Action::ConfirmYes),
     (Context::Confirm, "n", Action::ConfirmNo),
     (Context::Confirm, "esc", Action::ConfirmNo),
-    // Message selection (Ctrl+Up from the message box, `v` in vim Normal). The per-message keys
+    // Message selection (Ctrl+Up from the message box). The per-message keys
     // act on the highlighted message; ones that do not apply to it are dimmed in the footer.
     (Context::Select, "up", Action::SelectUp),
     (Context::Select, "k", Action::SelectUp),
@@ -665,7 +577,7 @@ const COMMON: &[Row] = &[
     (Context::Select, "/", Action::CommandBar),
 ];
 
-/// Message-box editing, bound in `composer` (default preset) and `insert` (vim preset).
+/// Message-box editing, bound in `composer`.
 const EDIT_KEYS: &[(&str, Action)] = &[
     ("left", Action::CursorLeft),
     ("right", Action::CursorRight),
@@ -694,8 +606,8 @@ const EDIT_KEYS: &[(&str, Action)] = &[
     ("ctrl+up", Action::SelectMessages),
 ];
 
-/// Today's keys.
-const DEFAULT_ONLY: &[Row] = &[
+/// The chat list and the message box.
+const CHATS: &[Row] = &[
     (Context::List, "up", Action::ListUp),
     (Context::List, "k", Action::ListUp),
     (Context::List, "down", Action::ListDown),
@@ -724,65 +636,17 @@ const DEFAULT_ONLY: &[Row] = &[
     (Context::Composer, "pgdn", Action::ScrollDown),
 ];
 
-const VIM_ONLY: &[Row] = &[
-    (Context::Normal, "k", Action::ListUp),
-    (Context::Normal, "up", Action::ListUp),
-    (Context::Normal, "j", Action::ListDown),
-    (Context::Normal, "down", Action::ListDown),
-    (Context::Normal, "G", Action::ListBottom),
-    (Context::Normal, "home", Action::ListTop),
-    (Context::Normal, "end", Action::ListBottom),
-    (Context::Normal, "ctrl+d", Action::HalfPageDown),
-    (Context::Normal, "ctrl+u", Action::HalfPageUp),
-    (Context::Normal, "i", Action::EnterInsert),
-    (Context::Normal, "a", Action::EnterInsert),
-    (Context::Normal, "o", Action::EnterInsert),
-    (Context::Normal, "enter", Action::OpenChat),
-    (Context::Normal, "/", Action::CommandBar),
-    (Context::Normal, "r", Action::Refresh),
-    (Context::Normal, "q", Action::Quit),
-    (Context::Normal, "esc", Action::ClearFilter),
-    (Context::Normal, ":", Action::CommandBox),
-    (Context::Normal, "pgup", Action::ScrollUp),
-    (Context::Normal, "pgdn", Action::ScrollDown),
-    (Context::Normal, "?", Action::Help),
-    (Context::Normal, "u", Action::OpenLink),
-    (Context::Normal, "v", Action::SelectMessages),
-    (Context::Normal, "n", Action::NextUnread),
-    (Context::Normal, "N", Action::PrevUnread),
-    (Context::Normal, "M", Action::MarkAllRead),
-    (Context::Normal, "p", Action::Pin),
-    (Context::Normal, "m", Action::Mute),
-    (Context::Normal, "x", Action::Hide),
-    (Context::Normal, "H", Action::ShowHidden),
-    (Context::Select, "ctrl+d", Action::SelectPageDown),
-    (Context::Select, "ctrl+u", Action::SelectPageUp),
-    (Context::Insert, "enter", Action::Send),
-    (Context::Insert, "esc", Action::LeaveInsert),
-    (Context::Insert, "pgup", Action::ScrollUp),
-    (Context::Insert, "pgdn", Action::ScrollDown),
-    (Context::Help, "k", Action::ListUp),
-    (Context::Help, "j", Action::ListDown),
-];
+/// Two-key sequences (`g g`), held until the second key; no timer. None are bound by default
+/// yet; `step` and the keys page already handle them.
+const SEQUENCES: &[(Context, &str, &str, Action)] = &[];
 
-/// Two-key sequences, vim preset only. Held until the second key; no timer.
-const VIM_SEQUENCES: &[(Context, &str, &str, Action)] = &[
-    (Context::Normal, "g", "g", Action::ListTop),
-    (Context::Normal, "g", "t", Action::NextNetwork),
-    (Context::Normal, "g", "T", Action::PrevNetwork),
-    (Context::Select, "g", "g", Action::SelectFirst),
-];
-
-fn rows(preset: Preset) -> Vec<Row> {
-    let (own, composer) = match preset {
-        Preset::Default => (DEFAULT_ONLY, Context::Composer),
-        Preset::Vim => (VIM_ONLY, Context::Insert),
-    };
+/// Every built-in single-key binding, in display order.
+fn rows() -> Vec<Row> {
     COMMON
         .iter()
-        .chain(own.iter())
+        .chain(CHATS.iter())
         .copied()
-        .chain(EDIT_KEYS.iter().map(|(k, a)| (composer, *k, *a)))
+        .chain(EDIT_KEYS.iter().map(|(k, a)| (Context::Composer, *k, *a)))
         .collect()
 }
 
@@ -791,37 +655,31 @@ fn builtin(key: &str) -> KeyChord {
 }
 
 /// Actions with no default key that can still be bound: the keys page lists them too.
-const EXTRA: &[(Context, Action)] = &[
-    (Context::Global, Action::TogglePreset),
-    (Context::List, Action::FilterStart),
-    (Context::Normal, Action::FilterStart),
-];
+const EXTRA: &[(Context, Action)] = &[(Context::List, Action::FilterStart)];
 
-/// The keys `preset` itself gives `action` in `ctx` (no user bindings).
-pub(crate) fn preset_keys(preset: Preset, ctx: Context, action: Action) -> Vec<KeyChord> {
-    rows(preset)
+/// The keys chatcli itself gives `action` in `ctx` (no user bindings).
+pub(crate) fn default_keys(ctx: Context, action: Action) -> Vec<KeyChord> {
+    rows()
         .into_iter()
         .filter(|r| r.0 == ctx && r.2 == action)
         .map(|r| builtin(r.1))
         .collect()
 }
 
-/// What the keys page lists for `ctx`: the preset's actions in order, then the bindable ones
+/// What the keys page lists for `ctx`: the built-in actions in order, then the bindable ones
 /// with no default key, then any the user's `[keys.<ctx>]` names. No action twice.
-pub(crate) fn actions_for(preset: Preset, ctx: Context, user: &KeySettings) -> Vec<Action> {
+pub(crate) fn actions_for(ctx: Context, user: &KeySettings) -> Vec<Action> {
     let mut out: Vec<Action> = Vec::new();
     let mut add = |a: Action| {
         if a != Action::Unbound && !out.contains(&a) {
             out.push(a);
         }
     };
-    for r in rows(preset).into_iter().filter(|r| r.0 == ctx) {
+    for r in rows().into_iter().filter(|r| r.0 == ctx) {
         add(r.2);
     }
-    if preset == Preset::Vim {
-        for s in VIM_SEQUENCES.iter().filter(|s| s.0 == ctx) {
-            add(s.3);
-        }
+    for s in SEQUENCES.iter().filter(|s| s.0 == ctx) {
+        add(s.3);
     }
     for (_, a) in EXTRA.iter().filter(|e| e.0 == ctx) {
         add(*a);
@@ -854,7 +712,6 @@ pub enum Step {
 
 #[derive(Debug, Clone)]
 pub struct Keymap {
-    preset: Preset,
     /// In display order: the first key an action has in a context is the one hints show.
     single: Vec<(Context, KeyChord, Action)>,
     seq: Vec<(Context, KeyChord, KeyChord, Action)>,
@@ -863,15 +720,11 @@ pub struct Keymap {
 
 impl Default for Keymap {
     fn default() -> Keymap {
-        Keymap::build(Preset::Default, &KeySettings::default()).0
+        Keymap::build(&KeySettings::default()).0
     }
 }
 
 impl Keymap {
-    pub fn preset(&self) -> Preset {
-        self.preset
-    }
-
     /// How many user bindings were applied (for the help header).
     pub fn user_bindings(&self) -> usize {
         self.user
@@ -908,7 +761,7 @@ impl Keymap {
             .collect()
     }
 
-    /// The two-key sequences `action` has in `ctx` (vim preset), as display text (`g t`).
+    /// The two-key sequences `action` has in `ctx`, as display text (`g t`).
     pub(crate) fn sequences_in(&self, ctx: Context, action: Action) -> Vec<String> {
         self.seq
             .iter()
@@ -994,11 +847,11 @@ impl Keymap {
         (!keys.is_empty()).then(|| keys.join("/"))
     }
 
-    /// Everything the active preset binds, grouped by context, for the help overlay:
+    /// Everything the keymap binds, grouped by context, for the help overlay:
     /// (context, [(action, keys)]). Sequences read as `g g`.
     pub fn help_sections(&self) -> Vec<HelpSection> {
         let mut out = Vec::new();
-        for ctx in self.preset.contexts() {
+        for ctx in Context::ALL {
             let mut entries: Vec<(Action, Vec<String>)> = Vec::new();
             let mut add = |a: Action, key: String| match entries.iter_mut().find(|e| e.0 == a) {
                 Some(e) => e.1.push(key),
@@ -1017,27 +870,22 @@ impl Keymap {
         out
     }
 
-    /// A keymap from a preset plus the user's `[keys]` tables, and every problem found.
+    /// The built-in keys plus the user's `[keys]` tables, and every problem found.
     /// Bad bindings are skipped; the rest still apply.
-    pub fn build(preset: Preset, user: &KeySettings) -> (Keymap, Vec<SettingsProblem>) {
+    pub fn build(user: &KeySettings) -> (Keymap, Vec<SettingsProblem>) {
         let mut map = Keymap {
-            preset,
-            single: rows(preset)
+            single: rows()
                 .into_iter()
                 .map(|r| (r.0, builtin(r.1), r.2))
                 .collect(),
-            seq: if preset == Preset::Vim {
-                VIM_SEQUENCES
-                    .iter()
-                    .map(|s| (s.0, builtin(s.1), builtin(s.2), s.3))
-                    .collect()
-            } else {
-                Vec::new()
-            },
+            seq: SEQUENCES
+                .iter()
+                .map(|s| (s.0, builtin(s.1), builtin(s.2), s.3))
+                .collect(),
             user: 0,
         };
         let mut problems = Vec::new();
-        // User bindings go before the preset's, so the hint shows the key the user chose.
+        // User bindings go before the built-in ones, so the hint shows the key the user chose.
         let mut insert_at = 0;
         for (ctx_name, table) in &user.bindings {
             let problem = |sev: Severity, key: Option<&str>, msg: String| SettingsProblem {
@@ -1105,7 +953,7 @@ impl Keymap {
                 seen.push((chord, key_str));
                 let Some(action) = Action::from_name(action_str) else {
                     let hint = closest(action_str, Action::ALL.iter().map(|a| a.name()))
-                        .map_or("see the action list in the README".to_string(), |a| {
+                        .map_or("see the action list in docs/guide.md".to_string(), |a| {
                             format!("did you mean \"{a}\"?")
                         });
                     problems.push(problem(
@@ -1140,15 +988,12 @@ impl Keymap {
                     map.seq.retain(|s| !(s.0 == ctx && s.1 == chord));
                     if map.single.len() == before
                         && map.seq.len() == had_seq
-                        && ![Preset::Default, Preset::Vim].into_iter().any(|p| {
-                            rows(p)
-                                .into_iter()
-                                .any(|r| r.0 == ctx && builtin(r.1) == chord)
-                                || (p == Preset::Vim
-                                    && VIM_SEQUENCES
-                                        .iter()
-                                        .any(|s| s.0 == ctx && builtin(s.1) == chord))
-                        })
+                        && !rows()
+                            .into_iter()
+                            .any(|r| r.0 == ctx && builtin(r.1) == chord)
+                        && !SEQUENCES
+                            .iter()
+                            .any(|s| s.0 == ctx && builtin(s.1) == chord)
                     {
                         problems.push(problem(
                             Severity::Warning,
@@ -1166,7 +1011,7 @@ impl Keymap {
                     problems.push(problem(
                         Severity::Warning,
                         key,
-                        "this key starts key sequences in the vim preset: your binding replaces them."
+                        "this key starts two-key sequences here: your binding replaces them."
                             .to_string(),
                     ));
                 }
@@ -1176,14 +1021,7 @@ impl Keymap {
                 map.user += 1;
             }
         }
-        for ctx in [
-            Context::Panel,
-            if preset == Preset::Vim {
-                Context::Normal
-            } else {
-                Context::List
-            },
-        ] {
+        for ctx in [Context::Panel, Context::List] {
             let quits = map
                 .single
                 .iter()
@@ -1204,25 +1042,10 @@ impl Keymap {
     }
 }
 
-/// Problems with the `[keys]` section: the preset name, then every binding. This is the TUI's
-/// half of `chatcli settings check` (core only checks structure).
+/// Problems with every binding in `[keys]`. This is the TUI's half of `chatcli settings check`
+/// (core only checks structure).
 pub fn validate_keys(settings: &Settings) -> Vec<SettingsProblem> {
-    let mut problems = Vec::new();
-    let preset = Preset::from_name(&settings.keys.preset).unwrap_or_else(|| {
-        problems.push(SettingsProblem {
-            severity: Severity::Error,
-            line: None,
-            section: "keys".to_string(),
-            key: Some("preset".to_string()),
-            message: format!(
-                "unknown preset \"{}\": use \"default\" or \"vim\". Using \"default\".",
-                settings.keys.preset
-            ),
-        });
-        Preset::Default
-    });
-    problems.extend(Keymap::build(preset, &settings.keys).1);
-    problems
+    Keymap::build(&settings.keys).1
 }
 
 /// The candidate closest to `word`, when it is close enough to be a typo.
@@ -1269,7 +1092,7 @@ mod tests {
 
     #[test]
     fn the_newline_hint_is_shift_enter_only_where_the_terminal_sends_it() {
-        let map = Keymap::build(Preset::Default, &KeySettings::default()).0;
+        let map = Keymap::default();
         let chords = map.chords_for(Context::Composer, Action::InsertNewline);
         assert_eq!(chords, vec![k("shift+enter"), k("ctrl+j"), k("alt+enter")]);
         assert_eq!(hint_key(&chords, true), Some(k("shift+enter")));
@@ -1305,7 +1128,7 @@ mod tests {
     }
 
     fn build(entries: &[(&str, &str, &str)]) -> (Keymap, Vec<SettingsProblem>) {
-        Keymap::build(Preset::Default, &user(entries))
+        Keymap::build(&user(entries))
     }
 
     fn texts(p: &[SettingsProblem]) -> Vec<String> {
@@ -1370,16 +1193,11 @@ mod tests {
 
     #[test]
     fn builtin_strings_parse_and_have_no_duplicates() {
-        for preset in [Preset::Default, Preset::Vim] {
-            let map = Keymap::build(preset, &KeySettings::default()).0;
-            let mut seen = Vec::new();
-            for (c, k, _) in &map.single {
-                assert!(
-                    !seen.contains(&(*c, *k)),
-                    "{preset:?} binds {c:?} {k:?} twice"
-                );
-                seen.push((*c, *k));
-            }
+        let map = Keymap::default();
+        let mut seen = Vec::new();
+        for (c, k, _) in &map.single {
+            assert!(!seen.contains(&(*c, *k)), "binds {c:?} {k:?} twice");
+            seen.push((*c, *k));
         }
         // Every action name round-trips, and no two share a name.
         for a in Action::ALL {
@@ -1484,71 +1302,47 @@ mod tests {
         }
     }
 
-    /// F2 gave up the preset switch to the settings screen: the preset action stays bindable
-    /// but has no default key, and `/` no longer starts the plain filter.
+    /// `/` opens the command bar, not the plain filter: the filter action stays bindable but has
+    /// no default key.
     #[test]
-    fn toggle_preset_and_filter_start_have_no_default_key() {
-        for preset in [Preset::Default, Preset::Vim] {
-            let map = Keymap::build(preset, &KeySettings::default()).0;
-            for a in [Action::TogglePreset, Action::FilterStart] {
-                assert!(
-                    !map.single.iter().any(|(_, _, x)| *x == a),
-                    "{preset:?} binds {a:?}"
-                );
-            }
-        }
+    fn filter_start_has_no_default_key() {
+        let map = Keymap::default();
+        assert!(!map.single.iter().any(|(_, _, x)| *x == Action::FilterStart));
     }
 
-    /// Typing must win in text contexts: `q` types in Filter, Composer, Insert and Command.
+    /// Typing must win in text contexts: `q` types in the filter and the message box.
     #[test]
     fn plain_letters_are_unbound_where_you_type() {
-        for preset in [Preset::Default, Preset::Vim] {
-            let map = Keymap::build(preset, &KeySettings::default()).0;
-            for ctx in [
-                Context::Filter,
-                Context::Composer,
-                Context::Insert,
-                Context::Command,
-            ] {
-                for c in ['q', 'j', 'k', 'r', '/', '?', ':', 'G', 'g', 'i'] {
-                    let key = ev(KeyCode::Char(c), KeyModifiers::NONE);
-                    assert_eq!(
-                        map.step(ctx, None, key),
-                        Step::Unbound,
-                        "{preset:?} {ctx:?} {c}"
-                    );
-                }
-                // Backspace is an action (delete_back) in the two message boxes, so a rebinding
-                // can move it; elsewhere it is still plain typing.
-                let boxes = matches!(
-                    (preset, ctx),
-                    (Preset::Default, Context::Composer) | (Preset::Vim, Context::Insert)
-                );
-                assert_eq!(
-                    map.step(ctx, None, ev(KeyCode::Backspace, KeyModifiers::NONE)),
-                    if boxes {
-                        Step::Action(Action::DeleteBack)
-                    } else {
-                        Step::Unbound
-                    }
-                );
+        let map = Keymap::default();
+        for ctx in [Context::Filter, Context::Composer] {
+            for c in ['q', 'j', 'k', 'r', '/', '?', ':', 'G', 'g', 'i'] {
+                let key = ev(KeyCode::Char(c), KeyModifiers::NONE);
+                assert_eq!(map.step(ctx, None, key), Step::Unbound, "{ctx:?} {c}");
             }
+            // Backspace is an action (delete_back) in the message box, so a rebinding can move
+            // it; in the filter it is still plain typing.
+            assert_eq!(
+                map.step(ctx, None, ev(KeyCode::Backspace, KeyModifiers::NONE)),
+                if ctx == Context::Composer {
+                    Step::Action(Action::DeleteBack)
+                } else {
+                    Step::Unbound
+                }
+            );
         }
     }
 
     #[test]
     fn ctrl_c_quits_from_every_context_and_pending_state() {
         let ctrl_c = ev(KeyCode::Char('c'), KeyModifiers::CONTROL);
-        for preset in [Preset::Default, Preset::Vim] {
-            let map = Keymap::build(preset, &KeySettings::default()).0;
-            for ctx in Context::ALL {
-                assert_eq!(map.lookup(ctx, ctrl_c), Some(Action::Quit), "{ctx:?}");
-                assert_eq!(map.step(ctx, None, ctrl_c), Step::Action(Action::Quit));
-                assert_eq!(
-                    map.step(ctx, Some(k("g")), ctrl_c),
-                    Step::Action(Action::Quit)
-                );
-            }
+        let map = Keymap::default();
+        for ctx in Context::ALL {
+            assert_eq!(map.lookup(ctx, ctrl_c), Some(Action::Quit), "{ctx:?}");
+            assert_eq!(map.step(ctx, None, ctrl_c), Step::Action(Action::Quit));
+            assert_eq!(
+                map.step(ctx, Some(k("g")), ctrl_c),
+                Step::Action(Action::Quit)
+            );
         }
     }
 
@@ -1558,15 +1352,13 @@ mod tests {
     fn caps_lock_does_not_break_ctrl_shortcuts() {
         let caps = KeyEvent::new(KeyCode::Char('C'), KeyModifiers::CONTROL);
         assert_eq!(KeyChord::from_event(&caps), CTRL_C);
-        for preset in [Preset::Default, Preset::Vim] {
-            let map = Keymap::build(preset, &KeySettings::default()).0;
-            for ctx in Context::ALL {
-                assert_eq!(
-                    map.step(ctx, None, KeyChord::from_event(&caps)),
-                    Step::Action(Action::Quit),
-                    "{ctx:?}"
-                );
-            }
+        let map = Keymap::default();
+        for ctx in Context::ALL {
+            assert_eq!(
+                map.step(ctx, None, KeyChord::from_event(&caps)),
+                Step::Action(Action::Quit),
+                "{ctx:?}"
+            );
         }
         let real = ev(
             KeyCode::Char('C'),
@@ -1604,45 +1396,9 @@ mod tests {
     /// Alt+Enter is Windows Terminal's fullscreen key.
     #[test]
     fn the_newline_hint_is_a_key_every_terminal_delivers() {
-        for (preset, ctx) in [
-            (Preset::Default, Context::Composer),
-            (Preset::Vim, Context::Insert),
-        ] {
-            let map = Keymap::build(preset, &KeySettings::default()).0;
-            let chords = map.chords_for(ctx, Action::InsertNewline);
-            assert_eq!(hint_key(&chords, false), Some(k("ctrl+j")));
-        }
-    }
-
-    /// The vim preset's Insert mode has the same editing keys as the default message box, and
-    /// `u` opens links from Normal mode.
-    #[test]
-    fn vim_insert_has_the_editing_keys() {
-        let map = Keymap::build(Preset::Vim, &KeySettings::default()).0;
-        for (key, want) in [
-            ("left", Action::CursorLeft),
-            ("ctrl+w", Action::DeleteWordBack),
-            ("backspace", Action::DeleteBack),
-            ("alt+enter", Action::InsertNewline),
-            ("ctrl+e", Action::EmojiPicker),
-            ("ctrl+o", Action::Attach),
-            ("alt+v", Action::PasteImage),
-        ] {
-            assert_eq!(map.lookup(Context::Insert, k(key)), Some(want), "{key}");
-        }
-        assert_eq!(map.lookup(Context::Normal, k("u")), Some(Action::OpenLink));
-        // In Select the same letters mean something else than in Normal mode: `o` opens the
-        // attachment (Normal: insert), `v` shows it (Normal: start selecting).
-        assert_eq!(map.lookup(Context::Select, k("o")), Some(Action::OpenMedia));
-        assert_eq!(map.lookup(Context::Select, k("v")), Some(Action::ViewImage));
-        assert_eq!(
-            map.lookup(Context::Normal, k("o")),
-            Some(Action::EnterInsert)
-        );
-        assert_eq!(
-            map.lookup(Context::Normal, k("v")),
-            Some(Action::SelectMessages)
-        );
+        let map = Keymap::default();
+        let chords = map.chords_for(Context::Composer, Action::InsertNewline);
+        assert_eq!(hint_key(&chords, false), Some(k("ctrl+j")));
     }
 
     /// The picker is modal: no `Global` key leaks into it, and a user cannot bind a plain letter
@@ -1751,7 +1507,7 @@ mod tests {
             vec!["settings.toml line 1: [keys.list] ctrl+n: unknown action \"lst_down\": did you mean \"list_down\"? Skipping this binding."]
         );
         let (_, p) = build(&[("list", "ctrl+n", "xyzzy-nothing-like-it")]);
-        assert!(p[0].message.contains("README"), "{p:?}");
+        assert!(p[0].message.contains("docs/guide.md"), "{p:?}");
     }
 
     #[test]
@@ -1788,9 +1544,9 @@ mod tests {
         for (ctx, key) in [
             ("filter", "x"),
             ("composer", "G"),
-            ("insert", "space"),
+            ("composer", "space"),
             ("filter", "backspace"),
-            ("command", "a"),
+            ("popup", "a"),
             ("global", "x"),
         ] {
             let (map, problems) = build(&[(ctx, key, "refresh")]);
@@ -1875,111 +1631,20 @@ mod tests {
     }
 
     #[test]
-    fn validate_keys_checks_the_preset_name() {
+    fn validate_keys_reports_the_bindings_problems() {
         let mut s = Settings::default();
         assert!(validate_keys(&s).is_empty());
-        s.keys.preset = "emacs".into();
+        s.keys = user(&[("list", "ctrl+n", "lst_down")]);
         let p = validate_keys(&s);
         assert_eq!(p.len(), 1);
         assert_eq!(p[0].severity, Severity::Error);
-        assert_eq!(p[0].key.as_deref(), Some("preset"));
-        s.keys.preset = "VIM".into();
-        assert!(validate_keys(&s).is_empty(), "case does not matter");
-    }
-
-    // ---- sequences ----
-
-    fn vim() -> Keymap {
-        Keymap::build(Preset::Vim, &KeySettings::default()).0
+        // The vim tables are gone with the vim preset.
+        s.keys = user(&[("normal", "x", "refresh")]);
+        assert!(validate_keys(&s)[0].message.starts_with("unknown table"));
     }
 
     #[test]
-    fn g_waits_then_completes_or_cancels() {
-        let map = vim();
-        let n = Context::Normal;
-        assert_eq!(map.step(n, None, k("g")), Step::Pending);
-        assert_eq!(
-            map.step(n, Some(k("g")), k("g")),
-            Step::Action(Action::ListTop)
-        );
-        assert_eq!(
-            map.step(n, Some(k("g")), k("t")),
-            Step::Action(Action::NextNetwork)
-        );
-        assert_eq!(
-            map.step(n, Some(k("g")), k("T")),
-            Step::Action(Action::PrevNetwork)
-        );
-        // Any other key cancels, and that key does nothing (j would have moved down).
-        assert_eq!(map.step(n, Some(k("g")), k("j")), Step::Cancel);
-        assert_eq!(map.step(n, Some(k("g")), k("esc")), Step::Cancel);
-        assert_eq!(map.step(n, Some(k("g")), k("tab")), Step::Cancel);
-        // Without a held key, j is a normal command again.
-        assert_eq!(map.step(n, None, k("j")), Step::Action(Action::ListDown));
-    }
-
-    #[test]
-    fn sequences_exist_in_the_vim_preset_only_and_only_in_normal() {
-        assert_eq!(
-            Keymap::default().step(Context::List, None, k("g")),
-            Step::Unbound
-        );
-        let map = vim();
-        for ctx in [Context::Insert, Context::Filter, Context::Command] {
-            assert_eq!(map.step(ctx, None, k("g")), Step::Unbound, "{ctx:?}");
-        }
-    }
-
-    #[test]
-    fn a_user_binding_on_g_replaces_the_sequences_with_a_warning() {
-        let (map, problems) = Keymap::build(Preset::Vim, &user(&[("normal", "g", "refresh")]));
-        assert_eq!(
-            map.step(Context::Normal, None, k("g")),
-            Step::Action(Action::Refresh)
-        );
-        assert_eq!(problems.len(), 1, "{problems:?}");
-        assert_eq!(problems[0].severity, Severity::Warning);
-    }
-
-    #[test]
-    fn vim_mode_keys() {
-        let map = vim();
-        let n = Context::Normal;
-        for (key, want) in [
-            ("j", Action::ListDown),
-            ("k", Action::ListUp),
-            ("G", Action::ListBottom),
-            ("ctrl+d", Action::HalfPageDown),
-            ("ctrl+u", Action::HalfPageUp),
-            ("i", Action::EnterInsert),
-            ("a", Action::EnterInsert),
-            ("o", Action::EnterInsert),
-            ("/", Action::CommandBar),
-            ("r", Action::Refresh),
-            ("q", Action::Quit),
-            ("esc", Action::ClearFilter),
-            (":", Action::CommandBox),
-            ("?", Action::Help),
-            ("tab", Action::NextNetwork),
-            ("alt+1", Action::GotoNetwork1),
-            ("f2", Action::Settings),
-            ("f1", Action::Help),
-        ] {
-            assert_eq!(map.lookup(n, k(key)), Some(want), "normal {key}");
-        }
-        assert_eq!(map.lookup(Context::Insert, k("enter")), Some(Action::Send));
-        assert_eq!(
-            map.lookup(Context::Insert, k("esc")),
-            Some(Action::LeaveInsert)
-        );
-        // Normal commands do not exist in Insert.
-        for key in ["j", "q", "i", "r", "ctrl+d"] {
-            assert_eq!(map.lookup(Context::Insert, k(key)), None, "insert {key}");
-        }
-    }
-
-    #[test]
-    fn help_is_modal_and_lists_the_active_preset() {
+    fn help_is_modal_and_lists_every_context() {
         let map = Keymap::default();
         // Tab would switch network under the overlay if Global leaked through.
         assert_eq!(map.lookup(Context::Help, k("tab")), None);
@@ -1995,13 +1660,12 @@ mod tests {
                 Context::Filter,
                 Context::Composer,
                 Context::Select,
-                Context::Command,
                 Context::Popup,
                 Context::Confirm,
                 Context::Help
             ]
         );
-        // Every action of the preset's tables is listed.
+        // Every built-in action is listed.
         let listed: Vec<Action> = sections
             .iter()
             .flat_map(|s| s.1.iter().map(|e| e.0))
@@ -2009,13 +1673,6 @@ mod tests {
         for (_, _, a) in &map.single {
             assert!(listed.contains(a), "{a:?} missing from help");
         }
-        let vsections = vim().help_sections();
-        assert!(vsections.iter().any(|s| s.0 == Context::Normal));
-        assert!(!vsections.iter().any(|s| s.0 == Context::List));
-        // Sequences read as two keys.
-        let normal = vsections.iter().find(|s| s.0 == Context::Normal).unwrap();
-        let top = normal.1.iter().find(|e| e.0 == Action::ListTop).unwrap();
-        assert!(top.1.contains(&"g g".to_string()), "{top:?}");
     }
 
     #[test]
@@ -2045,57 +1702,40 @@ mod tests {
         );
     }
 
-    /// Message selection keys: Ctrl+Up from the message box (both presets), `v` in vim Normal,
-    /// the per-message keys in the shared `select` table, `gg` only in vim.
+    /// Message selection keys: Ctrl+Up from the message box, and the per-message keys in the
+    /// `select` table.
     #[test]
     fn selection_keys() {
         use Action::*;
         let def = Keymap::default();
-        let vim = Keymap::build(Preset::Vim, &KeySettings::default()).0;
         assert_eq!(
             def.lookup(Context::Composer, k("ctrl+up")),
             Some(SelectMessages)
         );
-        assert_eq!(
-            vim.lookup(Context::Insert, k("ctrl+up")),
-            Some(SelectMessages)
-        );
-        assert_eq!(vim.lookup(Context::Normal, k("v")), Some(SelectMessages));
         assert_eq!(def.lookup(Context::List, k("v")), None);
-        for map in [&def, &vim] {
-            for (key, want) in [
-                ("up", SelectUp),
-                ("k", SelectUp),
-                ("down", SelectDown),
-                ("j", SelectDown),
-                ("pgup", SelectPageUp),
-                ("pgdn", SelectPageDown),
-                ("home", SelectFirst),
-                ("end", SelectLast),
-                ("G", SelectLast),
-                ("esc", LeaveSelect),
-                ("r", Reply),
-                ("e", React),
-                ("E", Edit),
-                ("d", Delete),
-                ("u", OpenLink),
-                ("?", Help),
-            ] {
-                assert_eq!(map.lookup(Context::Select, k(key)), Some(want), "{key}");
-            }
-            // Tab and Ctrl+C still work while selecting (Global fallback); help is modal.
-            assert_eq!(map.lookup(Context::Select, k("tab")), Some(NextNetwork));
+        for (key, want) in [
+            ("up", SelectUp),
+            ("k", SelectUp),
+            ("down", SelectDown),
+            ("j", SelectDown),
+            ("pgup", SelectPageUp),
+            ("pgdn", SelectPageDown),
+            ("home", SelectFirst),
+            ("end", SelectLast),
+            ("G", SelectLast),
+            ("esc", LeaveSelect),
+            ("r", Reply),
+            ("e", React),
+            ("E", Edit),
+            ("d", Delete),
+            ("u", OpenLink),
+            ("?", Help),
+        ] {
+            assert_eq!(def.lookup(Context::Select, k(key)), Some(want), "{key}");
         }
-        assert_eq!(vim.step(Context::Select, None, k("g")), Step::Pending);
-        assert_eq!(
-            vim.step(Context::Select, Some(k("g")), k("g")),
-            Step::Action(SelectFirst)
-        );
+        // Tab and Ctrl+C still work while selecting (Global fallback); help is modal.
+        assert_eq!(def.lookup(Context::Select, k("tab")), Some(NextNetwork));
         assert_eq!(def.step(Context::Select, None, k("g")), Step::Unbound);
-        assert_eq!(
-            vim.lookup(Context::Select, k("ctrl+d")),
-            Some(SelectPageDown)
-        );
         // `cancel_reply` has no default key: Esc cancels through leave_composer.
         assert!(def.keys_for(Context::Composer, CancelReply).is_empty());
     }

@@ -259,18 +259,6 @@ pub(crate) const STEPS: &[Step] = &[
         ],
     },
     Step {
-        caption: "The vim preset adds Normal and Insert modes.",
-        acts: &[
-            Act::Cmd("keys"),
-            Act::Row(RowId::KeyPreset),
-            RIGHT,
-            Act::Wait(2000),
-            LEFT,
-            Act::Wait(800),
-            ESC,
-        ],
-    },
-    Step {
         caption: "? opens help: commands first, then every key.",
         acts: &[
             Act::ToList,
@@ -428,9 +416,9 @@ mod tests {
             assert!(!s.caption.is_empty(), "step {} has no caption", i + 1);
         }
         let t = Tour::new(0);
-        assert!("TOUR 1/26 - ".len() < 40);
-        assert!(t.bar_text().starts_with("TOUR 1/26 - Welcome"));
-        assert_eq!(STEPS.len(), 26);
+        assert!("TOUR 1/25 - ".len() < 40);
+        assert!(t.bar_text().starts_with("TOUR 1/25 - Welcome"));
+        assert_eq!(STEPS.len(), 25);
     }
 
     #[test]

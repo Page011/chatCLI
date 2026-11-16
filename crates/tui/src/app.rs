@@ -33,7 +33,7 @@ use crate::commands::{self, slash_query, CmdId, Typed, COMMANDS_TITLE};
 use crate::composer::Composer;
 use crate::emoji::{self, Picker, PickerFor};
 use crate::input::TextInput;
-use crate::keymap::{typed_char, Action, Context, KeyChord, Keymap, Mode, Preset, Step};
+use crate::keymap::{typed_char, Action, Context, KeyChord, Keymap, Step};
 use crate::links;
 use crate::media_view::MediaState;
 use crate::notify::Fold;
@@ -289,8 +289,6 @@ pub struct App {
     pending: Option<(Context, KeyChord)>,
     /// Help overlay: `Some(first visible line)` while open.
     help: Option<usize>,
-    /// The `:` command box: `Some(text)` while open.
-    command: Option<String>,
     /// The `:shortcode` suggestions above the message box.
     popup: Option<Popup>,
     /// Set by anything that edits or moves in the message box during one key press: the popup
@@ -357,7 +355,7 @@ pub(crate) enum Prompt {
     MarkAllRead { count: usize },
     /// `Sign out of Teams? y/n` (the `/signout` command).
     SignOut(Network),
-    /// `Reset every key to the preset? y/n` (the keys page).
+    /// `Reset every key to its default? y/n` (the keys page).
     ResetKeys,
     /// Before a file goes out: an executable type (any network) and a Teams document (it goes
     /// to the sender's OneDrive and the chat may not have access).
@@ -456,10 +454,10 @@ fn upsert_message(list: &mut Vec<ChatMessage>, m: ChatMessage) {
 impl App {
     /// Default settings: today's keys.
     pub fn new(clock: Clock) -> App {
-        App::with_keys(clock, KeySettings::default(), Preset::Default)
+        App::with_keys(clock, KeySettings::default())
     }
 
-    fn with_keys(clock: Clock, user_keys: KeySettings, preset: Preset) -> App {
+    fn with_keys(clock: Clock, user_keys: KeySettings) -> App {
         let settings = Settings {
             keys: user_keys,
             ..Settings::default()
@@ -475,11 +473,10 @@ impl App {
             clock,
             next_client: 0,
             quit: false,
-            keys: Keymap::build(preset, &settings.keys).0,
+            keys: Keymap::build(&settings.keys).0,
             settings,
             pending: None,
             help: None,
-            command: None,
             popup: None,
             popup_alive: false,
             picker: None,
@@ -517,14 +514,9 @@ impl App {
         }
     }
 
-    /// App for `settings` with the key preset from `--keys` (wins) or `[keys] preset`. An
-    /// unknown preset name falls back to `default`; `validate_settings` reports it.
-    pub fn with_settings(clock: Clock, settings: &Settings, keys_preset: Option<&str>) -> App {
-        let preset = keys_preset
-            .and_then(Preset::from_name)
-            .or_else(|| Preset::from_name(&settings.keys.preset))
-            .unwrap_or(Preset::Default);
-        let mut app = App::with_keys(clock, settings.keys.clone(), preset);
+    /// App for `settings`, its `[keys]` bindings over the built-in keys.
+    pub fn with_settings(clock: Clock, settings: &Settings) -> App {
+        let mut app = App::with_keys(clock, settings.keys.clone());
         app.settings = settings.clone();
         app.apply_view(settings);
         app
@@ -561,17 +553,7 @@ impl App {
                     is_error: p.severity == Severity::Error,
                 }),
         );
-        if let Some(name) = ctx.keys_preset.as_deref() {
-            if Preset::from_name(name).is_none() {
-                lines.push(StartupNotice {
-                    text: format!(
-                        "--keys {name}: use default or vim. Using the settings.toml preset."
-                    ),
-                    is_error: true,
-                });
-            }
-        }
-        let mut app = App::with_settings(clock, &ctx.settings, ctx.keys_preset.as_deref());
+        let mut app = App::with_settings(clock, &ctx.settings);
         app.demo = ctx.demo;
         // NO_COLOR (any non-empty value) removes every colour.
         if std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()) {
@@ -618,11 +600,6 @@ impl App {
         self.help
     }
 
-    /// The `:` box text while it is open.
-    pub(crate) fn command_text(&self) -> Option<&str> {
-        self.command.as_deref()
-    }
-
     /// The `:shortcode` suggestions while they are open.
     pub(crate) fn popup(&self) -> Option<&Popup> {
         self.popup.as_ref()
@@ -649,7 +626,6 @@ impl App {
     /// True while something covers the message box, so it must not draw the terminal cursor.
     pub(crate) fn overlay_open(&self) -> bool {
         self.help.is_some()
-            || self.command.is_some()
             || self.picker.is_some()
             || self.prompt.is_some()
             || self.media.attach.is_some()
@@ -661,21 +637,6 @@ impl App {
     /// The held first key of a sequence, as text for the footer.
     pub(crate) fn pending_text(&self) -> Option<String> {
         self.pending.map(|(_, k)| k.display())
-    }
-
-    /// Vim mode, `None` with the default preset. Derived from focus, so it cannot get out of
-    /// step: Insert while the message box has focus, Normal otherwise.
-    pub(crate) fn mode(&self) -> Option<Mode> {
-        if self.keys.preset() != Preset::Vim {
-            return None;
-        }
-        let ns = self.active();
-        Some(match ns.focus {
-            _ if ns.panel() => Mode::Normal,
-            Focus::Composer => Mode::Insert,
-            Focus::Select => Mode::Select,
-            Focus::List | Focus::Filter => Mode::Normal,
-        })
     }
 
     /// Which key table applies right now.
@@ -694,21 +655,15 @@ impl App {
         {
             return Context::Popup;
         }
-        if self.command.is_some() {
-            return Context::Command;
-        }
         let ns = self.active();
         if ns.panel() {
             return Context::Panel;
         }
-        let vim = self.keys.preset() == Preset::Vim;
-        match (ns.focus, vim) {
-            (Focus::List, false) => Context::List,
-            (Focus::List, true) => Context::Normal,
-            (Focus::Filter, _) => Context::Filter,
-            (Focus::Composer, false) => Context::Composer,
-            (Focus::Composer, true) => Context::Insert,
-            (Focus::Select, _) => Context::Select,
+        match ns.focus {
+            Focus::List => Context::List,
+            Focus::Filter => Context::Filter,
+            Focus::Composer => Context::Composer,
+            Focus::Select => Context::Select,
         }
     }
 
@@ -1223,11 +1178,7 @@ impl App {
     fn takes_text(&self) -> bool {
         matches!(
             self.context(),
-            Context::Composer
-                | Context::Insert
-                | Context::Filter
-                | Context::Popup
-                | Context::Command
+            Context::Composer | Context::Filter | Context::Popup
         )
     }
 
@@ -1300,7 +1251,7 @@ impl App {
             return Vec::new();
         }
         // The `:shortcode` list owns four keys; every other key goes on to the message box.
-        if self.popup.is_some() && matches!(ctx, Context::Composer | Context::Insert) {
+        if self.popup.is_some() && ctx == Context::Composer {
             let own = self.keys.lookup_in(Context::Popup, chord).filter(|a| {
                 matches!(
                     a,
@@ -1345,7 +1296,7 @@ impl App {
                 self.ns_mut(n).filter.insert_char(c);
                 self.fix_selection(n, true);
             }
-            (Context::Composer | Context::Insert, _, Some(c)) => {
+            (Context::Composer, _, Some(c)) => {
                 if let Some(d) = self.ns_mut(n).composer_mut() {
                     d.insert_char(c);
                 }
@@ -1365,16 +1316,6 @@ impl App {
                     p.query.insert_char(c);
                     p.sel = 0;
                     p.top = 0;
-                }
-            }
-            (Context::Command, KeyCode::Backspace, _) => {
-                if let Some(c) = self.command.as_mut() {
-                    c.pop();
-                }
-            }
-            (Context::Command, _, Some(ch)) => {
-                if let Some(c) = self.command.as_mut() {
-                    c.push(ch);
                 }
             }
             _ => {}
@@ -1398,7 +1339,6 @@ impl App {
                     self.set_active(net);
                 }
             }
-            Action::TogglePreset => self.set_preset(self.keys.preset().other()),
             Action::CommandBar => self.open_palette(),
             Action::Settings => return self.run_cmd(CmdId::Settings, None),
             Action::Help => self.help = Some(0),
@@ -1464,20 +1404,17 @@ impl App {
             | Action::DeleteWordBack
             | Action::ClearLine
             | Action::InsertNewline
-                if matches!(ctx, Context::Composer | Context::Insert) =>
+                if ctx == Context::Composer =>
             {
                 self.edit(n, action);
             }
-            Action::EmojiPicker
-                if matches!(ctx, Context::Composer | Context::Insert)
-                    && self.ns(n).open.is_some() =>
-            {
+            Action::EmojiPicker if ctx == Context::Composer && self.ns(n).open.is_some() => {
                 self.picker = Some(Picker::new(PickerFor::Compose, !self.recents.is_empty()));
             }
-            Action::Attach if matches!(ctx, Context::Composer | Context::Insert) => {
+            Action::Attach if ctx == Context::Composer => {
                 self.start_attach(n);
             }
-            Action::PasteImage if matches!(ctx, Context::Composer | Context::Insert) => {
+            Action::PasteImage if ctx == Context::Composer => {
                 self.request_clipboard(n);
             }
             Action::OpenMedia if ctx == Context::Select => return self.open_media(n),
@@ -1553,8 +1490,6 @@ impl App {
             Action::ListDown if !panel => self.move_sel(n, 1),
             Action::ListTop if !panel => self.move_sel(n, isize::MIN),
             Action::ListBottom if !panel => self.move_sel(n, isize::MAX),
-            Action::HalfPageUp if !panel => self.move_sel(n, -(rows / 2).max(1)),
-            Action::HalfPageDown if !panel => self.move_sel(n, (rows / 2).max(1)),
             // In the message box a page key scrolls the messages; in the list it pages chats.
             Action::ScrollUp | Action::ScrollDown if !panel => {
                 let dir = if action == Action::ScrollUp { 1 } else { -1 };
@@ -1569,21 +1504,18 @@ impl App {
                     self.move_sel(n, -dir * rows);
                 }
             }
-            Action::OpenChat | Action::EnterInsert if !panel => return self.open_selected(n),
+            Action::OpenChat if !panel => return self.open_selected(n),
             Action::SignIn if matches!(self.ns(n).status, Status::NeedsLogin { .. }) => {
                 return vec![(n, Command::Login)];
             }
             Action::FilterStart if !panel => self.ns_mut(n).focus = Focus::Filter,
             Action::FilterAccept => {
-                if self.command.is_some() {
-                    return self.run_command();
-                }
                 if focus == Focus::Filter {
                     self.ns_mut(n).focus = Focus::List;
                 }
             }
             Action::FilterCancel => {
-                if self.command.take().is_none() && focus == Focus::Filter {
+                if focus == Focus::Filter {
                     let ns = self.ns_mut(n);
                     ns.filter.clear();
                     ns.focus = Focus::List;
@@ -1599,24 +1531,23 @@ impl App {
             Action::Refresh if !panel => return self.refresh(n),
             Action::Send if focus == Focus::Composer && !panel => return self.send_and_pause(n),
             // A reply or edit in progress goes first; the next Esc leaves the box.
-            Action::LeaveComposer | Action::LeaveInsert
+            Action::LeaveComposer
                 if focus == Focus::Composer && !panel && self.ns(n).target().is_some() =>
             {
                 self.cancel_target(n);
             }
             // Then a chosen file: Esc takes the chip off before it leaves the box.
-            Action::LeaveComposer | Action::LeaveInsert
+            Action::LeaveComposer
                 if focus == Focus::Composer && !panel && self.ns(n).attachment().is_some() =>
             {
                 self.drop_attachment(n);
             }
-            Action::LeaveComposer | Action::LeaveInsert if focus == Focus::Composer && !panel => {
+            Action::LeaveComposer if focus == Focus::Composer && !panel => {
                 let ns = self.ns_mut(n);
                 ns.focus = Focus::List;
                 // Leaving the chat: the next Enter on it asks the backend again.
                 ns.requested = None;
             }
-            Action::CommandBox => self.command = Some(String::new()),
             // Bound where it does not apply, or the `unbound` pseudo-action (never stored).
             _ => {}
         }
@@ -1901,7 +1832,7 @@ impl App {
         };
     }
 
-    /// Enter on the selected chat (or vim i, a, o): show it, ask the backend, focus the box.
+    /// Enter on the selected chat: show it, ask the backend, focus the box.
     fn open_selected(&mut self, n: Network) -> Out {
         let ns = self.ns(n);
         let vis = ns.visible();
@@ -1916,30 +1847,6 @@ impl App {
     fn refresh(&mut self, n: Network) -> Out {
         self.ns_mut(n).requested = None;
         vec![(n, Command::Refresh)]
-    }
-
-    /// Switches the key preset for the session, keeping the user's `[keys]` bindings.
-    fn set_preset(&mut self, preset: Preset) {
-        self.keys = Keymap::build(preset, &self.settings.keys).0;
-        self.pending = None;
-        self.push_global_notice(&format!("Key preset: {}", preset.name()), false);
-    }
-
-    /// Runs the `:` box through the command registry. Unknown text is a notice, never silent.
-    fn run_command(&mut self) -> Out {
-        let text = self.command.take().unwrap_or_default();
-        let text = text.trim();
-        if text.is_empty() {
-            return Vec::new();
-        }
-        let (word, rest) = text.split_once(char::is_whitespace).unwrap_or((text, ""));
-        match commands::find(word) {
-            Some(c) => self.run_cmd(c.id, Some(rest.trim()).filter(|r| !r.is_empty())),
-            None => {
-                self.push_global_notice(&format!("UNKNOWN COMMAND :{text} - try :help"), true);
-                Vec::new()
-            }
-        }
     }
 
     /// Scrolls the help overlay, kept inside the text.
@@ -2025,10 +1932,6 @@ impl App {
             p.query.insert_str(flat.trim());
             p.sel = 0;
             p.top = 0;
-            return;
-        }
-        if let Some(c) = self.command.as_mut() {
-            c.push_str(&flat);
             return;
         }
         let focus = self.ns(n).focus;
@@ -2705,11 +2608,7 @@ mod tests {
     }
 
     fn app_with_chats(count: usize) -> App {
-        let mut app = App::with_settings(
-            clock(),
-            &settings_with("default", &[("list", "f", "filter_start")]),
-            None,
-        );
+        let mut app = App::with_settings(clock(), &settings_with(&[("list", "f", "filter_start")]));
         app.handle_event(Event::Status(
             Network::Teams,
             Status::Online {
@@ -3076,9 +2975,8 @@ mod tests {
         key_mod(KeyCode::Char(c), KeyModifiers::CONTROL)
     }
 
-    fn settings_with(preset: &str, entries: &[(&str, &str, &str)]) -> Settings {
+    fn settings_with(entries: &[(&str, &str, &str)]) -> Settings {
         let mut s = Settings::default();
-        s.keys.preset = preset.to_string();
         for (i, (c, k, a)) in entries.iter().enumerate() {
             s.keys
                 .bindings
@@ -3096,8 +2994,7 @@ mod tests {
     fn filter_app() -> App {
         online(App::with_settings(
             clock(),
-            &settings_with("default", &[("list", "f", "filter_start")]),
-            None,
+            &settings_with(&[("list", "f", "filter_start")]),
         ))
     }
 
@@ -3106,14 +3003,6 @@ mod tests {
         app.handle_key(key(KeyCode::Char('/')));
         type_text(app, text);
         app.handle_key(key(KeyCode::Enter))
-    }
-
-    fn vim_app() -> App {
-        online(App::with_settings(
-            clock(),
-            &settings_with("vim", &[]),
-            None,
-        ))
     }
 
     fn notice_text(app: &App) -> Option<String> {
@@ -3142,74 +3031,50 @@ mod tests {
         ));
         app.handle_key(ctrl('c'));
         assert!(app.should_quit(), "panel");
-        // Filter, composer, help, command box, in both presets.
-        for vim in [false, true] {
-            let build = |vim: bool| {
-                online(App::with_settings(
-                    clock(),
-                    &settings_with(
-                        if vim { "vim" } else { "default" },
-                        &[
-                            ("list", "f", "filter_start"),
-                            ("normal", "f", "filter_start"),
-                        ],
-                    ),
-                    None,
-                ))
-            };
-            let mut app = build(vim);
-            app.handle_key(key(KeyCode::Char('f')));
-            assert_eq!(app.context(), Context::Filter);
-            app.handle_key(ctrl('c'));
-            assert!(app.should_quit(), "filter vim={vim}");
-            let mut app = build(vim);
-            app.handle_key(key(KeyCode::Enter));
-            app.handle_key(ctrl('c'));
-            assert!(app.should_quit(), "composer vim={vim}");
-            let mut app = build(vim);
-            app.handle_key(key(KeyCode::Char('?')));
-            assert_eq!(app.context(), Context::Help);
-            app.handle_key(ctrl('c'));
-            assert!(app.should_quit(), "help vim={vim}");
-        }
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char(':')));
+        // Filter, composer and help.
+        let build = || {
+            online(App::with_settings(
+                clock(),
+                &settings_with(&[("list", "f", "filter_start")]),
+            ))
+        };
+        let mut app = build();
+        app.handle_key(key(KeyCode::Char('f')));
+        assert_eq!(app.context(), Context::Filter);
         app.handle_key(ctrl('c'));
-        assert!(app.should_quit(), "command box");
-        // A held `g` does not swallow it either.
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char('g')));
+        assert!(app.should_quit(), "filter");
+        let mut app = build();
+        app.handle_key(key(KeyCode::Enter));
         app.handle_key(ctrl('c'));
-        assert!(app.should_quit(), "pending g");
+        assert!(app.should_quit(), "composer");
+        let mut app = build();
+        app.handle_key(key(KeyCode::Char('?')));
+        assert_eq!(app.context(), Context::Help);
+        app.handle_key(ctrl('c'));
+        assert!(app.should_quit(), "help");
     }
 
     #[test]
     fn ctrl_c_cannot_be_rebound_by_the_user() {
-        let s = settings_with(
-            "default",
-            &[
-                ("list", "ctrl+c", "refresh"),
-                ("global", "ctrl+c", "unbound"),
-            ],
-        );
-        let mut app = online(App::with_settings(clock(), &s, None));
+        let s = settings_with(&[
+            ("list", "ctrl+c", "refresh"),
+            ("global", "ctrl+c", "unbound"),
+        ]);
+        let mut app = online(App::with_settings(clock(), &s));
         app.handle_key(ctrl('c'));
         assert!(app.should_quit());
     }
 
     #[test]
     fn user_bindings_override_add_and_unbind() {
-        let s = settings_with(
-            "default",
-            &[
-                ("list", "ctrl+n", "list_down"),
-                ("list", "ctrl+p", "list_up"),
-                ("list", "r", "unbound"),
-                ("list", "x", "refresh"),
-                ("composer", "ctrl+s", "send"),
-            ],
-        );
-        let mut app = online(App::with_settings(clock(), &s, None));
+        let s = settings_with(&[
+            ("list", "ctrl+n", "list_down"),
+            ("list", "ctrl+p", "list_up"),
+            ("list", "r", "unbound"),
+            ("list", "x", "refresh"),
+            ("composer", "ctrl+s", "send"),
+        ]);
+        let mut app = online(App::with_settings(clock(), &s));
         app.handle_key(ctrl('n'));
         assert_eq!(app.active().selected.as_deref(), Some("b"));
         app.handle_key(ctrl('p'));
@@ -3234,15 +3099,12 @@ mod tests {
 
     #[test]
     fn a_binding_that_would_stop_typing_never_takes_effect() {
-        let s = settings_with(
-            "default",
-            &[
-                ("filter", "x", "refresh"),
-                ("composer", "z", "send"),
-                ("list", "f", "filter_start"),
-            ],
-        );
-        let mut app = online(App::with_settings(clock(), &s, None));
+        let s = settings_with(&[
+            ("filter", "x", "refresh"),
+            ("composer", "z", "send"),
+            ("list", "f", "filter_start"),
+        ]);
+        let mut app = online(App::with_settings(clock(), &s));
         app.handle_key(key(KeyCode::Char('f')));
         type_text(&mut app, "x");
         assert_eq!(app.active().filter, "x");
@@ -3253,287 +3115,35 @@ mod tests {
     }
 
     #[test]
-    fn rebinding_changes_the_context_it_belongs_to() {
-        // [keys.normal] has no effect with the default preset until /keys vim switches to vim.
-        let s = settings_with("default", &[("normal", "z", "refresh")]);
-        let mut app = online(App::with_settings(clock(), &s, None));
+    fn a_binding_applies_only_in_its_own_context() {
+        // `z` refreshes in message selection, not in the chat list.
+        let s = settings_with(&[("select", "z", "refresh")]);
+        let mut app = online(App::with_settings(clock(), &s));
         assert!(app.handle_key(key(KeyCode::Char('z'))).is_empty());
+        assert_eq!(
+            app.keys.lookup(
+                Context::Select,
+                KeyChord::new(KeyCode::Char('z'), KeyModifiers::NONE)
+            ),
+            Some(Action::Refresh)
+        );
+    }
+
+    #[test]
+    fn keys_command_opens_the_keys_page_and_takes_no_preset() {
+        let mut app = online(App::new(clock()));
+        slash(&mut app, "keys");
+        assert_eq!(
+            app.settings_page().map(|p| p.section),
+            Some(crate::settings_view::Section::Keys)
+        );
+        let mut app = online(App::new(clock()));
         slash(&mut app, "keys vim");
+        assert!(app.settings_page().is_none());
         assert_eq!(
-            app.handle_key(key(KeyCode::Char('z'))),
-            vec![(Network::Teams, Command::Refresh)]
+            notice_text(&app).as_deref(),
+            Some("/keys takes no arguments")
         );
-    }
-
-    #[test]
-    fn keys_command_switches_presets_live_and_keeps_user_bindings() {
-        let s = settings_with("default", &[("global", "ctrl+r", "refresh")]);
-        let mut app = online(App::with_settings(clock(), &s, None));
-        assert_eq!(
-            app.mode(),
-            None,
-            "no mode indicator with the default preset"
-        );
-        slash(&mut app, "keys vim");
-        assert_eq!(app.mode(), Some(Mode::Normal));
-        assert_eq!(notice_text(&app).as_deref(), Some("Key preset: vim"));
-        assert!(!app.current_notice().unwrap().is_error);
-        assert_eq!(
-            app.handle_key(ctrl('r')),
-            vec![(Network::Teams, Command::Refresh)],
-            "user binding survives the switch"
-        );
-        slash(&mut app, "keys default");
-        assert_eq!(app.mode(), None);
-        assert_eq!(notice_text(&app).as_deref(), Some("Key preset: default"));
-    }
-
-    #[test]
-    fn a_bound_toggle_preset_works_in_the_message_box_and_mode_follows_focus() {
-        // F2 opens the settings screen now: the preset switch is a binding of your own.
-        let s = settings_with("default", &[("global", "f3", "toggle_preset")]);
-        let mut app = online(App::with_settings(clock(), &s, None));
-        app.handle_key(key(KeyCode::Enter));
-        assert_eq!(app.context(), Context::Composer);
-        app.handle_key(key(KeyCode::F(3)));
-        assert_eq!(app.mode(), Some(Mode::Insert));
-        assert_eq!(app.context(), Context::Insert);
-        type_text(&mut app, "q");
-        assert!(!app.should_quit());
-        assert_eq!(app.active().draft(), "q");
-    }
-
-    #[test]
-    fn keys_flag_wins_over_the_settings_preset() {
-        let s = settings_with("default", &[]);
-        let app = App::with_settings(clock(), &s, Some("vim"));
-        assert_eq!(app.mode(), Some(Mode::Normal));
-        let s = settings_with("vim", &[]);
-        assert_eq!(
-            App::with_settings(clock(), &s, Some("default")).mode(),
-            None
-        );
-        // An unknown name falls back to the settings preset.
-        assert_eq!(
-            App::with_settings(clock(), &s, Some("emacs")).mode(),
-            Some(Mode::Normal)
-        );
-        assert_eq!(
-            App::with_settings(clock(), &settings_with("emacs", &[]), None).mode(),
-            None
-        );
-    }
-
-    #[test]
-    fn vim_normal_and_insert_modes() {
-        let mut app = vim_app();
-        assert_eq!(app.mode(), Some(Mode::Normal));
-        app.handle_key(key(KeyCode::Char('j')));
-        assert_eq!(app.active().selected.as_deref(), Some("b"));
-        app.handle_key(key(KeyCode::Char('k')));
-        assert_eq!(app.active().selected.as_deref(), Some("a"));
-        // i opens the chat and enters Insert mode.
-        let out = app.handle_key(key(KeyCode::Char('i')));
-        assert_eq!(out, vec![open_chat_cmd("a"), mark_read_cmd("a")]);
-        assert_eq!(app.mode(), Some(Mode::Insert));
-        // Letters typed in Insert mode never run Normal commands.
-        type_text(&mut app, "qjkrgi:/?G");
-        assert!(!app.should_quit());
-        assert_eq!(app.active().draft(), "qjkrgi:/?G");
-        assert_eq!(app.active().selected.as_deref(), Some("a"));
-        assert!(app.command_text().is_none() && app.help_open().is_none());
-        // Enter sends, Esc is back to Normal.
-        let out = app.handle_key(key(KeyCode::Enter));
-        assert!(matches!(out[0].1, Command::Send { .. }), "{out:?}");
-        app.handle_key(key(KeyCode::Esc));
-        assert_eq!(app.mode(), Some(Mode::Normal));
-        assert_eq!(app.active().focus, Focus::List);
-        // a and o do the same as i.
-        for c in ['a', 'o'] {
-            let mut app = vim_app();
-            app.handle_key(key(KeyCode::Char(c)));
-            assert_eq!(app.mode(), Some(Mode::Insert), "{c}");
-        }
-    }
-
-    #[test]
-    fn vim_g_big_and_half_pages() {
-        let mut app = online(App::with_settings(
-            clock(),
-            &settings_with("vim", &[]),
-            None,
-        ));
-        let chats = (0..40)
-            .map(|i| {
-                chat(
-                    Network::Teams,
-                    &format!("c{i}"),
-                    &format!("Chat {i}"),
-                    10_000 - i,
-                    0,
-                )
-            })
-            .collect();
-        app.handle_event(Event::Chats(Network::Teams, chats));
-        app.handle_key(key(KeyCode::Char('G')));
-        assert_eq!(app.active().selected.as_deref(), Some("c39"));
-        // Shift+g as a terminal may send it.
-        app.handle_key(key(KeyCode::Char('g')));
-        app.handle_key(key(KeyCode::Char('g')));
-        assert_eq!(app.active().selected.as_deref(), Some("c0"));
-        let half = (app.list_rows(Network::Teams) / 2).max(1);
-        app.handle_key(ctrl('d'));
-        assert_eq!(app.active().selected, Some(format!("c{half}")));
-        app.handle_key(ctrl('u'));
-        assert_eq!(app.active().selected.as_deref(), Some("c0"));
-        let shifted = key_mod(KeyCode::Char('G'), KeyModifiers::SHIFT);
-        app.handle_key(shifted);
-        assert_eq!(app.active().selected.as_deref(), Some("c39"));
-    }
-
-    #[test]
-    fn vim_gt_and_capital_gt_switch_network_and_g_cancels_cleanly() {
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char('g')));
-        assert_eq!(app.pending_text().as_deref(), Some("g"));
-        app.handle_key(key(KeyCode::Char('t')));
-        assert_eq!(app.active, Network::WhatsApp);
-        assert_eq!(app.pending_text(), None);
-        app.handle_key(key(KeyCode::Char('g')));
-        app.handle_key(key(KeyCode::Char('T')));
-        assert_eq!(app.active, Network::Teams);
-        // g then another key: both dropped, the second key does nothing.
-        app.handle_key(key(KeyCode::Char('g')));
-        app.handle_key(key(KeyCode::Char('j')));
-        assert_eq!(
-            app.active().selected.as_deref(),
-            Some("a"),
-            "j did not move"
-        );
-        assert_eq!(app.pending_text(), None);
-        app.handle_key(key(KeyCode::Char('j')));
-        assert_eq!(app.active().selected.as_deref(), Some("b"), "j works again");
-        // g then Esc cancels; g then Tab does not switch network.
-        app.handle_key(key(KeyCode::Char('g')));
-        app.handle_key(key(KeyCode::Tab));
-        assert_eq!(app.active, Network::Teams);
-        assert_eq!(app.pending_text(), None);
-    }
-
-    #[test]
-    fn a_held_g_is_dropped_by_a_click_a_mode_change_and_a_context_change() {
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char('g')));
-        app.handle_mouse(MouseEvent {
-            kind: MouseEventKind::ScrollDown,
-            column: 50,
-            row: 5,
-            modifiers: KeyModifiers::NONE,
-        });
-        assert_eq!(app.pending_text(), None);
-        // g typed in Insert mode is text, and starts nothing.
-        app.handle_key(key(KeyCode::Char('i')));
-        app.handle_key(key(KeyCode::Char('g')));
-        assert_eq!(app.pending_text(), None);
-        assert_eq!(app.active().draft(), "g");
-    }
-
-    #[test]
-    fn g_has_no_meaning_with_the_default_preset() {
-        let mut app = online_app();
-        app.handle_key(key(KeyCode::Char('g')));
-        assert_eq!(app.pending_text(), None);
-    }
-
-    #[test]
-    fn colon_box_runs_commands() {
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char(':')));
-        assert_eq!(app.context(), Context::Command);
-        // List keys do not run while the box has the keyboard.
-        type_text(&mut app, "jq");
-        assert_eq!(app.command_text(), Some("jq"));
-        assert!(!app.should_quit());
-        assert_eq!(app.active().selected.as_deref(), Some("a"));
-        app.handle_key(key(KeyCode::Backspace));
-        app.handle_key(key(KeyCode::Backspace));
-        type_text(&mut app, "q");
-        app.handle_key(key(KeyCode::Enter));
-        assert!(app.should_quit(), ":q quits");
-
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char(':')));
-        type_text(&mut app, "quit");
-        app.handle_key(key(KeyCode::Enter));
-        assert!(app.should_quit(), ":quit quits");
-
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char(':')));
-        type_text(&mut app, "keys default");
-        app.handle_key(key(KeyCode::Enter));
-        assert_eq!(app.mode(), None);
-        assert!(app.command_text().is_none());
-
-        let mut app = online_app();
-        slash(&mut app, "keys vim");
-        app.handle_key(key(KeyCode::Char(':')));
-        type_text(&mut app, "keys vim");
-        app.handle_key(key(KeyCode::Enter));
-        assert_eq!(app.mode(), Some(Mode::Normal));
-
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char(':')));
-        type_text(&mut app, "refresh");
-        let out = app.handle_key(key(KeyCode::Enter));
-        assert_eq!(out, vec![(Network::Teams, Command::Refresh)]);
-    }
-
-    #[test]
-    fn colon_box_esc_cancels_and_unknown_commands_say_so() {
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char(':')));
-        type_text(&mut app, "quit");
-        app.handle_key(key(KeyCode::Esc));
-        assert!(app.command_text().is_none());
-        assert!(!app.should_quit());
-
-        app.handle_key(key(KeyCode::Char(':')));
-        type_text(&mut app, "frobnicate now");
-        let out = app.handle_key(key(KeyCode::Enter));
-        assert!(out.is_empty());
-        assert!(app.command_text().is_none());
-        let n = app.current_notice().expect("a notice");
-        assert!(
-            n.is_error && n.global && n.text == "UNKNOWN COMMAND :frobnicate now - try :help",
-            "{n:?}"
-        );
-        // A bad preset name is a notice too.
-        app.handle_key(key(KeyCode::Char(':')));
-        type_text(&mut app, "keys emacs");
-        app.handle_key(key(KeyCode::Enter));
-        assert!(notice_text(&app).unwrap().contains("emacs"));
-        assert_eq!(app.mode(), Some(Mode::Normal), "preset unchanged");
-        // An empty box is not an error.
-        app.tick(app.clock().now_ms + NOTICE_TTL_MS);
-        app.handle_key(key(KeyCode::Char(':')));
-        app.handle_key(key(KeyCode::Enter));
-        assert!(app.current_notice().is_none());
-    }
-
-    #[test]
-    fn colon_box_takes_pasted_text() {
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char(':')));
-        app.handle_paste("keys\ndefault");
-        assert_eq!(app.command_text(), Some("keys default"));
-    }
-
-    #[test]
-    fn colon_box_is_bindable_in_the_default_preset() {
-        let s = settings_with("default", &[("list", ":", "command_box")]);
-        let mut app = online(App::with_settings(clock(), &s, None));
-        app.handle_key(key(KeyCode::Char(':')));
-        assert_eq!(app.context(), Context::Command);
     }
 
     #[test]
@@ -3554,15 +3164,6 @@ mod tests {
         type_text(&mut app, "why?");
         assert_eq!(app.active().draft(), "why?");
         assert_eq!(app.help_open(), None);
-        // Vim: Normal mode opens it, Insert types it.
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char('?')));
-        assert_eq!(app.help_open(), Some(0));
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char('i')));
-        app.handle_key(key(KeyCode::Char('?')));
-        assert_eq!(app.help_open(), None);
-        assert_eq!(app.active().draft(), "?");
     }
 
     #[test]
@@ -3652,7 +3253,7 @@ mod tests {
     }
 
     #[test]
-    fn help_lists_every_action_of_the_active_preset_and_follows_rebinding() {
+    fn help_lists_every_action_and_follows_rebinding() {
         let text = |app: &App| -> String {
             ui::help_rows(app)
                 .into_iter()
@@ -3679,23 +3280,13 @@ mod tests {
         ] {
             assert!(t.contains(name), "{name} missing:\n{t}");
         }
-        assert!(
-            !t.contains("Enter insert"),
-            "vim-only action listed for default"
-        );
-        let s = settings_with(
-            "default",
-            &[("list", "ctrl+n", "list_down"), ("list", "j", "unbound")],
-        );
-        let t = text(&online(App::with_settings(clock(), &s, None)));
+        let s = settings_with(&[("list", "ctrl+n", "list_down"), ("list", "j", "unbound")]);
+        let t = text(&online(App::with_settings(clock(), &s)));
         assert!(t.contains("Ctrl+N, Down List down"), "{t}");
         assert!(
             !t.contains("Down, j List down") && !t.contains("j List up"),
             "{t}"
         );
-        let t = text(&vim_app());
-        assert!(t.contains("Enter insert") && t.contains("g g"), "{t}");
-        assert!(!t.contains("Composer"), "{t}");
     }
 
     // ---- CodeRabbit review comments on PR 1 ----
@@ -4002,11 +3593,10 @@ mod tests {
         let mut ctx = UiCtx::new(Store::open_in_memory().unwrap(), media);
         let clean = App::with_ctx(clock(), &ctx);
         assert!(clean.current_notice().is_none(), "no problems, no notice");
-        ctx.settings = Arc::new(settings_with(
-            "default",
-            &[("list", "ctrl+n", "lst_down"), ("filter", "x", "refresh")],
-        ));
-        ctx.keys_preset = Some("emacs".into());
+        ctx.settings = Arc::new(settings_with(&[
+            ("list", "ctrl+n", "lst_down"),
+            ("filter", "x", "refresh"),
+        ]));
         ctx.startup_notices = vec![StartupNotice {
             text: "settings.toml line 3: [layout] density: bad".into(),
             is_error: false,
@@ -4016,7 +3606,7 @@ mod tests {
         assert!(n.global && n.is_error, "{n:?}");
         assert!(
             n.text
-                .starts_with("settings.toml line 3: [layout] density: bad (+3 more"),
+                .starts_with("settings.toml line 3: [layout] density: bad (+2 more"),
             "{n:?}"
         );
         assert!(n.text.contains("chatcli settings check"), "{n:?}");
@@ -4032,11 +3622,11 @@ mod tests {
             std::env::temp_dir().join(format!("chatcli-tui-app-test1-{}", std::process::id()));
         let media = MediaCache::open(&dir, &Settings::default().media).unwrap();
         let mut ctx = UiCtx::new(Store::open_in_memory().unwrap(), media);
-        ctx.keys_preset = Some("emacs".into());
+        ctx.settings = std::sync::Arc::new(settings_with(&[("list", "ctrl+n", "lst_down")]));
         let app = App::with_ctx(clock(), &ctx);
         let n = app.current_notice().unwrap();
         assert!(
-            n.text.starts_with("--keys emacs") && !n.text.contains("more"),
+            n.text.contains("lst_down") && !n.text.contains("more"),
             "{n:?}"
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -4124,18 +3714,6 @@ mod tests {
         assert_eq!(cursor_of(&app), 2, "the cursor stayed where it was");
     }
 
-    #[test]
-    fn vim_insert_mode_has_the_same_editing_keys() {
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char('i')));
-        type_text(&mut app, "helo");
-        app.handle_key(key(KeyCode::Left));
-        type_text(&mut app, "l");
-        assert_eq!(app.active().draft(), "hello");
-        app.handle_key(key(KeyCode::Backspace));
-        assert_eq!(app.active().draft(), "helo");
-    }
-
     fn keys_of(s: &str) -> Vec<KeyEvent> {
         s.chars()
             .flat_map(|c| {
@@ -4184,7 +3762,7 @@ mod tests {
     }
 
     #[test]
-    fn altgr_characters_type_in_the_message_box_the_filter_and_vim_insert() {
+    fn altgr_characters_type_in_the_message_box_and_the_filter() {
         let altgr = KeyModifiers::CONTROL | KeyModifiers::ALT;
         let mut app = typing_app();
         for c in ['@', '€', '{', '\\'] {
@@ -4196,11 +3774,6 @@ mod tests {
         app.handle_key(key(KeyCode::Char('f')));
         app.handle_key(key_mod(KeyCode::Char('€'), altgr));
         assert_eq!(app.active().filter, "€");
-        // Vim Insert mode.
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char('i')));
-        app.handle_key(key_mod(KeyCode::Char('@'), altgr));
-        assert_eq!(app.active().draft(), "@");
         // A plain Alt chord is still not text.
         let mut app = typing_app();
         app.handle_key(key_mod(KeyCode::Char('x'), KeyModifiers::ALT));
@@ -4590,7 +4163,10 @@ mod tests {
             "Alt+2 does not switch network under the picker"
         );
         app.handle_key(key(KeyCode::F(2)));
-        assert_eq!(app.keys().preset(), Preset::Default);
+        assert!(
+            app.settings_page().is_none(),
+            "F2 does not open settings under the picker"
+        );
         app.handle_key(ctrl('c'));
         assert!(app.should_quit());
     }
@@ -4808,29 +4384,6 @@ mod tests {
     }
 
     #[test]
-    fn vim_normal_u_opens_links_too() {
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char('i')));
-        app.handle_key(key(KeyCode::Esc));
-        app.handle_event(Event::Messages {
-            network: Network::Teams,
-            chat_id: "a".into(),
-            messages: vec![ChatMessage {
-                network: Network::Teams,
-                chat_id: "a".into(),
-                id: "m1".into(),
-                ts: 5,
-                sender: "Alex Example".into(),
-                text: "https://docs.example/".into(),
-                state: MessageState::Sent,
-                ..ChatMessage::blank(Network::Teams)
-            }],
-        });
-        app.handle_key(key(KeyCode::Char('u')));
-        assert!(app.prompt().is_some());
-    }
-
-    #[test]
     fn composer_grows_with_the_draft_up_to_six_rows() {
         let mut app = typing_app();
         app.resize(80, 30);
@@ -4862,20 +4415,15 @@ mod tests {
 
     #[test]
     fn slash_in_the_list_opens_the_bar_with_every_command() {
-        for vim in [false, true] {
-            let mut app = if vim { vim_app() } else { online_app() };
-            assert!(app.handle_key(key(KeyCode::Char('/'))).is_empty());
-            assert_eq!(app.context(), Context::Popup, "vim={vim}");
-            // Nothing typed: every command, no chats.
-            assert_eq!(app.palette_items().len(), commands::COMMANDS.len());
-            assert!(app.overlay_open());
-            app.handle_key(key(KeyCode::Esc));
-            assert!(app.palette().is_none());
-            assert_eq!(
-                app.context(),
-                if vim { Context::Normal } else { Context::List }
-            );
-        }
+        let mut app = online_app();
+        assert!(app.handle_key(key(KeyCode::Char('/'))).is_empty());
+        assert_eq!(app.context(), Context::Popup);
+        // Nothing typed: every command, no chats.
+        assert_eq!(app.palette_items().len(), commands::COMMANDS.len());
+        assert!(app.overlay_open());
+        app.handle_key(key(KeyCode::Esc));
+        assert!(app.palette().is_none());
+        assert_eq!(app.context(), Context::List);
     }
 
     #[test]
@@ -5020,16 +4568,7 @@ mod tests {
         assert!(app.settings_page().is_none(), "start_tour closes the page");
         assert_eq!(app.layout_in(app.size).body.y, body_before.y + 1);
         assert_eq!(app.layout_in(app.size).header.y, 1);
-        assert!(app.tour_bar().unwrap().text.starts_with("TOUR 1/26 - "));
-    }
-
-    #[test]
-    fn the_tour_uses_the_default_keys_even_after_vim() {
-        let mut app = online_app();
-        app.demo = true;
-        app.set_preset(Preset::Vim);
-        app.start_tour();
-        assert_eq!(app.keys().preset(), Preset::Default);
+        assert!(app.tour_bar().unwrap().text.starts_with("TOUR 1/25 - "));
     }
 
     #[test]
@@ -5084,7 +4623,10 @@ mod tests {
             Some("/quit takes no arguments")
         );
         slash(&mut app, "keys emacs");
-        assert!(notice_text(&app).unwrap().contains("emacs"));
+        assert_eq!(
+            notice_text(&app).as_deref(),
+            Some("/keys takes no arguments")
+        );
     }
 
     #[test]
@@ -5096,20 +4638,18 @@ mod tests {
 
     #[test]
     fn slash_in_the_message_box_lists_commands_and_enter_runs_one() {
-        for vim in [false, true] {
-            let mut app = if vim { vim_app() } else { online_app() };
-            app.handle_key(key(KeyCode::Enter));
-            type_text(&mut app, "/se");
-            let p = app.popup().expect("commands popup");
-            assert_eq!(p.title, COMMANDS_TITLE);
-            assert_eq!(p.items[0].label.trim_end(), "/settings");
-            assert_eq!(p.items[0].detail, "theme, layout, keys and more");
-            let out = app.handle_key(key(KeyCode::Enter));
-            assert!(out.is_empty());
-            assert!(app.settings_page().is_some(), "vim={vim}");
-            assert_eq!(app.active().draft(), "", "the command is not a draft");
-            assert!(app.popup().is_none());
-        }
+        let mut app = online_app();
+        app.handle_key(key(KeyCode::Enter));
+        type_text(&mut app, "/se");
+        let p = app.popup().expect("commands popup");
+        assert_eq!(p.title, COMMANDS_TITLE);
+        assert_eq!(p.items[0].label.trim_end(), "/settings");
+        assert_eq!(p.items[0].detail, "theme, layout, keys and more");
+        let out = app.handle_key(key(KeyCode::Enter));
+        assert!(out.is_empty());
+        assert!(app.settings_page().is_some());
+        assert_eq!(app.active().draft(), "", "the command is not a draft");
+        assert!(app.popup().is_none());
     }
 
     #[test]
@@ -5169,10 +4709,10 @@ mod tests {
     #[test]
     fn a_slash_command_with_arguments_runs_from_the_message_box() {
         let mut app = typing_app();
-        type_text(&mut app, "/keys vim ");
+        type_text(&mut app, "/theme light ");
         let out = app.handle_key(key(KeyCode::Enter));
         assert!(out.is_empty());
-        assert_eq!(app.mode(), Some(Mode::Insert));
+        assert_eq!(app.settings.theme.name, "light");
         assert_eq!(app.active().draft(), "");
     }
 
@@ -5197,55 +4737,31 @@ mod tests {
     }
 
     #[test]
-    fn colon_commands_go_through_the_registry() {
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char(':')));
-        type_text(&mut app, "settings");
-        app.handle_key(key(KeyCode::Enter));
-        assert!(app.settings_page().is_some());
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char(':')));
-        type_text(&mut app, "keys");
-        app.handle_key(key(KeyCode::Enter));
-        assert!(
-            app.settings_page().is_some(),
-            ":keys alone opens the keys page"
-        );
-        let mut app = vim_app();
-        app.handle_key(key(KeyCode::Char(':')));
-        type_text(&mut app, "help");
-        app.handle_key(key(KeyCode::Enter));
+    fn f1_opens_help_and_f2_the_settings_screen() {
+        let mut app = online_app();
+        app.handle_key(key(KeyCode::F(1)));
+        assert_eq!(app.help_open(), Some(0), "F1 list");
+        app.handle_key(key(KeyCode::F(1)));
+        assert_eq!(app.help_open(), None, "F1 closes help");
+        app.handle_key(key(KeyCode::F(2)));
+        assert!(app.settings_page().is_some(), "F2 list");
+        assert!(app.overlay_open());
+        // F1 over the page opens help; Esc returns to the page; F2 closes it.
+        app.handle_key(key(KeyCode::F(1)));
         assert_eq!(app.help_open(), Some(0));
-    }
-
-    #[test]
-    fn f1_opens_help_and_f2_the_settings_screen_in_both_presets() {
-        for vim in [false, true] {
-            let mut app = if vim { vim_app() } else { online_app() };
-            app.handle_key(key(KeyCode::F(1)));
-            assert_eq!(app.help_open(), Some(0), "F1 list vim={vim}");
-            app.handle_key(key(KeyCode::F(1)));
-            assert_eq!(app.help_open(), None, "F1 closes help");
-            app.handle_key(key(KeyCode::F(2)));
-            assert!(app.settings_page().is_some(), "F2 list vim={vim}");
-            assert!(app.overlay_open());
-            // F1 over the page opens help; Esc returns to the page; F2 closes it.
-            app.handle_key(key(KeyCode::F(1)));
-            assert_eq!(app.help_open(), Some(0));
-            app.handle_key(key(KeyCode::Esc));
-            assert!(app.help_open().is_none() && app.settings_page().is_some());
-            app.handle_key(key(KeyCode::F(2)));
-            assert!(app.settings_page().is_none());
-            // The message box too.
-            app.handle_key(key(KeyCode::Enter));
-            app.handle_key(key(KeyCode::F(1)));
-            assert_eq!(app.help_open(), Some(0), "F1 box vim={vim}");
-            app.handle_key(key(KeyCode::Esc));
-            app.handle_key(key(KeyCode::F(2)));
-            assert!(app.settings_page().is_some(), "F2 box vim={vim}");
-            app.handle_key(key(KeyCode::Esc));
-            assert!(app.settings_page().is_none(), "Esc closes the page");
-        }
+        app.handle_key(key(KeyCode::Esc));
+        assert!(app.help_open().is_none() && app.settings_page().is_some());
+        app.handle_key(key(KeyCode::F(2)));
+        assert!(app.settings_page().is_none());
+        // The message box too.
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::F(1)));
+        assert_eq!(app.help_open(), Some(0), "F1 box");
+        app.handle_key(key(KeyCode::Esc));
+        app.handle_key(key(KeyCode::F(2)));
+        assert!(app.settings_page().is_some(), "F2 box");
+        app.handle_key(key(KeyCode::Esc));
+        assert!(app.settings_page().is_none(), "Esc closes the page");
     }
 
     #[test]

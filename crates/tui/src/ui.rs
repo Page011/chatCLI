@@ -16,14 +16,14 @@ use crate::app::{App, Focus, NetState, Prompt, NARROW};
 use crate::chats;
 use crate::composer::{self, Composer};
 use crate::emoji::{PickerFor, CATEGORIES};
-use crate::keymap::{Action, Context, Keymap, Mode};
+use crate::keymap::{Action, Context, Keymap};
 use crate::links::find_links;
 use crate::media_view::{
     human_size, kind_label, percent, strip_markers, Fetch, MediaKey, MediaState, View,
 };
 use crate::older::Older;
 use crate::settings_view::RowId;
-use crate::text::{clean_line, fit, sw, tail, truncate, wrap, wrap_pieces, Clock, Fmt, Piece};
+use crate::text::{clean_line, fit, sw, truncate, wrap, wrap_pieces, Clock, Fmt, Piece};
 use crate::theme::Theme;
 use std::path::PathBuf;
 
@@ -60,13 +60,11 @@ fn height_for_body(body: usize) -> usize {
 /// two wrapped rows, so the action half of "what failed: what to do" is not cut off; mid-size
 /// ones share one row; short ones show the key hints or the problem, never both.
 pub(crate) fn footer_height(app: &App, area: Rect) -> u16 {
-    let base = match area.height {
+    match area.height {
         20.. => 1 + problem_lines(app, area.width as usize).len() as u16,
         14..=19 => 1 + u16::from(status_part(app).is_some() || notice_part(app).is_some()),
         _ => 1,
-    };
-    // The `:` command box is one more row, directly above the rest of the footer.
-    base + u16::from(app.command_text().is_some())
+    }
 }
 
 pub(crate) struct Layout {
@@ -356,7 +354,6 @@ fn hints(app: &App) -> Vec<(String, bool)> {
     let ns = app.active();
     let keys = app.keys();
     let ctx = app.context();
-    let vim = app.mode().is_some();
     if let Some(tour) = app.tour_bar() {
         return vec![(tour.hint.to_string(), true)];
     }
@@ -369,13 +366,6 @@ fn hints(app: &App) -> Vec<(String, bool)> {
                 (&[ListUp, ListDown], "scroll"),
                 (&[ScrollUp, ScrollDown], "page"),
             ],
-        );
-    }
-    if app.command_text().is_some() {
-        return join_hints(
-            keys,
-            ctx,
-            &[(&[FilterAccept], "run"), (&[FilterCancel], "cancel")],
         );
     }
     if let Some(prompt) = app.prompt() {
@@ -493,11 +483,7 @@ fn hints(app: &App) -> Vec<(String, bool)> {
     } else {
         "open"
     };
-    let chat: &[Action] = if vim {
-        &[ListDown, ListUp]
-    } else {
-        &[ListUp, ListDown]
-    };
+    let chat: &[Action] = &[ListUp, ListDown];
     if !ns.panel() && ns.focus == Focus::List && !ns.filter.is_empty() {
         return join_hints(
             keys,
@@ -539,18 +525,6 @@ fn hints(app: &App) -> Vec<(String, bool)> {
         };
     }
     match ns.focus {
-        Focus::List if vim => join_hints(
-            keys,
-            ctx,
-            &[
-                (chat, "chat"),
-                (&[EnterInsert], "insert"),
-                (&[CommandBar], "commands"),
-                (&[CommandBox], "command"),
-                (&[Help], "help"),
-                (&[Quit], "quit"),
-            ],
-        ),
         Focus::List => join_hints(
             keys,
             ctx,
@@ -584,17 +558,12 @@ fn hints(app: &App) -> Vec<(String, bool)> {
                     (&[], "/ commands"),
                     (&[Help], "help"),
                     (
-                        if vim {
-                            &[LeaveInsert]
-                        } else {
-                            &[LeaveComposer]
-                        },
-                        match (ns.target(), ns.attachment(), vim) {
-                            (Some(Target::Reply(_)), _, _) => "cancel reply",
-                            (Some(Target::Edit { .. }), _, _) => "cancel edit",
-                            (None, Some(_), _) => "remove file",
-                            (None, None, true) => "normal mode",
-                            (None, None, false) => "back to list",
+                        &[LeaveComposer],
+                        match (ns.target(), ns.attachment()) {
+                            (Some(Target::Reply(_)), _) => "cancel reply",
+                            (Some(Target::Edit { .. }), _) => "cancel edit",
+                            (None, Some(_)) => "remove file",
+                            (None, None) => "back to list",
                         },
                     ),
                     (&[SelectMessages], "select"),
@@ -767,7 +736,7 @@ fn link_line(prompt: &Prompt, keys: &Keymap, ctx: Context) -> String {
             let yn = keys
                 .hint(ctx, &[Action::ConfirmYes, Action::ConfirmNo])
                 .unwrap_or_else(|| "y/n".to_string());
-            format!("Reset every key to the preset? {yn}")
+            format!("Reset every key to its default? {yn}")
         }
         Prompt::SendFile {
             name,
@@ -799,23 +768,13 @@ fn link_line(prompt: &Prompt, keys: &Keymap, ctx: Context) -> String {
     }
 }
 
-/// `-- NORMAL --` / `-- INSERT --` and the held sequence key, at the left of the footer. Only
-/// with the vim preset; text, never colour alone.
+/// The first key of a two-key sequence while it waits for the second, at the left of the
+/// footer: text, never colour alone.
 fn mode_spans(app: &App) -> Vec<Span<'static>> {
-    let Some(mode) = app.mode() else {
-        return Vec::new();
-    };
-    let label = match mode {
-        Mode::Normal => "-- NORMAL --",
-        Mode::Insert => "-- INSERT --",
-        Mode::Select => "-- SELECT --",
-    };
-    let mut spans = vec![Span::styled(label, bold())];
-    if let Some(held) = app.pending_text() {
-        spans.push(Span::styled(format!(" {held}"), bold()));
+    match app.pending_text() {
+        Some(held) => vec![Span::styled(held, bold()), Span::raw("  ")],
+        None => Vec::new(),
     }
-    spans.push(Span::raw("  "));
-    spans
 }
 
 fn clip_spans(spans: Vec<Span<'static>>, width: usize) -> Line<'static> {
@@ -864,7 +823,7 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect, screen_height: u16) {
     let mut hint_spans = mode.clone();
     hint_spans.extend(hint_spans_of(app, w.saturating_sub(mode_w)));
     let hint_line = Line::from(hint_spans);
-    let mut rows: Vec<Line<'static>> = match screen_height {
+    let rows: Vec<Line<'static>> = match screen_height {
         20.. => {
             let mut rows = problem_lines(app, w);
             rows.push(hint_line);
@@ -884,7 +843,7 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect, screen_height: u16) {
             }
         }
         // One row: a problem outranks the key hints, which return once it is gone.
-        // The vim mode label stays: it is the one thing that must always be visible.
+        // A held sequence key stays: it is the one thing that must always be visible.
         // A link waiting for y/n outranks the problem: it is modal and its keys must be visible.
         _ => match status_part(app)
             .or(notice_part(app))
@@ -898,16 +857,6 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect, screen_height: u16) {
             None => vec![hint_line],
         },
     };
-    if let Some(cmd) = app.command_text() {
-        // Same drawing as the filter box: a prefix, the text, the cursor at its end.
-        let shown = tail(cmd, w.saturating_sub(2));
-        let x = area.x + (1 + sw(&shown)).min(w.saturating_sub(1)) as u16;
-        rows.insert(
-            0,
-            Line::from(vec![Span::styled(":", bold()), Span::raw(shown)]),
-        );
-        f.set_cursor_position((x, area.y));
-    }
     f.render_widget(Paragraph::new(rows), area);
 }
 
@@ -1004,15 +953,11 @@ fn draw_help(f: &mut Frame, app: &App, area: Rect, body: Rect) {
     let inner = b.inner(Margin::new(1, 1));
     let w = inner.width as usize;
     let user = app.keys().user_bindings();
-    let header = format!(
-        "{} preset, {}",
-        app.keys().preset().name(),
-        if user == 0 {
-            "no user bindings".to_string()
-        } else {
-            format!("{user} user bindings")
-        }
-    );
+    let header = if user == 0 {
+        "No user bindings".to_string()
+    } else {
+        format!("{user} user bindings")
+    };
     f.render_widget(
         Paragraph::new(Span::styled(truncate(&header, w), t.hint)),
         Rect::new(inner.x, inner.y, inner.width, 1),
@@ -1138,7 +1083,7 @@ fn draw_sidebar(f: &mut Frame, app: &App, lay: &Layout) {
             ])),
             r,
         );
-        if ns.focus == Focus::Filter && app.help_open().is_none() && app.command_text().is_none() {
+        if ns.focus == Focus::Filter && app.help_open().is_none() {
             f.set_cursor_position((r.x + 1 + col as u16, r.y));
         }
     }
@@ -1738,14 +1683,7 @@ fn composer_extras(app: &App, ns: &NetState, width: usize) -> Vec<Line<'static>>
     if let Some(target) = ns.target() {
         let esc = app
             .keys()
-            .hint(
-                app.context(),
-                &[
-                    Action::LeaveComposer,
-                    Action::LeaveInsert,
-                    Action::CancelReply,
-                ],
-            )
+            .hint(app.context(), &[Action::LeaveComposer, Action::CancelReply])
             .unwrap_or_else(|| "Esc".to_string());
         let tail = format!("  {esc} cancel");
         let room = width.saturating_sub(sw(&tail));
@@ -1776,7 +1714,7 @@ fn composer_extras(app: &App, ns: &NetState, width: usize) -> Vec<Line<'static>>
     if let Some(p) = ns.attachment() {
         let esc = app
             .keys()
-            .hint(app.context(), &[Action::LeaveComposer, Action::LeaveInsert])
+            .hint(app.context(), &[Action::LeaveComposer])
             .unwrap_or_else(|| "Esc".to_string());
         let tail = format!("  {esc} remove");
         let room = width.saturating_sub(sw(&tail));

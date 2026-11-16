@@ -42,13 +42,6 @@ fn new_app() -> App {
     })
 }
 
-/// An app with the vim preset (as `preset = "vim"` or `--keys vim` would give).
-fn new_vim_app() -> App {
-    let mut s = Settings::default();
-    s.keys.preset = "vim".into();
-    new_app_with(s)
-}
-
 fn new_app_with(settings: Settings) -> App {
     App::with_settings(
         Clock {
@@ -56,7 +49,6 @@ fn new_app_with(settings: Settings) -> App {
             tz: Some(zone()),
         },
         &settings,
-        None,
     )
 }
 
@@ -612,84 +604,14 @@ fn press_mod(app: &mut App, code: KeyCode, mods: KeyModifiers) {
     });
 }
 
-/// Vim Normal mode: `-- NORMAL --` at the left of the footer, the chat list in focus.
 #[test]
-fn vim_normal_mode() {
-    both_sizes("vim_normal", || {
-        let mut app = online_in(new_vim_app());
-        press(&mut app, KeyCode::Char('j'));
-        press(&mut app, KeyCode::Char('k'));
-        app
-    });
-}
-
-/// Vim Insert mode: the message box has focus and the footer says so.
-#[test]
-fn vim_insert_mode() {
-    both_sizes("vim_insert", || open_chat_in(new_vim_app()));
-}
-
-/// A held `g` shows in the footer next to the mode.
-#[test]
-fn vim_pending_g_is_echoed() {
-    both_sizes("vim_pending_g", || {
-        let mut app = online_in(new_vim_app());
-        press(&mut app, KeyCode::Char('g'));
-        app
-    });
-}
-
-/// The `:` box above the footer, with some text typed.
-#[test]
-fn vim_command_box() {
-    both_sizes("vim_command_box", || {
-        let mut app = online_in(new_vim_app());
-        press(&mut app, KeyCode::Char(':'));
-        type_str(&mut app, "keys default");
-        app
-    });
-}
-
-fn error_app_in(mut app: App) -> App {
-    app.handle_event(Event::Status(
-        Network::Teams,
-        Status::Error {
-            message: "Teams refused the saved sign-in: run chatcli teams login.".into(),
-        },
-    ));
-    app.handle_event(Event::Chats(Network::Teams, teams_chats()));
-    app
-}
-
-/// The mode label must stay visible when a problem takes the only footer row.
-#[test]
-fn vim_mode_label_survives_a_one_row_footer() {
-    let mut app = error_app_in(new_vim_app());
-    let got = render(&mut app, 40, 12);
-    let footer = got.lines().nth(11).unwrap();
-    assert!(footer.starts_with("-- NORMAL --"), "{got}");
-    check("vim_tiny", 40, 12, &got);
-}
-
-#[test]
-fn help_overlay_default_preset() {
+fn help_overlay() {
     for (w, h) in [(80, 24), (40, 12)] {
         let mut app = online_in(new_app());
         press(&mut app, KeyCode::Char('?'));
         let got = render(&mut app, w, h);
-        assert!(got.contains("default preset, no user bindings"), "{got}");
+        assert!(got.contains("No user bindings"), "{got}");
         check("help_default", w, h, &got);
-    }
-}
-
-#[test]
-fn help_overlay_vim_preset() {
-    for (w, h) in [(80, 24), (40, 12)] {
-        let mut app = online_in(new_vim_app());
-        press(&mut app, KeyCode::Char('?'));
-        let got = render(&mut app, w, h);
-        assert!(got.contains("vim preset, no user bindings"), "{got}");
-        check("help_vim", w, h, &got);
     }
 }
 
@@ -749,7 +671,7 @@ fn rebinding_changes_help_and_footer() {
     press(&mut app, KeyCode::Char('?'));
     let help = render(&mut app, 100, 40);
     assert!(help.contains("Ctrl+N, Down"), "{help}");
-    assert!(help.contains("default preset, 4 user bindings"), "{help}");
+    assert!(help.contains("4 user bindings"), "{help}");
     // The unbound `q` quits no more, Ctrl+Q does.
     press(&mut app, KeyCode::Esc);
     press(&mut app, KeyCode::Char('q'));
@@ -1401,15 +1323,6 @@ fn select_before_capabilities_dims_everything() {
 }
 
 #[test]
-fn select_in_the_vim_preset_says_select() {
-    let mut app = rich_in(new_vim_app(), true);
-    ctrl_up(&mut app);
-    let got = render(&mut app, 100, 30);
-    assert!(got.contains("-- SELECT --"), "{got}");
-    check("select_vim", 100, 30, &got);
-}
-
-#[test]
 fn select_on_a_narrow_terminal() {
     let mut app = rich_app(true);
     select_msg(&mut app, "m3");
@@ -2047,26 +1960,6 @@ fn upload_progress_on_the_message_and_in_the_footer() {
     let got = render(&mut app, 100, 30);
     assert!(got.contains("NOT SENT - IMAGE OVER 4 MB"), "{got}");
     check("upload_failed", 100, 30, &got);
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
-/// Vim preset: the chip, the path prompt and `o` / `v` all work from Insert and Select.
-#[test]
-fn vim_preset_has_the_attachment_keys() {
-    let dir = attach_dir("vim_preset_has_the_attac");
-    let mut app = open_media_in(new_vim_app(), Depth::True);
-    app.set_attach_dir(dir.clone());
-    app.handle_event(Event::Messages {
-        network: Network::Teams,
-        chat_id: "alex".into(),
-        messages: media_history(),
-    });
-    ctrl_o(&mut app);
-    type_str(&mut app, "notes.txt");
-    press(&mut app, KeyCode::Enter);
-    let got = render(&mut app, 100, 30);
-    assert!(got.contains("[notes.txt 1 B]"), "{got}");
-    check("attach_chip_vim", 100, 30, &got);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -2916,13 +2809,12 @@ fn footers_point_at_commands_and_help() {
         press_mod(&mut app, KeyCode::Up, KeyModifiers::CONTROL);
         app
     };
-    let screens: [(&str, App, &str); 5] = [
+    let screens: [(&str, App, &str); 4] = [
         ("list", online_in(new_app()), "? help"),
         ("composer", typing_app(), "F1 help"),
         ("panel", panel(), "? help"),
         // 80 columns keep the way out (Esc back) and the bar; help follows on wider screens.
         ("select", select(), "Esc back"),
-        ("vim list", online_in(new_vim_app()), "? help"),
     ];
     for (what, mut app, help) in screens {
         let got = render(&mut app, 80, 24);
@@ -2995,7 +2887,7 @@ fn settings_whatsapp() {
 /// tests below check the footer names `refresh`, so a reordered page fails loudly).
 fn keys_app() -> App {
     let mut app = settings_app(6, true);
-    for _ in 0..20 {
+    for _ in 0..18 {
         press(&mut app, KeyCode::Down);
     }
     app
@@ -3125,7 +3017,7 @@ fn keys_reset_all_prompt() {
         press(&mut app, KeyCode::Up);
         press(&mut app, KeyCode::Enter);
         let got = render(&mut app, 80, 24);
-        assert!(got.contains("Reset every key to the preset? y/n"), "{got}");
+        assert!(got.contains("Reset every key to its default? y/n"), "{got}");
         app
     });
 }
@@ -3140,19 +3032,6 @@ fn key_rebound_footer() {
         press(&mut app, KeyCode::Esc);
         let got = render(&mut app, 80, 24);
         assert!(got.contains("F5 refresh"), "{got}");
-        app
-    });
-}
-
-/// The vim preset from the page: the footer shows the mode at once.
-#[test]
-fn key_preset_row_switches_to_vim() {
-    at_sizes("key_preset_row_vim", &[(80, 24)], || {
-        let mut app = settings_app(6, true);
-        press(&mut app, KeyCode::Right);
-        press(&mut app, KeyCode::Esc);
-        let got = render(&mut app, 80, 24);
-        assert!(got.contains("-- NORMAL --"), "{got}");
         app
     });
 }

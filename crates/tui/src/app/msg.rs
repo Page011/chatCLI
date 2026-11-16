@@ -523,7 +523,6 @@ fn clean_members(mut members: Vec<PersonRef>) -> Vec<PersonRef> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keymap::Mode;
     use crate::text::Clock;
     use chatcli_core::model::{Capabilities, ChatKind, ChatSummary, Event, Reaction, Status};
     use crossterm::event::{
@@ -956,36 +955,6 @@ mod tests {
             Focus::Composer,
             "nothing left to select"
         );
-    }
-
-    #[test]
-    fn vim_v_selects_and_gg_goes_to_the_first() {
-        let mut s = chatcli_core::settings::Settings::default();
-        s.keys.preset = "vim".into();
-        let mut app = App::with_settings(clock(), &s, None);
-        online(&mut app, ChatKind::Direct);
-        app.handle_event(Event::Messages {
-            network: Network::Teams,
-            chat_id: "a".into(),
-            messages: three(),
-        });
-        // Preview the chat from the list, then `v`.
-        ch(&mut app, 'j');
-        ch(&mut app, 'k');
-        let out = ch(&mut app, 'v');
-        assert_eq!(app.active().focus, Focus::Select);
-        assert_eq!(app.mode(), Some(Mode::Select));
-        assert_eq!(sel(&app), Some("m3"));
-        assert!(
-            out.iter()
-                .any(|(_, c)| matches!(c, Command::OpenChat { .. })),
-            "selecting opens the chat like Enter: {out:?}"
-        );
-        ch(&mut app, 'g');
-        ch(&mut app, 'g');
-        assert_eq!(sel(&app), Some("m1"));
-        press(&mut app, KeyCode::Esc);
-        assert_eq!(app.mode(), Some(Mode::Insert));
     }
 
     // ---- reply (issue 12) ----

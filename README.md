@@ -12,7 +12,7 @@
 - Teams and WhatsApp direct/group chats in separate tabs
 - Replies, reactions, editing, deleting, mentions and attachments
 - Search, unread counts, notifications, configurable themes and keybindings
-- Optional Vim keybindings, keyboard navigation and local message storage
+- Rebindable keys, keyboard navigation and local message storage
 - Local-first: connect your own accounts; no chatcli-hosted messaging service
 
 ## Get started

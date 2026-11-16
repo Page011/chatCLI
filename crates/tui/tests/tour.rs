@@ -191,9 +191,9 @@ async fn the_tour_plays_every_step_to_the_end() {
         last = screen;
     }
     assert!(r.app.tour_done(), "tour did not finish");
-    // 25 steps play; the 26th is the done screen the loop stops on.
-    assert_eq!(seen_steps.len(), 25, "steps played: {seen_steps:?}");
-    assert_eq!(r.app.tour_step(), Some(26));
+    // 24 steps play; the 25th is the done screen the loop stops on.
+    assert_eq!(seen_steps.len(), 24, "steps played: {seen_steps:?}");
+    assert_eq!(r.app.tour_step(), Some(25));
     if let Some(dir) = &frames {
         std::fs::write(dir.join("done.txt"), r.screen()).unwrap();
     }
@@ -269,7 +269,7 @@ async fn the_caption_bar_fits_a_small_terminal() {
     r.round().await;
     let screen = r.screen();
     assert!(
-        screen.lines().next().unwrap().starts_with("TOUR 1/26 - "),
+        screen.lines().next().unwrap().starts_with("TOUR 1/25 - "),
         "{screen}"
     );
     // The tour must still play on a small screen without a panic.

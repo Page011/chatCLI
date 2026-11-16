@@ -1,4 +1,4 @@
-TOUR 1/26 - Welcome to the chatcli demo: fake chats, nothing is sent.
+TOUR 1/25 - Welcome to the chatcli demo: fake chats, nothing is sent.
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ╔ Chats ═══════════════════╗┌ Conversation ────────────────────────────────────┐
 ║  2  Alex Example    09:15║│                                                  │

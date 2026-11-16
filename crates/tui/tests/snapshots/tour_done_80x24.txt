@@ -1,4 +1,4 @@
-TOUR 26/26 - Tour done. Type / for commands. Ctrl+C quits.
+TOUR 25/25 - Tour done. Type / for commands. Ctrl+C quits.
  chatcli  Teams 101 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ╔ Chats ═══════════════════╗┌ Alex Example ────────────────────────────────────┐
 ║     Alex Example    09:15║│14:31 You           Will do.                      │

@@ -279,7 +279,6 @@ impl TextInput {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::text::tail;
 
     fn t(text: &str) -> TextInput {
         TextInput::from(text)
@@ -428,21 +427,39 @@ mod tests {
     }
 
     #[test]
-    fn the_view_with_the_cursor_at_the_end_is_the_tail() {
-        for (text, width) in [
-            ("short", 20),
-            ("a fairly long query that will not fit", 12),
-            ("\u{4f60}\u{597d}\u{4e16}\u{754c}\u{4f60}\u{597d}", 6),
-            (FAMILY, 4),
-            ("", 5),
+    fn with_the_cursor_at_the_end_the_view_keeps_the_end_of_the_text() {
+        let fam3 = FAMILY.repeat(3);
+        for (text, width, want) in [
+            ("short", 20, "short".to_string()),
+            ("abc", 5, "abc".to_string()),
+            ("abcdef", 5, "\u{2026}def".to_string()),
+            (
+                "\u{4f60}\u{597d}\u{4e16}\u{754c}",
+                6,
+                "\u{2026}\u{4e16}\u{754c}".to_string(),
+            ),
+            // A family emoji is 2 columns: 5 free columns keep two of them after the ellipsis.
+            (fam3.as_str(), 6, format!("\u{2026}{FAMILY}{FAMILY}")),
+            ("", 5, String::new()),
+            ("abc", 1, String::new()),
         ] {
             let (shown, col) = t(text).view(width);
-            assert_eq!(
-                shown,
-                tail(text, width.saturating_sub(1)),
-                "{text:?} {width}"
-            );
+            assert_eq!(shown, want, "{text:?} {width}");
             assert_eq!(col, sw(&shown), "{text:?} {width}");
+        }
+        // Never a split cluster, never wider than the box, for every width.
+        for text in [
+            fam3.as_str(),
+            "a\u{301}b\u{301}c\u{301}d\u{301}",
+            "\u{4f60}x\u{597d}y",
+        ] {
+            let all: Vec<&str> = graphemes(text).collect();
+            for width in 1..=12 {
+                let (shown, _) = t(text).view(width);
+                assert!(sw(&shown) < width.max(1), "{text:?} {width}: {shown:?}");
+                let kept: Vec<&str> = graphemes(shown.trim_start_matches('\u{2026}')).collect();
+                assert_eq!(kept, all[all.len() - kept.len()..], "{text:?} {width}");
+            }
         }
     }
 

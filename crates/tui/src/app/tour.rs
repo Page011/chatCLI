@@ -7,9 +7,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState};
 use ratatui::layout::Rect;
 
 use super::{App, Focus, Out};
-use chatcli_core::settings::KeySettings;
-
-use crate::keymap::{KeyChord, Keymap, Preset, CTRL_C};
+use crate::keymap::{KeyChord, CTRL_C};
 use crate::settings_view::RowId;
 use crate::tour::{self as script, Cond, Prim, Tour};
 
@@ -36,10 +34,7 @@ impl App {
         // Plain default keys, none of the user's: the tour's key presses must hit the actions
         // its captions name. The user's own are put back by `end_tour`.
         let saved = (
-            std::mem::replace(
-                &mut self.keys,
-                Keymap::build(Preset::Default, &KeySettings::default()).0,
-            ),
+            std::mem::take(&mut self.keys),
             std::mem::take(&mut self.settings.keys),
         );
         self.show_lists();
@@ -101,7 +96,6 @@ impl App {
         self.picker = None;
         self.search = None;
         self.popup = None;
-        self.command = None;
         self.media.attach = None;
         for n in Network::ALL {
             let ns = self.ns_mut(n);
@@ -256,9 +250,8 @@ mod tests {
     use chatcli_core::settings::Settings;
 
     fn user_app() -> App {
-        // The user moved `next_network` from Tab to F6 and chose the vim preset.
+        // The user moved `next_network` from Tab to F6.
         let mut s = Settings::default();
-        s.keys.preset = "vim".to_string();
         let global = s.keys.bindings.entry("global".to_string()).or_default();
         global.insert("f6".to_string(), "next_network".to_string());
         global.insert("tab".to_string(), "unbound".to_string());
@@ -268,7 +261,6 @@ mod tests {
                 tz: chrono::FixedOffset::east_opt(0),
             },
             &s,
-            None,
         )
     }
 
@@ -286,9 +278,8 @@ mod tests {
     fn the_tour_plays_on_default_keys_and_gives_the_users_keys_back() {
         let mut app = user_app();
         let own = app.keys().user_bindings();
-        assert!(own > 0 && app.keys().preset() == Preset::Vim);
+        assert!(own > 0);
         app.start_tour();
-        assert_eq!(app.keys().preset(), Preset::Default);
         assert_eq!(app.keys().user_bindings(), 0);
         // Step 2 presses Tab: with the user's keys it would do nothing.
         let seen = run_ms(&mut app, 8_000);
@@ -301,8 +292,7 @@ mod tests {
             crossterm::event::KeyModifiers::NONE,
         ));
         assert!(!app.tour_running());
-        assert_eq!(app.keys().preset(), Preset::Vim);
         assert_eq!(app.keys().user_bindings(), own);
-        assert_eq!(app.settings.keys.preset, "vim");
+        assert_eq!(app.settings.keys.bindings["global"]["f6"], "next_network");
     }
 }

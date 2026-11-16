@@ -10,8 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `settings.toml`: one hand-edited file for key bindings, theme, layout, notifications, media limits, optional Teams scopes and WhatsApp privacy options. A broken section falls back to its defaults with one notice naming the line and key. `chatcli settings path` and `chatcli settings check`.
 - Keys are named actions in a keymap. Rebind them in `settings.toml` (`[keys.<context>]`), with a notice for every mistake and a suggested name. `?` opens a help screen generated from the active keys.
-- Vim key preset (`[keys] preset = "vim"`, `--keys vim`, or `/keys vim` live): Normal, Insert and Select modes, `gg` `gt` `gT`, and a `:` command box.
-- Message selection (`Ctrl+Up`, `v` in vim): reply with a quote, react, edit and delete your own messages, open links, open attachments.
+- Message selection (`Ctrl+Up`): reply with a quote, react, edit and delete your own messages, open links, open attachments.
 - Replies with a quote on Teams and WhatsApp. Teams needs the new `ChatMessage.Send` permission: log out of Teams and sign in again after upgrading.
 - Reactions on Teams and WhatsApp, shown as counts under each message, with an emoji picker (`Ctrl+E`, Recent first) and `:shortcode` completion.
 - Edit and delete your own messages on Teams and WhatsApp. Edits and deletes from other people update in place.
@@ -37,15 +36,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Linux: `CHATCLI_SECRET_STORE=file` keeps secrets in `secrets.json` in the data folder (mode 0600, not encrypted) for systems with no Secret Service.
 - Winget and Scoop manifests (not yet submitted), a code-signing write-up, a memory benchmark script, a relay end-to-end test, WhatsApp fake-transport tests, and release notes built from this file.
 - Sidebar preview: moving through the chat list (arrow keys, j/k, page keys, a click) shows each chat in the message pane at once. Enter replies, Esc goes back. A previewed chat counts as read after 2 s on screen, never while its pane is hidden.
-- `/` command bar (chat list, sign-in panel, message selection): lists every command and your chats. Commands also work as `/command` in the message box (`//` sends a message that starts with a slash) and as `:command` in the vim box: `/help` `/settings` `/keys` `/theme` `/layout` `/notifications` `/search` `/refresh` `/signin` `/signout` `/about` `/tour` `/quit`.
+- `/` command bar (chat list, sign-in panel, message selection): lists every command and your chats. Commands also work as `/command` in the message box (`//` sends a message that starts with a slash): `/help` `/settings` `/keys` `/theme` `/layout` `/notifications` `/search` `/refresh` `/signin` `/signout` `/about` `/tour` `/quit`.
 - Settings screen (`F2`, `/settings`): theme and the 14 colour roles with a live preview, layout, notifications, media limits, Teams file permissions and WhatsApp privacy options. Every change applies at once and is saved to `settings.toml`, one key at a time, with comments kept. A `settings.toml` that does not parse is never written: the change applies for the session and `NOT SAVED` says why.
-- Key bindings page (`/keys`): change any key by pressing the new one, swap on a clash, remove, reset one or all, and switch the key preset. Saved to `[keys]` in `settings.toml`.
-- Key bindings page: several keys per action. `a` adds a key and keeps the others, `d` chooses one of the action's keys with `Left` / `Right` and deletes it. A key another action of the same context holds is refused and named; one that overlaps an `Everywhere` key or a vim sequence asks first.
-- Guided tour: `chatcli --demo --tour` (or `/tour` in the demo) plays 26 captioned steps over the demo data. `Space` pauses, `n` skips a step, `Esc` ends it. The demo and the tour run on a temporary copy of the settings and never write your real `settings.toml`.
+- Key bindings page (`/keys`): change any key by pressing the new one, swap on a clash, remove, and reset one or all. Saved to `[keys]` in `settings.toml`.
+- Key bindings page: several keys per action. `a` adds a key and keeps the others, `d` chooses one of the action's keys with `Left` / `Right` and deletes it. A key another action of the same context holds is refused and named; one that overlaps an `Everywhere` key or a two-key sequence asks first.
+- Guided tour: `chatcli --demo --tour` (or `/tour` in the demo) plays 25 captioned steps over the demo data. `Space` pauses, `n` skips a step, `Esc` ends it. The demo and the tour run on a temporary copy of the settings and never write your real `settings.toml`.
 
 ### Changed
 
-- `F2` opens the settings screen instead of switching the key preset (use `/keys vim` or `:keys vim`). `/` opens the command bar instead of the plain chat filter; bind a key to `filter_start` to keep the filter. A message that starts with `/` is a command: type `//` to send it as text.
+- `/` opens the command bar instead of the plain chat filter; bind a key to `filter_start` to keep the filter. A message that starts with `/` is a command: type `//` to send it as text.
 - `settings.toml` is no longer read-only to chatcli: the settings screen writes it (see Added).
 - WhatsApp read receipts are now off by default (`[whatsapp] send_read_receipts`). Before, they were always sent.
 - An edited WhatsApp message no longer gets an `(edited)` text suffix: the message carries an edited flag. A deleted message has empty text and shows `[message deleted]`.

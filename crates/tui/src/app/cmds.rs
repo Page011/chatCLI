@@ -1,11 +1,10 @@
-//! Commands: the `/` command bar, `/command` in the message box and `:command` in the vim
-//! box all end in `run_cmd`. `App` stays pure: a command that needs a backend returns an `Out`.
+//! Commands: the `/` command bar and `/command` in the message box both end in `run_cmd`. `App` stays pure: a command that needs a backend returns an `Out`.
 
 use chatcli_core::model::{Command, Status};
 
 use super::{App, Focus, Out, Prompt};
 use crate::commands::{self, Cmd, CmdId, COMMANDS_TITLE};
-use crate::keymap::{Action, Preset};
+use crate::keymap::Action;
 use crate::palette::{PalItem, Palette};
 use crate::popup::{Popup, PopupItem};
 use crate::settings_view::{Section, SettingsPage};
@@ -51,7 +50,7 @@ impl App {
         if let Some(reason) = self.cmd_unavailable(id) {
             return Some((reason, false));
         }
-        let takes_arg = matches!(id, CmdId::Keys | CmdId::Theme);
+        let takes_arg = id == CmdId::Theme;
         if arg.is_some() && !takes_arg {
             let name = commands::COMMANDS
                 .iter()
@@ -73,16 +72,7 @@ impl App {
             CmdId::Help => self.help = Some(0),
             CmdId::Settings => self.open_settings(Section::Appearance),
             CmdId::Theme => return self.cmd_theme(arg),
-            CmdId::Keys => match arg {
-                None => self.open_settings(Section::Keys),
-                Some(name) => match Preset::from_name(name) {
-                    Some(p) => self.set_preset(p),
-                    None => self.push_global_notice(
-                        &format!("Unknown key preset \"{name}\": use default or vim."),
-                        true,
-                    ),
-                },
-            },
+            CmdId::Keys => self.open_settings(Section::Keys),
             CmdId::Layout => self.open_settings(Section::Layout),
             CmdId::Notifications => self.open_settings(Section::Notifications),
             CmdId::About => self.open_settings(Section::About),

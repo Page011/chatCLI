@@ -9,9 +9,7 @@ use chatcli_core::settings::{
 };
 
 use crate::input::TextInput;
-use crate::keymap::{
-    actions_for, parse_key, preset_keys, Action, Context, KeyChord, Keymap, Preset,
-};
+use crate::keymap::{actions_for, default_keys, parse_key, Action, Context, KeyChord, Keymap};
 use crate::theme::{parse_colour, ROLES, THEMES};
 
 /// A page of the settings screen, opened by `/settings`, `/theme`, `/keys`, `/layout`,
@@ -188,8 +186,6 @@ pub(crate) enum RowId {
     Info(&'static str),
     /// A read-only settings.toml problem (About), by position.
     Problem(usize),
-    /// Keys page: the key preset (default or vim).
-    KeyPreset,
     /// Keys page: a context's name, not selectable.
     KeyHeading(Context),
     /// Keys page: one action in one context. Enter captures its key.
@@ -352,12 +348,12 @@ pub(crate) fn edit_start(s: &Settings, id: RowId) -> String {
     }
 }
 
-/// The user's `[keys.<ctx>]` names `action`, or unbinds one of its preset keys.
-fn key_is_custom(s: &Settings, preset: Preset, ctx: Context, action: Action) -> bool {
+/// The user's `[keys.<ctx>]` names `action`, or unbinds one of its built-in keys.
+fn key_is_custom(s: &Settings, ctx: Context, action: Action) -> bool {
     let Some(table) = s.keys.bindings.get(ctx.name()) else {
         return false;
     };
-    let own = preset_keys(preset, ctx, action);
+    let own = default_keys(ctx, action);
     table.iter().any(|(k, v)| {
         v == action.name()
             || (v == Action::Unbound.name() && parse_key(k).is_ok_and(|c| own.contains(&c)))
@@ -383,17 +379,16 @@ fn key_value(keys: &Keymap, ctx: Context, action: Action, custom: bool) -> Strin
     value
 }
 
-/// The Keys page: the preset, then every context of that preset with its actions, then Reset all.
+/// The Keys page: a legend, then every context with its actions, then Reset all.
 fn key_rows(out: &mut Vec<Row>, s: &Settings, keys: &Keymap) {
-    let preset = keys.preset();
     out.push(row(
-        RowId::KeyPreset,
-        "Key preset",
-        preset.name().to_string(),
-        "default or vim; * = changed by you",
-        preset != Preset::Default,
+        RowId::Info("keys"),
+        "",
+        "* marks a key you changed".to_string(),
+        "",
+        false,
     ));
-    for ctx in preset.contexts() {
+    for ctx in Context::ALL {
         out.push(row(
             RowId::KeyHeading(ctx),
             ctx.title(),
@@ -401,8 +396,8 @@ fn key_rows(out: &mut Vec<Row>, s: &Settings, keys: &Keymap) {
             "",
             false,
         ));
-        for a in actions_for(preset, ctx, &s.keys) {
-            let custom = key_is_custom(s, preset, ctx, a);
+        for a in actions_for(ctx, &s.keys) {
+            let custom = key_is_custom(s, ctx, a);
             out.push(row(
                 RowId::KeyAction(ctx, a),
                 &a.label(),
@@ -715,19 +710,6 @@ pub(crate) fn change(s: &Settings, id: RowId, c: Change) -> Done {
         }
         RowId::KeyAction(..) => Err("Enter replaces a key, a adds one, d deletes one".to_string()),
         RowId::ResetAllKeys => Err("press Enter to reset every key".to_string()),
-        RowId::KeyPreset => {
-            let cur = Preset::from_name(&s.keys.preset).unwrap_or(Preset::Default);
-            let name = match &c {
-                Change::Reset => Preset::Default,
-                Change::Text(t) => {
-                    Preset::from_name(t).ok_or_else(|| "use default or vim".to_string())?
-                }
-                _ => cur.other(),
-            }
-            .name();
-            n.keys.preset = name.to_string();
-            one(n, mk("keys", "preset", reset, SettingValue::str(name)))
-        }
         RowId::ThemeName => {
             let name = match &c {
                 Change::Reset => d.theme.name.clone(),
@@ -1003,7 +985,7 @@ mod tests {
     #[test]
     fn every_selectable_row_survives_every_change() {
         let ids = all_ids();
-        assert_eq!(ids.len(), 19 + ROLES.len());
+        assert_eq!(ids.len(), 18 + ROLES.len());
         for id in ids {
             for c in [Change::Prev, Change::Next, Change::Toggle, Change::Reset] {
                 let (_, edits) = run(&Settings::default(), id, c.clone());
@@ -1287,7 +1269,7 @@ mod tests {
         let t = s.keys.bindings.entry("list".into()).or_default();
         t.insert("f5".into(), "refresh".into());
         t.insert("p".into(), "unbound".into());
-        let keys = Keymap::build(Preset::Default, &s.keys).0;
+        let keys = Keymap::build(&s.keys).0;
         let r = rows(Section::Keys, &s, &keys, &[], &[]);
         let find = |a: Action| {
             r.iter()
@@ -1300,25 +1282,6 @@ mod tests {
         assert_eq!(find(Action::Pin).value, "- *");
         assert!(!find(Action::Mute).custom);
         assert_eq!(find(Action::Mute).value, "m");
-    }
-
-    #[test]
-    fn the_preset_row_cycles_default_and_vim_and_resets() {
-        let s = Settings::default();
-        let (n, e) = run(&s, RowId::KeyPreset, Change::Next);
-        assert_eq!(n.keys.preset, "vim");
-        assert_eq!(
-            e,
-            vec![SettingEdit::set("keys", "preset", SettingValue::str("vim"))]
-        );
-        let (n, _) = run(&n, RowId::KeyPreset, Change::Prev);
-        assert_eq!(n.keys.preset, "default");
-        let (_, e) = run(&n, RowId::KeyPreset, Change::Reset);
-        assert_eq!(e, vec![SettingEdit::remove("keys", "preset")]);
-        assert_eq!(
-            err(&s, RowId::KeyPreset, Change::Text("emacs".into())),
-            "use default or vim"
-        );
     }
 
     #[test]

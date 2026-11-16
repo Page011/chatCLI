@@ -1,4 +1,4 @@
-TOUR 1/26 PAUSED                                   Space resume  n next  Esc end
+TOUR 1/25 PAUSED                                   Space resume  n next  Esc end
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ╔ Chats ═══════════════════╗┌ Conversation ────────────────────────────────────┐
 ║  2  Alex Example    09:15║│                                                  │

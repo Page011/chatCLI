@@ -21,7 +21,7 @@
 │                │║Reset all keys                                              ║
 │                │║Enter removes every key you set, after y/n                  ║
 └────────────────┘╚════════════════════════════════════════════════════════════╝
-Reset every key to the preset? y/n
+Reset every key to its default? y/n
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -34,4 +34,4 @@ row 11 cols 19-51: fg=Reset bg=Reset BOLD
 row 14 cols 19-27: fg=Reset bg=Reset BOLD
 row 20 cols 19-78: fg=Reset bg=Reset BOLD | REVERSED
 row 21 cols 19-60: fg=Reset bg=Reset DIM
-row 23 cols 0-33: fg=Reset bg=Reset BOLD
+row 23 cols 0-34: fg=Reset bg=Reset BOLD

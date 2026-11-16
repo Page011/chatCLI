@@ -9,7 +9,7 @@
 //!   Sixel / Kitty / iTerm2 graphics
 //! - `commands`, `palette`: the `/` command registry and the command bar; `settings_view`: the
 //!   settings screen model
-//! - `keymap`: named actions, key chords, the `default` and `vim` presets, `[keys]` validation
+//! - `keymap`: named actions, key chords, the built-in keys, `[keys]` validation
 //! - `tour`: the guided tour's script (`chatcli --demo --tour`); `app/tour.rs` plays it
 //! - `ui`: drawing
 //! - `text`: width-aware helpers and the clock
@@ -71,15 +71,14 @@ use tokio::sync::mpsc::unbounded_channel;
 
 pub use app::media::FileJob;
 pub use app::{App, Focus, Notice, Out};
-pub use keymap::{parse_key, Action, Context, KeyChord, Keymap, Mode, Preset};
+pub use keymap::{parse_key, Action, Context, KeyChord, Keymap};
 pub use media_view::{make_thumb, Depth, MediaKey, Thumb};
 pub use text::Clock;
 pub use theme::{parse_colour, Theme};
 pub use ui::draw;
 
-/// Problems the TUI finds in `settings.toml` that core cannot: the `[keys]` preset name and
-/// every binding (unknown action, unreadable key, same key twice, a key that would stop typing,
-/// Ctrl+C). `chatcli settings check` prints these together with core's own problems.
+/// Problems the TUI finds in `settings.toml` that core cannot: every `[keys]` binding (unknown
+/// action, unreadable key, same key twice, a key that would stop typing, Ctrl+C). `chatcli settings check` prints these together with core's own problems.
 pub fn validate_settings(settings: &Settings) -> Vec<SettingsProblem> {
     let mut problems = keymap::validate_keys(settings);
     problems.extend(theme::validate_theme(&settings.theme));
@@ -714,14 +713,18 @@ mod tests {
     fn settings_check_reports_theme_and_key_problems_together() {
         let mut s = chatcli_core::settings::Settings::default();
         s.theme.overrides.insert("dim".into(), "banana".into());
-        s.keys.preset = "emacs".into();
+        s.keys
+            .bindings
+            .entry("list".into())
+            .or_default()
+            .insert("ctrl+n".into(), "lst_down".into());
         let texts: Vec<String> = validate_settings(&s).iter().map(|p| p.text()).collect();
         assert!(
             texts.iter().any(|t| t.contains("[theme] dim:")),
             "{texts:?}"
         );
         assert!(
-            texts.iter().any(|t| t.contains("[keys] preset:")),
+            texts.iter().any(|t| t.contains("[keys.list] ctrl+n:")),
             "{texts:?}"
         );
         assert!(validate_settings(&chatcli_core::settings::Settings::default()).is_empty());
