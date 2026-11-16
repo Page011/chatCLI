@@ -2,6 +2,7 @@
 /target
 **/node_modules
 relay/.wrangler
+/result
 
 # Local secrets and data: never commit
 .dev.vars
