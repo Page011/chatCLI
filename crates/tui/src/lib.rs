@@ -295,30 +295,33 @@ fn spawn_work<R: Send + 'static>(
 
 /// Saves the clipboard's picture as a PNG in the data folder's `tmp`. Blocking: run it on a
 /// worker thread. Clipboard access fails over remote sessions: that is a notice, never a crash.
-/// `y`: puts `text` on the clipboard. Over SSH the local clipboard is the wrong machine's (or
-/// none), so the terminal is asked to copy it (OSC 52); elsewhere `clipboard` is used, and the
-/// terminal only when it cannot be reached. The `Ok` text is the notice.
+/// `y`: puts `text` on the clipboard, two ways at once. The terminal is always asked (OSC 52):
+/// most terminals do it (Ghostty, kitty, foot, WezTerm, Windows Terminal), it reaches the right
+/// machine over SSH, and a terminal without it ignores the sequence. `clipboard` (the native one)
+/// is used too, except over SSH, where it would be the remote machine's. The `Ok` text is the
+/// notice.
 fn copy_text(
     clipboard: &mut Option<arboard::Clipboard>,
     text: &str,
 ) -> std::result::Result<&'static str, String> {
+    use std::io::Write;
+    let mut out = io::stdout();
+    let terminal = out
+        .write_all(osc52(text).as_bytes())
+        .and_then(|()| out.flush());
     let ssh = std::env::var_os("SSH_CONNECTION").is_some() || std::env::var_os("SSH_TTY").is_some();
     if !ssh {
         if clipboard.is_none() {
             *clipboard = arboard::Clipboard::new().ok();
         }
-        if let Some(c) = clipboard.as_mut() {
-            if c.set_text(text).is_ok() {
-                return Ok("Copied.");
-            }
+        if clipboard.as_mut().is_some_and(|c| c.set_text(text).is_ok()) {
+            return Ok("Copied.");
         }
     }
-    use std::io::Write;
-    let mut out = io::stdout();
-    out.write_all(osc52(text).as_bytes())
-        .and_then(|()| out.flush())
-        .map_err(|e| format!("Could not copy ({e})."))?;
-    Ok("Copied through the terminal (it may need to allow that).")
+    match terminal {
+        Ok(()) => Ok("Copied through the terminal (it may need to allow that)."),
+        Err(e) => Err(format!("Could not copy ({e}).")),
+    }
 }
 
 /// The OSC 52 sequence that asks the terminal to put `text` on the clipboard.

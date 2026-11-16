@@ -315,7 +315,7 @@ Message selection (`Enter` on a chat, or `Shift+Up` from the message box). The f
 | `d` or `x` | Delete your own message for everyone, after a `y/n` |
 | `u` | Open a link from this message |
 | `o` | Open the attachment (downloads first if needed) |
-| `y` | Copy the message's text (for an attachment with no caption, its file name). Over SSH, or where no clipboard can be reached, chatcli asks the terminal to copy it (OSC 52), which some terminals must be told to allow |
+| `y` | Copy the message's text (for an attachment with no caption, its file name). chatcli uses the system clipboard (on Linux the Wayland one natively, on wlroots compositors and KDE) and also asks the terminal to copy it (OSC 52), which is what works over SSH; some terminals must be told to allow that |
 
 Popups and pickers take `Enter` (not `Tab`) for the chosen item. `view_image` (a thumbnail of an image, in message selection) and `open_link` in the chat list (a link from the newest message) have no default key: bind one if you want them.
 
