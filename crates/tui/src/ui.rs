@@ -629,6 +629,7 @@ fn select_items(app: &App) -> Vec<(String, bool)> {
         (&[CommandBar][..], "commands", true),
         (&[Compose][..], "type", true),
         (&[Help][..], "help", true),
+        (&[Copy][..], "copy", true),
     ]);
     items
         .iter()

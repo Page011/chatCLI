@@ -1,15 +1,15 @@
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ┌ Settings ──────┐╔ Keys - Message selection ══════════════════════════════════╗
-│Appearance      │║Compose             i                                       ║
-│Layout          │║Top                 Home                                    ║
-│Notifications   │║Bottom              End                                     ║
-│Media           │║Screen middle       M                                       ║
-│Teams           │║Reply               r                                       ║
-│WhatsApp        │║React               e                                       ║
-│Keys            │║Edit                c                                       ║
-│About           │║Delete              x, d                                    ║
-│                │║Open link           u                                       ║
+│Appearance      │║Top                 Home                                    ║
+│Layout          │║Bottom              End                                     ║
+│Notifications   │║Screen middle       M                                       ║
+│Media           │║Reply               r                                       ║
+│Teams           │║React               e                                       ║
+│WhatsApp        │║Edit                c                                       ║
+│Keys            │║Delete              x, d                                    ║
+│About           │║Open link           u                                       ║
 │                │║Open media          o                                       ║
+│                │║Copy                y                                       ║
 │                │║Jump back           Ctrl+O                                  ║
 │                │║View image          -                                       ║
 │                │║Confirm (link, delete, mark read)                           ║

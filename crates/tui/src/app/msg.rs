@@ -447,6 +447,31 @@ impl App {
         }
     }
 
+    /// `y` on the highlighted message: its text, without the attachment markers; for an attachment
+    /// with no caption, its file name. Queued for the run loop, which owns the clipboard.
+    pub(super) fn copy_selected(&mut self, n: Network) {
+        let Some(m) = self.selected_message(n) else {
+            return;
+        };
+        let text = crate::media_view::strip_markers(&m.text, m.attachments.len())
+            .trim()
+            .to_string();
+        let text = if text.is_empty() {
+            m.attachments
+                .iter()
+                .filter_map(|a| a.name.clone())
+                .collect::<Vec<_>>()
+                .join(", ")
+        } else {
+            text
+        };
+        if text.is_empty() {
+            self.push_notice(n, "Nothing to copy in this message.", false);
+        } else {
+            self.copy = Some((n, text));
+        }
+    }
+
     /// `u` on the highlighted message: its links, behind the same "Open host? y/n" line.
     pub(super) fn link_selected(&mut self, n: Network) {
         let urls = self
@@ -1038,6 +1063,52 @@ mod tests {
         let mut app = app_with(ChatKind::Direct, Vec::new());
         press(&mut app, KeyCode::Esc);
         assert_eq!(app.active().focus, Focus::List);
+    }
+
+    #[test]
+    fn y_copies_the_text_or_the_file_name() {
+        let mut app = app_with(ChatKind::Direct, three());
+        ctrl_up(&mut app);
+        ch(&mut app, 'y');
+        assert_eq!(
+            app.take_copy(),
+            Some((
+                Network::Teams,
+                "third https://docs.example.invalid/a".to_string()
+            ))
+        );
+        assert_eq!(app.take_copy(), None, "once");
+        app.copy_done(Network::Teams, Ok("Copied."));
+        assert_eq!(
+            app.current_notice().map(|n| n.text.as_str()),
+            Some("Copied.")
+        );
+        // An attachment: its caption without the marker, or its name when there is none.
+        let file = |text: &str| {
+            let mut m = msg("f", 4000, false, text);
+            m.attachments = vec![chatcli_core::model::Attachment {
+                kind: chatcli_core::model::MediaKind::Document,
+                name: Some("plan.pdf".into()),
+                mime: None,
+                size: None,
+                fetch_ref: chatcli_core::model::FetchRef::new("ref"),
+                open_url: None,
+            }];
+            m
+        };
+        for (text, want) in [
+            ("[document: plan.pdf] see p2", "see p2"),
+            ("[document: plan.pdf]", "plan.pdf"),
+        ] {
+            let mut app = app_with(ChatKind::Direct, vec![file(text)]);
+            ctrl_up(&mut app);
+            ch(&mut app, 'y');
+            assert_eq!(
+                app.take_copy().map(|c| c.1).as_deref(),
+                Some(want),
+                "{text}"
+            );
+        }
     }
 
     #[test]

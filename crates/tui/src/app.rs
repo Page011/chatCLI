@@ -308,6 +308,8 @@ pub struct App {
     prompt: Option<Prompt>,
     /// Links the user confirmed; the run loop opens them (App stays pure).
     open_urls: Vec<String>,
+    /// Text `y` asked the run loop to put on the clipboard (`take_copy`).
+    copy: Option<(Network, String)>,
     /// Attachments: the path prompt, queues for the run loop, thumbnail settings (issues 16-37).
     media: media::Ctl,
     /// Colours by role (issue 22).
@@ -502,6 +504,7 @@ impl App {
             store: None,
             prompt: None,
             open_urls: Vec::new(),
+            copy: None,
             media: media::Ctl::default(),
             theme: Theme::default(),
             layout: LayoutSettings::default(),
@@ -639,6 +642,20 @@ impl App {
     /// browser (core's `open_url` checks it again) and shows the error if that fails.
     pub fn take_open_urls(&mut self) -> Vec<String> {
         std::mem::take(&mut self.open_urls)
+    }
+
+    /// Text to put on the clipboard, once (`y` in message selection). The run loop copies it and
+    /// answers with `copy_done`.
+    pub fn take_copy(&mut self) -> Option<(Network, String)> {
+        self.copy.take()
+    }
+
+    /// How the copy went: the notice line says so.
+    pub fn copy_done(&mut self, n: Network, result: Result<&str, String>) {
+        match result {
+            Ok(text) => self.push_notice(n, text, false),
+            Err(e) => self.push_notice(n, &e, true),
+        }
     }
 
     /// True while something covers the message box, so it must not draw the terminal cursor.
@@ -1412,6 +1429,7 @@ impl App {
                 self.request_clipboard(n);
             }
             Action::OpenMedia if ctx == Context::Select => return self.open_media(n),
+            Action::Copy if ctx == Context::Select => self.copy_selected(n),
             Action::JumpBack if ctx == Context::Select => self.jump_back(n),
             Action::ViewImage if ctx == Context::Select => return self.view_image(n),
             Action::SelectMessages if !panel => return self.enter_select(n),

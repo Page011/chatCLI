@@ -295,6 +295,39 @@ fn spawn_work<R: Send + 'static>(
 
 /// Saves the clipboard's picture as a PNG in the data folder's `tmp`. Blocking: run it on a
 /// worker thread. Clipboard access fails over remote sessions: that is a notice, never a crash.
+/// `y`: puts `text` on the clipboard. Over SSH the local clipboard is the wrong machine's (or
+/// none), so the terminal is asked to copy it (OSC 52); elsewhere `clipboard` is used, and the
+/// terminal only when it cannot be reached. The `Ok` text is the notice.
+fn copy_text(
+    clipboard: &mut Option<arboard::Clipboard>,
+    text: &str,
+) -> std::result::Result<&'static str, String> {
+    let ssh = std::env::var_os("SSH_CONNECTION").is_some() || std::env::var_os("SSH_TTY").is_some();
+    if !ssh {
+        if clipboard.is_none() {
+            *clipboard = arboard::Clipboard::new().ok();
+        }
+        if let Some(c) = clipboard.as_mut() {
+            if c.set_text(text).is_ok() {
+                return Ok("Copied.");
+            }
+        }
+    }
+    use std::io::Write;
+    let mut out = io::stdout();
+    out.write_all(osc52(text).as_bytes())
+        .and_then(|()| out.flush())
+        .map_err(|e| format!("Could not copy ({e})."))?;
+    Ok("Copied through the terminal (it may need to allow that).")
+}
+
+/// The OSC 52 sequence that asks the terminal to put `text` on the clipboard.
+fn osc52(text: &str) -> String {
+    use base64::Engine;
+    let data = base64::engine::general_purpose::STANDARD.encode(text);
+    format!("\x1b]52;c;{data}\x07")
+}
+
 fn clipboard_to_temp() -> std::result::Result<PathBuf, String> {
     let mut clipboard = arboard::Clipboard::new().map_err(|_| {
         "Cannot reach the clipboard here: attach the file with Ctrl+O instead.".to_string()
@@ -411,6 +444,9 @@ pub async fn run(
     let mut toast_failed = false;
     let mut dirty = true;
     let mut result = Ok(());
+    // One clipboard for the whole run: on Linux the copied text is served by this handle, so it
+    // must stay alive after `y` (made on the first copy).
+    let mut clipboard: Option<arboard::Clipboard> = None;
 
     while !app.should_quit() {
         if dirty {
@@ -572,6 +608,11 @@ pub async fn run(
             );
             dirty = true;
         }
+        if let Some((net, text)) = app.take_copy() {
+            let r = copy_text(&mut clipboard, &text);
+            app.copy_done(net, r);
+            dirty = true;
+        }
         if let Some((net, chat)) = app.take_clipboard_request() {
             spawn_work(
                 internal_tx.clone(),
@@ -612,6 +653,12 @@ mod tests {
         Internal,
     };
     use std::path::PathBuf;
+
+    #[test]
+    fn osc52_carries_the_text_as_base64() {
+        assert_eq!(crate::osc52("hi"), "\x1b]52;c;aGk=\x07");
+        assert_eq!(crate::osc52(""), "\x1b]52;c;\x07");
+    }
 
     #[test]
     fn the_demo_never_opens_a_file_in_an_app() {

@@ -9,6 +9,8 @@ license.workspace = true
 [dependencies]
 # Clipboard image for "paste image" (issue 20). Default features: the image-data reader.
 arboard = "3.7"
+# OSC 52: `y` copies through the terminal over SSH, where no local clipboard can be reached.
+base64.workspace = true
 chatcli-core.workspace = true
 chrono.workspace = true
 crossterm.workspace = true

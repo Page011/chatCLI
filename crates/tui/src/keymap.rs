@@ -176,6 +176,7 @@ actions! {
     Edit "edit" "edit the selected message of yours",
     Delete "delete" "delete the selected message of yours for everyone",
     OpenMedia "open_media" "open the selected message's attachment in the default app",
+    Copy "copy" "copy the selected message's text (an attachment without a caption: its file name)",
     ViewImage "view_image" "show or hide a thumbnail of the selected image",
     Attach "attach" "choose a file to send: type or complete its path",
     PasteImage "paste_image" "attach the image on the clipboard",
@@ -588,6 +589,7 @@ const OWN: &[Row] = &[
     (Context::Select, "d", Action::Delete),
     (Context::Select, "u", Action::OpenLink),
     (Context::Select, "o", Action::OpenMedia),
+    (Context::Select, "y", Action::Copy),
     (Context::Select, "ctrl+o", Action::JumpBack),
     // The message box (its editing keys are in `common`).
     (Context::Composer, "enter", Action::Send),
