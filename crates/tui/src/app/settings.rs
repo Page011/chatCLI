@@ -12,7 +12,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::{App, Out, Prompt};
 use crate::keymap::{Action, Context, KeyChord, Keymap, Preset, CTRL_C};
-use crate::keys_edit::{self, Captured};
+use crate::keys_edit::{self, Adding, Captured};
 use crate::settings_view::{self, Change, Kind, PageEdit, Row, RowId, Section, SettingsPage};
 
 /// The About page's lines. Tests built without a context show `-` for the paths.
@@ -319,6 +319,38 @@ impl App {
                 KeyCode::Esc => self.set_edit(None),
                 _ => {}
             },
+            Some(PageEdit::Add { ctx, action }) => {
+                match keys_edit::capture_add(&self.keys, ctx, action, chord) {
+                    Adding::Cancel | Adding::Same => self.set_edit(None),
+                    Adding::Refused(msg) => self.set_error(Some(msg)),
+                    Adding::Overlaps(note) => self.set_edit(Some(PageEdit::AddOverlap {
+                        ctx,
+                        action,
+                        key: chord,
+                        note,
+                    })),
+                    Adding::Free => {
+                        self.set_edit(None);
+                        let done =
+                            keys_edit::add(&self.keys, &self.settings.keys, ctx, action, chord);
+                        return self.key_result(done);
+                    }
+                }
+            }
+            Some(PageEdit::AddOverlap {
+                ctx, action, key, ..
+            }) => match code {
+                KeyCode::Enter => {
+                    self.set_edit(None);
+                    let done = keys_edit::add(&self.keys, &self.settings.keys, ctx, action, key);
+                    return self.key_result(done);
+                }
+                KeyCode::Esc => self.set_edit(None),
+                _ => {}
+            },
+            Some(PageEdit::Pick { ctx, action, index }) => {
+                return self.pick_key(chord, code, ctx, action, index)
+            }
             Some(PageEdit::Capture { ctx, action }) => {
                 match keys_edit::capture(&self.keys, ctx, action, chord) {
                     Captured::Cancel | Captured::Same => self.set_edit(None),
@@ -351,6 +383,69 @@ impl App {
             _ => {}
         }
         Vec::new()
+    }
+
+    /// One key press while choosing which key of `action` to delete. Left/Right (h/l) move,
+    /// Enter or d deletes, Esc leaves. A locked key is refused and the choice stays open.
+    fn pick_key(
+        &mut self,
+        chord: KeyChord,
+        code: KeyCode,
+        ctx: Context,
+        action: Action,
+        index: usize,
+    ) -> Out {
+        let keys = self.keys.keys_in(ctx, action);
+        if keys.is_empty() {
+            self.set_edit(None);
+            return Vec::new();
+        }
+        let plain = !chord
+            .mods
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
+        let n = keys.len();
+        let index = index.min(n - 1);
+        let moved = |index| Some(PageEdit::Pick { ctx, action, index });
+        match (code, plain) {
+            (KeyCode::Left | KeyCode::Char('h'), true) => self.set_edit(moved((index + n - 1) % n)),
+            (KeyCode::Right | KeyCode::Char('l'), true) => self.set_edit(moved((index + 1) % n)),
+            (KeyCode::Enter | KeyCode::Char('d'), true) => {
+                match keys_edit::remove_key(
+                    &self.keys,
+                    &self.settings.keys,
+                    ctx,
+                    action,
+                    keys[index],
+                ) {
+                    Ok(done) => {
+                        self.set_edit(None);
+                        return self.key_result(Ok(done));
+                    }
+                    Err(msg) => self.set_error(Some(msg)),
+                }
+            }
+            (KeyCode::Esc, _) => self.set_edit(None),
+            _ => {}
+        }
+        Vec::new()
+    }
+
+    /// `a` and `d` on a key row: add a key, or choose one to delete.
+    fn start_key_edit(&mut self, add: bool) {
+        let Some(RowId::KeyAction(ctx, action)) = self.current_row().map(|r| r.id) else {
+            return;
+        };
+        if add {
+            self.set_edit(Some(PageEdit::Add { ctx, action }));
+        } else if self.keys.keys_in(ctx, action).is_empty() {
+            self.set_error(Some(format!("{} has no keys to delete", action.label())));
+        } else {
+            self.set_edit(Some(PageEdit::Pick {
+                ctx,
+                action,
+                index: 0,
+            }));
+        }
     }
 
     /// Enter on a row: a number, width or colour starts typing, the rest change.
@@ -408,10 +503,11 @@ impl App {
     /// keymap hard-wires it), F1 opens help, F2 and Esc close.
     pub(super) fn settings_key(&mut self, key: &KeyEvent) -> Out {
         let chord = KeyChord::from_event(key);
-        let capturing = matches!(
-            self.settings_page.as_ref().and_then(|p| p.edit.as_ref()),
-            Some(PageEdit::Capture { .. } | PageEdit::Conflict { .. })
-        );
+        let capturing = self
+            .settings_page
+            .as_ref()
+            .and_then(|p| p.edit.as_ref())
+            .is_some_and(PageEdit::is_key_edit);
         if capturing {
             return self.capture_key(chord, key.code);
         }
@@ -481,6 +577,7 @@ impl App {
             (KeyCode::Char(' '), true) if in_rows => return self.change_row(Change::Toggle),
             (KeyCode::Enter, _) if in_rows => return self.enter_row(),
             (KeyCode::Char('r'), true) if in_rows => return self.change_row(Change::Reset),
+            (KeyCode::Char(c @ ('a' | 'd')), true) if in_rows => self.start_key_edit(c == 'a'),
             _ => return self.settings_global(global, key),
         }
         Vec::new()
@@ -906,7 +1003,7 @@ mod tests {
         press(&mut a, KeyCode::Right);
         assert_eq!(
             a.settings_page().unwrap().error.as_deref(),
-            Some("press Enter, then the new key")
+            Some("Enter replaces a key, a adds one, d deletes one")
         );
     }
 
@@ -945,6 +1042,177 @@ mod tests {
             "F5 *"
         );
         assert!(a.current_row().unwrap().custom);
+    }
+
+    #[test]
+    fn a_adds_a_key_and_keeps_the_old_one() {
+        let mut a = on_key_row(Context::List, Action::Refresh);
+        press(&mut a, KeyCode::Char('a'));
+        assert_eq!(
+            capture_text(&a).as_deref(),
+            Some("Press a key to add to Refresh (Esc cancels)")
+        );
+        press(&mut a, KeyCode::F(5));
+        assert!(a.settings_page().unwrap().edit.is_none());
+        assert_eq!(
+            value_of(&a, keys_row(Context::List, Action::Refresh)),
+            "F5, r *"
+        );
+        assert_eq!(
+            a.take_setting_edits(),
+            vec![kset("keys.list", "f5", "refresh")]
+        );
+        // Esc leaves an add without a change.
+        press(&mut a, KeyCode::Char('a'));
+        press(&mut a, KeyCode::Esc);
+        assert!(a.settings_page().unwrap().edit.is_none());
+        assert!(
+            a.settings_page().is_some(),
+            "Esc cancels the add, not the page"
+        );
+        assert!(a.take_setting_edits().is_empty());
+    }
+
+    #[test]
+    fn adding_a_key_of_another_action_is_refused_and_keeps_listening() {
+        let mut a = on_key_row(Context::List, Action::Refresh);
+        press(&mut a, KeyCode::Char('a'));
+        press(&mut a, KeyCode::Char('p'));
+        let p = a.settings_page().unwrap();
+        assert_eq!(
+            p.error.as_deref(),
+            Some("p is already Pin (Chat list): delete it there first")
+        );
+        assert!(
+            matches!(p.edit, Some(PageEdit::Add { .. })),
+            "still listening"
+        );
+        assert!(a.take_setting_edits().is_empty());
+    }
+
+    #[test]
+    fn an_overlapping_key_is_added_only_after_enter() {
+        let mut a = on_key_row(Context::List, Action::Refresh);
+        press(&mut a, KeyCode::Char('a'));
+        press_mod(&mut a, KeyCode::Char('f'), KeyModifiers::CONTROL);
+        assert_eq!(
+            capture_text(&a).as_deref(),
+            Some(
+                "Ctrl+F is Search everywhere: in Chat list it will be Refresh instead. \
+                 Enter adds it anyway, Esc cancels"
+            )
+        );
+        assert!(a.take_setting_edits().is_empty(), "nothing until Enter");
+        press(&mut a, KeyCode::Esc);
+        assert!(a.take_setting_edits().is_empty());
+        press(&mut a, KeyCode::Char('a'));
+        press_mod(&mut a, KeyCode::Char('f'), KeyModifiers::CONTROL);
+        press(&mut a, KeyCode::Enter);
+        assert_eq!(
+            a.take_setting_edits(),
+            vec![kset("keys.list", "ctrl+f", "refresh")]
+        );
+        assert_eq!(
+            a.keys.lookup(
+                Context::List,
+                KeyChord::new(KeyCode::Char('f'), KeyModifiers::CONTROL)
+            ),
+            Some(Action::Refresh)
+        );
+    }
+
+    #[test]
+    fn d_chooses_a_key_with_left_and_right_and_deletes_it() {
+        let mut a = on_key_row(Context::List, Action::Refresh);
+        for k in [KeyCode::F(5), KeyCode::F(6)] {
+            press(&mut a, KeyCode::Char('a'));
+            press(&mut a, k);
+        }
+        a.take_setting_edits();
+        assert_eq!(
+            value_of(&a, keys_row(Context::List, Action::Refresh)),
+            "F5, F6, r *"
+        );
+        press(&mut a, KeyCode::Char('d'));
+        let pick = |a: &App| match a.settings_page().unwrap().edit {
+            Some(PageEdit::Pick { index, .. }) => index,
+            ref other => panic!("not picking: {other:?}"),
+        };
+        assert_eq!(pick(&a), 0);
+        press(&mut a, KeyCode::Right);
+        assert_eq!(pick(&a), 1);
+        press(&mut a, KeyCode::Char('l'));
+        assert_eq!(pick(&a), 2);
+        press(&mut a, KeyCode::Right);
+        assert_eq!(pick(&a), 0, "wraps");
+        press(&mut a, KeyCode::Left);
+        assert_eq!(pick(&a), 2, "wraps back");
+        press(&mut a, KeyCode::Char('h'));
+        assert_eq!(pick(&a), 1);
+        press(&mut a, KeyCode::Enter);
+        assert!(a.settings_page().unwrap().edit.is_none());
+        assert_eq!(
+            value_of(&a, keys_row(Context::List, Action::Refresh)),
+            "F5, r *"
+        );
+        assert_eq!(
+            a.take_setting_edits(),
+            vec![SettingEdit::remove("keys.list", "f6")]
+        );
+        // d deletes too, and Esc leaves without a change.
+        press(&mut a, KeyCode::Char('d'));
+        press(&mut a, KeyCode::Esc);
+        assert!(a.settings_page().unwrap().edit.is_none());
+        assert!(a.take_setting_edits().is_empty());
+        press(&mut a, KeyCode::Char('d'));
+        press(&mut a, KeyCode::Right);
+        press(&mut a, KeyCode::Char('d'));
+        assert_eq!(
+            value_of(&a, keys_row(Context::List, Action::Refresh)),
+            "F5 *"
+        );
+        assert_eq!(
+            a.take_setting_edits(),
+            vec![kset("keys.list", "r", "unbound")]
+        );
+    }
+
+    #[test]
+    fn a_locked_key_cannot_be_picked_away_and_a_keyless_action_says_so() {
+        let mut a = on_key_row(Context::Global, Action::Quit);
+        assert_eq!(
+            value_of(&a, keys_row(Context::Global, Action::Quit)),
+            "Ctrl+C"
+        );
+        press(&mut a, KeyCode::Char('d'));
+        press(&mut a, KeyCode::Enter);
+        let p = a.settings_page().unwrap();
+        assert_eq!(p.error.as_deref(), Some("Ctrl+C always quits"));
+        assert!(
+            matches!(p.edit, Some(PageEdit::Pick { .. })),
+            "still choosing"
+        );
+        assert!(a.take_setting_edits().is_empty());
+        press(&mut a, KeyCode::Esc);
+        goto(&mut a, keys_row(Context::Global, Action::TogglePreset));
+        press(&mut a, KeyCode::Char('d'));
+        let p = a.settings_page().unwrap();
+        assert_eq!(
+            p.error.as_deref(),
+            Some("Toggle preset has no keys to delete")
+        );
+        assert!(p.edit.is_none());
+    }
+
+    #[test]
+    fn ctrl_c_quits_while_adding_or_picking() {
+        for start in ['a', 'd'] {
+            let mut a = on_key_row(Context::List, Action::Refresh);
+            press(&mut a, KeyCode::Char(start));
+            press_mod(&mut a, KeyCode::Char('c'), KeyModifiers::CONTROL);
+            assert!(a.quit, "{start}");
+            assert!(a.take_setting_edits().is_empty());
+        }
     }
 
     #[test]

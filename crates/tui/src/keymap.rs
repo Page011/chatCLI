@@ -119,7 +119,7 @@ impl Context {
     }
 
     /// A modal context never falls back to `Global`.
-    fn modal(self) -> bool {
+    pub(crate) fn modal(self) -> bool {
         matches!(self, Context::Help | Context::Popup | Context::Confirm)
     }
 }
@@ -886,6 +886,16 @@ impl Keymap {
         self.seq
             .iter()
             .filter(|s| s.0 == ctx && s.3 == action)
+            .map(|s| format!("{} {}", s.1.display(), s.2.display()))
+            .collect()
+    }
+
+    /// The two-key sequences in `ctx` that start with `first`, as display text. A single-key
+    /// binding on `first` replaces them.
+    pub(crate) fn sequences_from(&self, ctx: Context, first: KeyChord) -> Vec<String> {
+        self.seq
+            .iter()
+            .filter(|s| s.0 == ctx && s.1 == first)
             .map(|s| format!("{} {}", s.1.display(), s.2.display()))
             .collect()
     }

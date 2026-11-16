@@ -7,6 +7,7 @@ use ratatui::widgets::{Clear, Paragraph};
 use ratatui::Frame;
 
 use crate::app::{App, NARROW};
+use crate::keymap::{Action, Context};
 use crate::settings_view::{fit_top, Kind, PageEdit, Row, RowId, Section, SettingsPage};
 use crate::text::{fit, sw, tail, truncate, wrap};
 use crate::theme::Theme;
@@ -199,6 +200,19 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
             f.render_widget(Paragraph::new(Line::from(spans)).style(base), line_area);
             continue;
         }
+        // Choosing a key to delete: only the chosen key carries the selection colour, so the row
+        // drops its own.
+        if let (Some(PageEdit::Pick { ctx, action, index }), true) = (&page.edit, selected) {
+            let mut spans = vec![
+                Span::styled(fit(&row.label, label_w), bold()),
+                Span::raw(" "),
+            ];
+            spans.extend(pick_spans(
+                app, *ctx, *action, *index, row.custom, value_w, t,
+            ));
+            f.render_widget(Paragraph::new(Line::from(spans)), line_area);
+            continue;
+        }
         let editing = match (&page.edit, selected) {
             (Some(PageEdit::Text(buf)), true) => Some(buf.as_str()),
             _ => None,
@@ -208,6 +222,10 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
             (Some(PageEdit::Capture { .. }), true) => Some("press a key".to_string()),
             (Some(PageEdit::Conflict { key, .. }), true) => {
                 Some(format!("{}? Enter swaps", key.display()))
+            }
+            (Some(PageEdit::Add { .. }), true) => Some("press a key to add".to_string()),
+            (Some(PageEdit::AddOverlap { key, .. }), true) => {
+                Some(format!("{}? Enter adds", key.display()))
             }
             _ => None,
         };
@@ -255,6 +273,51 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
         }
     }
     draw_status(f, page, rows, g, t);
+}
+
+/// The value of a key row while one of its keys is chosen for deleting: the keys as on the row,
+/// the chosen one in the selection colour, cut to `w` columns. Sequences show but cannot be
+/// chosen.
+fn pick_spans(
+    app: &App,
+    ctx: Context,
+    action: Action,
+    index: usize,
+    custom: bool,
+    w: usize,
+    t: &Theme,
+) -> Vec<Span<'static>> {
+    let keys = app.keys();
+    let plain = if custom { bold() } else { Style::new() };
+    let mut parts: Vec<(String, Style)> = Vec::new();
+    for (i, k) in keys.keys_in(ctx, action).iter().enumerate() {
+        if i > 0 {
+            parts.push((", ".to_string(), plain));
+        }
+        let style = if i == index { t.selected } else { plain };
+        parts.push((k.display(), style));
+    }
+    for s in keys.sequences_in(ctx, action) {
+        parts.push((", ".to_string(), plain));
+        parts.push((s, plain));
+    }
+    if custom {
+        parts.push((" *".to_string(), plain));
+    }
+    let mut out = Vec::new();
+    let mut left = w;
+    for (text, style) in parts {
+        if left == 0 {
+            break;
+        }
+        let shown = truncate(&text, left);
+        left -= sw(&shown);
+        out.push(Span::styled(shown, style));
+    }
+    if left > 0 {
+        out.push(Span::raw(" ".repeat(left)));
+    }
+    out
 }
 
 /// The line under the list: the red error, else the chosen row's hint.

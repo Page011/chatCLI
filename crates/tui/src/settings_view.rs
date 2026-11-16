@@ -89,6 +89,32 @@ pub(crate) enum PageEdit {
         key: KeyChord,
         other: Action,
     },
+    /// Waiting for a key to add to `action` in `ctx`, keeping its other keys.
+    Add {
+        ctx: Context,
+        action: Action,
+    },
+    /// `key` is free in `ctx` but overlaps a binding live at the same time (`note` says which):
+    /// Enter adds it anyway, Esc cancels.
+    AddOverlap {
+        ctx: Context,
+        action: Action,
+        key: KeyChord,
+        note: String,
+    },
+    /// Choosing which of the action's keys to delete: `index` into `Keymap::keys_in`.
+    Pick {
+        ctx: Context,
+        action: Action,
+        index: usize,
+    },
+}
+
+impl PageEdit {
+    /// True while the page reads raw key presses for a key binding (not typed text).
+    pub(crate) fn is_key_edit(&self) -> bool {
+        !matches!(self, PageEdit::Text(_))
+    }
 }
 
 /// The footer line while a key is being captured or a swap is asked, else None.
@@ -106,6 +132,17 @@ pub(crate) fn capture_line(edit: Option<&PageEdit>) -> Option<String> {
             key.display(),
             other.label(),
             other.label(),
+            action.label()
+        )),
+        PageEdit::Add { action, .. } => Some(format!(
+            "Press a key to add to {} (Esc cancels)",
+            action.label()
+        )),
+        PageEdit::AddOverlap { note, .. } => {
+            Some(format!("{note}. Enter adds it anyway, Esc cancels"))
+        }
+        PageEdit::Pick { action, .. } => Some(format!(
+            "Left/Right choose a key of {}, Enter or d deletes it, Esc cancels",
             action.label()
         )),
     }
@@ -688,7 +725,7 @@ pub(crate) fn change(s: &Settings, id: RowId, c: Change) -> Done {
         RowId::Info(_) | RowId::Problem(_) | RowId::KeyHeading(_) => {
             Err("this line is read-only".to_string())
         }
-        RowId::KeyAction(..) => Err("press Enter, then the new key".to_string()),
+        RowId::KeyAction(..) => Err("Enter replaces a key, a adds one, d deletes one".to_string()),
         RowId::ResetAllKeys => Err("press Enter to reset every key".to_string()),
         RowId::KeyPreset => {
             let cur = Preset::from_name(&s.keys.preset).unwrap_or(Preset::Default);
@@ -1309,7 +1346,10 @@ mod tests {
     fn key_rows_are_changed_by_capture_not_by_change() {
         let s = Settings::default();
         let id = RowId::KeyAction(Context::List, Action::Refresh);
-        assert_eq!(err(&s, id, Change::Next), "press Enter, then the new key");
+        assert_eq!(
+            err(&s, id, Change::Next),
+            "Enter replaces a key, a adds one, d deletes one"
+        );
         assert!(change(&s, RowId::KeyHeading(Context::List), Change::Next).is_err());
         assert!(change(&s, RowId::ResetAllKeys, Change::Next).is_err());
     }

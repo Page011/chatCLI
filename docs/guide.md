@@ -438,7 +438,7 @@ name = "default"            # "default", "high-contrast", "light" or "dark"
 
 ### Key bindings
 
-The `/keys` page (or the Keys section of `F2`) lists every action with its keys: `Enter` on an action, then press the new key. If the key already runs another action you are asked whether to swap; `Backspace` removes a key, `r` resets one action, the last row resets them all, and the top row switches the preset. `Ctrl+C` and the `Esc` that backs out of a screen cannot be changed. What follows is the same thing as a file.
+The `/keys` page (or the Keys section of `F2`) lists every action with its keys: `Enter` on an action, then press the new key. If the key already runs another action you are asked whether to swap; `Backspace` removes a key. An action can have several keys: `a` adds one and keeps the others (a key another action of the same context holds is refused with its name, and a key that would hide or be hidden by an `Everywhere` key, or a vim key sequence, asks first), and `d` lets you choose one of its keys with `Left` / `Right` and deletes it with `Enter`. The key you set last is the one the footer shows. `r` resets one action, the last row resets them all, and the top row switches the preset. `Ctrl+C` and the `Esc` that backs out of a screen cannot be changed. What follows is the same thing as a file.
 
 `[keys] preset` picks the base. Your own bindings sit in one table per context, `key = "action"`:
 

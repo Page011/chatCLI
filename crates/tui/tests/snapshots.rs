@@ -3031,6 +3031,41 @@ fn key_conflict() {
     });
 }
 
+/// `a` then F5 and F6: Refresh has three keys.
+fn keys_app_three_keys() -> App {
+    let mut app = keys_app();
+    for k in [KeyCode::F(5), KeyCode::F(6)] {
+        press(&mut app, KeyCode::Char('a'));
+        press(&mut app, k);
+    }
+    app
+}
+
+/// `a`: waiting for a key to add.
+#[test]
+fn key_add() {
+    at_sizes("key_add", &[(100, 30), (80, 24)], || {
+        let mut app = keys_app();
+        press(&mut app, KeyCode::Char('a'));
+        let got = render(&mut app, 100, 30);
+        assert!(got.contains("Press a key to add to Refresh"), "{got}");
+        app
+    });
+}
+
+/// `d` then Right: the second of three keys is chosen, in the selection colour only.
+#[test]
+fn key_pick() {
+    at_sizes("key_pick", &[(100, 30), (80, 24), (40, 12)], || {
+        let mut app = keys_app_three_keys();
+        press(&mut app, KeyCode::Char('d'));
+        press(&mut app, KeyCode::Right);
+        let got = render(&mut app, 100, 30);
+        assert!(got.contains("F5, F6, r *"), "{got}");
+        app
+    });
+}
+
 fn no_colour(mut app: App) -> App {
     app.set_theme(Theme::from_settings(&Settings::default().theme, true).0);
     app
@@ -3053,6 +3088,12 @@ fn the_new_screens_under_no_colour_and_high_contrast() {
     });
     at_sizes("command_bar_no_color", &[(80, 24)], || {
         no_colour(bar_app("se"))
+    });
+    at_sizes("key_pick_no_color", &[(80, 24)], || {
+        let mut app = no_colour(keys_app_three_keys());
+        press(&mut app, KeyCode::Char('d'));
+        press(&mut app, KeyCode::Right);
+        app
     });
     at_sizes("key_conflict_high_contrast", &[(80, 24)], || {
         let mut app = high_contrast(keys_app());

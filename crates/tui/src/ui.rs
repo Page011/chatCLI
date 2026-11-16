@@ -404,7 +404,9 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             &[
                 "Up/Down move",
                 "Esc close",
-                "Enter set key",
+                "Enter replace",
+                "a add",
+                "d delete",
                 "r reset",
                 "Tab sections",
             ]
