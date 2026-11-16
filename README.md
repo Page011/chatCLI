@@ -508,7 +508,7 @@ A Windows toast appears for a new incoming message when chatcli's window is not 
 
 ## Linux and macOS (experimental)
 
-Only the Windows build is tested by hand. CI also builds and tests on Linux and macOS, but those jobs are best effort and may fail. Secrets use the macOS Keychain or the Linux Secret Service (GNOME Keyring or KWallet); a Linux session with no Secret Service cannot store the Teams sign-in. Desktop notifications are Windows only. The data folder is `~/Library/Application Support/chatcli` on macOS and `$XDG_DATA_HOME/chatcli` (or `~/.local/share/chatcli`) on Linux.
+Only the Windows build is tested by hand. CI also builds and tests on Linux and macOS. Secrets use the macOS Keychain or the Linux Secret Service (GNOME Keyring or KWallet); a Linux session with no Secret Service cannot store the Teams sign-in. Desktop notifications are Windows only. The data folder is `~/Library/Application Support/chatcli` on macOS and `$XDG_DATA_HOME/chatcli` (or `~/.local/share/chatcli`) on Linux.
 
 ## Your data
 

@@ -37,13 +37,9 @@ jobs:
       - name: Test
         run: cargo test --workspace --locked
 
-  # Best-effort until proven: the code was written on Windows and these targets have never been
-  # built by a person. continue-on-error keeps a red job here from blocking a merge. Once both
-  # go green on main, delete this line and add the jobs to the required checks.
   rust-unix:
-    name: Rust ${{ matrix.os }} (best effort)
+    name: Rust ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    continue-on-error: true
     timeout-minutes: 45
     strategy:
       fail-fast: false

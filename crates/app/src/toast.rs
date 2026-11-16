@@ -12,7 +12,7 @@ use chatcli_core::Result;
 
 /// The app id Windows files our toasts under. An unpackaged program that does not register one
 /// either gets no toast or shows the wrong app name.
-#[cfg(any(windows, test))]
+#[cfg(windows)]
 const APP_ID: &str = "chatcli";
 
 pub fn system_notifier() -> Arc<dyn Notifier> {

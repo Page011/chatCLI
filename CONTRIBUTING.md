@@ -31,7 +31,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 ```
 
-Run `cargo fmt --all` to fix formatting. CI runs the same commands and must be green before merge. If you change dependencies, run `cargo build` once without `--locked` so `Cargo.lock` updates, then run the commands above. Versions used by more than one crate go in the root `[workspace.dependencies]`. Linux and macOS jobs run too but are best effort.
+Run `cargo fmt --all` to fix formatting. CI runs the same commands and must be green before merge. If you change dependencies, run `cargo build` once without `--locked` so `Cargo.lock` updates, then run the commands above. Versions used by more than one crate go in the root `[workspace.dependencies]`. CI runs them on Windows, Linux and macOS.
 
 Tests never touch your real data: set `CHATCLI_DATA_DIR` to a temp folder, and use test-only credential names. Never run `chatcli` itself from a test.
 
