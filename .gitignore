@@ -1,0 +1,20 @@
+# Build output
+/target
+**/node_modules
+relay/.wrangler
+
+# Local secrets and data: never commit
+.dev.vars
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+config.json
+*.log
+.env
+.env.*
+
+# Claude Code per-project settings, rolled logs, per-environment wrangler vars
+.claude/
+*.log.*
+.dev.vars.*

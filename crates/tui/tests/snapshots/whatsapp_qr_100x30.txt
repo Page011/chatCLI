@@ -1,0 +1,57 @@
+ chatcli  Teams 103 LIVE   WhatsApp SCAN QR                                              Ctrl+C quit
+
+
+
+                                          WHATSAPP: SCAN QR
+
+
+                                    █▀▀▀▀▀█ ▄▀    ▄▄▀▀▀▀▄ █▀▀▀▀▀█
+                                    █ ███ █ ▄██▀█▄▀█▀▄    █ ███ █
+                                    █ ▀▀▀ █ ▄▀   ▀▄▄█▄▄▀█ █ ▀▀▀ █
+                                    ▀▀▀▀▀▀▀ ▀▄█▄█ ▀ █ █ █ ▀▀▀▀▀▀▀
+                                    █▀██▀▄▀█▀▀  ▀ ▀ ▄▀▄█ █▄█▄▀ █▄
+                                     ██ ▄▄▀▀▄ ▀ ▀ ▄▀▀   ▄▄▀▀▀█  ▄
+                                     █  ▄▀▀█▀▀▀██ ▀▀▄▀▄▄█▄▄█▄▄█▀▄
+                                    ▄▄█ █ ▀█▀█▄▄█ ▄██ ▀▄█ █▀██ ▄
+                                    ██▀▀▀▀▀▄▀▀  ▀ ▀  █▄█▄▄▄▄▄▀▀█
+                                    █ ▀▄ ▄▀ ▀▀▄▄█ ▄▀▀ ▄▄▄▀  █▄ ▄▄
+                                    ▀  ▀  ▀ █▄▄ ▀ ▀ ▄██▀█▀▀▀█▄█▀▄
+                                    █▀▀▀▀▀█ ▀██▄█ ▄▀▄  ██ ▀ █▄ █
+                                    █ ███ █ █   ▀█  ▄█▄▄▀▀▀█▀▄▀ ▄
+                                    █ ▀▀▀ █ █▄█▄█ ▀█▀ ▄▀█▀▀██▀ █
+                                    ▀▀▀▀▀▀▀ ▀▀▀ ▀ ▀  ▀   ▀ ▀  ▀
+
+
+                  Linked devices (Android: menu, iPhone: Settings) > Link a device
+
+
+
+
+Tab network  q quit
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 10-18: fg=Reset bg=Reset BOLD
+row 0 cols 20-23: fg=Green bg=Reset BOLD
+row 0 cols 26-43: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 89-99: fg=Reset bg=Reset DIM
+row 4 cols 42-58: fg=Reset bg=Reset BOLD
+row 5 cols 32-68: fg=Black bg=White NONE
+row 6 cols 32-68: fg=Black bg=White NONE
+row 7 cols 32-68: fg=Black bg=White NONE
+row 8 cols 32-68: fg=Black bg=White NONE
+row 9 cols 32-68: fg=Black bg=White NONE
+row 10 cols 32-68: fg=Black bg=White NONE
+row 11 cols 32-68: fg=Black bg=White NONE
+row 12 cols 32-68: fg=Black bg=White NONE
+row 13 cols 32-68: fg=Black bg=White NONE
+row 14 cols 32-68: fg=Black bg=White NONE
+row 15 cols 32-68: fg=Black bg=White NONE
+row 16 cols 32-68: fg=Black bg=White NONE
+row 17 cols 32-68: fg=Black bg=White NONE
+row 18 cols 32-68: fg=Black bg=White NONE
+row 19 cols 32-68: fg=Black bg=White NONE
+row 20 cols 32-68: fg=Black bg=White NONE
+row 21 cols 32-68: fg=Black bg=White NONE
+row 22 cols 32-68: fg=Black bg=White NONE
+row 23 cols 32-68: fg=Black bg=White NONE
+row 29 cols 0-18: fg=Reset bg=Reset DIM

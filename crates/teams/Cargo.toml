@@ -1,0 +1,20 @@
+[package]
+name = "chatcli-teams"
+description = "Microsoft Teams chats through Microsoft Graph, plus the relay client for live updates"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+chatcli-core.workspace = true
+base64.workspace = true
+chrono.workspace = true
+futures-util.workspace = true
+rand.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tokio-tungstenite.workspace = true

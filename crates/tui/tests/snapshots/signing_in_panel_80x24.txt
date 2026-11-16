@@ -1,0 +1,34 @@
+ chatcli  Teams SIGNING IN   WhatsApp SIGNING IN                     Ctrl+C quit
+
+
+
+
+
+
+
+
+        ╔ Teams ═══════════════════════════════════════════════════════╗
+        ║                          SIGNING IN                          ║
+        ║                                                              ║
+        ║     Finish signing in in the browser window that opened.     ║
+        ║                     Tab switches network                     ║
+        ╚══════════════════════════════════════════════════════════════╝
+
+
+
+
+
+
+
+
+Tab network  q quit
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-26: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 29-36: fg=Reset bg=Reset BOLD
+row 0 cols 38-47: fg=Cyan bg=Reset BOLD
+row 0 cols 69-79: fg=Reset bg=Reset DIM
+row 9 cols 9-15: fg=Reset bg=Reset BOLD
+row 10 cols 35-44: fg=Reset bg=Reset BOLD
+row 13 cols 30-49: fg=Reset bg=Reset DIM
+row 23 cols 0-18: fg=Reset bg=Reset DIM

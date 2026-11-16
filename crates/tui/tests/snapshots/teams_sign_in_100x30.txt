@@ -1,0 +1,40 @@
+ chatcli  Teams SIGN-IN NEEDED   WhatsApp SIGN-IN NEEDED                                 Ctrl+C quit
+
+
+
+
+
+
+
+
+
+
+
+                  ╔ Teams ═══════════════════════════════════════════════════════╗
+                  ║                     TEAMS SIGN-IN NEEDED                     ║
+                  ║                                                              ║
+                  ║               Enter to sign in (opens browser)               ║
+                  ║                     Tab switches network                     ║
+                  ╚══════════════════════════════════════════════════════════════╝
+
+
+
+
+
+
+
+
+
+
+
+Enter sign in  Tab network  q quit
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-30: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 33-40: fg=Reset bg=Reset BOLD
+row 0 cols 42-55: fg=Yellow bg=Reset BOLD
+row 0 cols 89-99: fg=Reset bg=Reset DIM
+row 12 cols 19-25: fg=Reset bg=Reset BOLD
+row 13 cols 40-59: fg=Reset bg=Reset BOLD
+row 16 cols 40-59: fg=Reset bg=Reset DIM
+row 29 cols 0-33: fg=Reset bg=Reset DIM
