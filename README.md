@@ -508,7 +508,7 @@ A Windows toast appears for a new incoming message when chatcli's window is not 
 
 ## Linux and macOS (experimental)
 
-Only the Windows build is tested by hand. CI also builds and tests on Linux and macOS. Secrets use the macOS Keychain or the Linux Secret Service (GNOME Keyring or KWallet); a Linux session with no Secret Service cannot store the Teams sign-in. Desktop notifications are Windows only. The data folder is `~/Library/Application Support/chatcli` on macOS and `$XDG_DATA_HOME/chatcli` (or `~/.local/share/chatcli`) on Linux.
+Only the Windows build is tested by hand. CI also builds and tests on Linux and macOS. Secrets use the macOS Keychain or the Linux Secret Service (GNOME Keyring or KWallet); on Linux with no Secret Service (a headless box, a minimal window manager), set `CHATCLI_SECRET_STORE=file` to keep them in `secrets.json` in the data folder instead. That file is readable by you only (mode 0600) but is not encrypted, so anyone who can read your files can read your sign-in. Desktop notifications are Windows only. The data folder is `~/Library/Application Support/chatcli` on macOS and `$XDG_DATA_HOME/chatcli` (or `~/.local/share/chatcli`) on Linux.
 
 ## Your data
 
@@ -525,6 +525,7 @@ Everything stays on your machine, under `%LOCALAPPDATA%\chatcli` (on Windows; se
 | `chatcli.log` | Connection, sign-in, relay and send events (older entries in `chatcli.log.1`) | Rolls to `chatcli.log.1` at 5 MB. Never holds tokens, secrets or message text. |
 | `chatcli.lock` | Single-instance lock | Empty. |
 | `secrets.lock` | Stops two chatcli processes writing Credential Manager at once | Empty. |
+| `secrets.json` | Linux only, with `CHATCLI_SECRET_STORE=file`: your secrets | Readable by you only, not encrypted. Absent otherwise. |
 
 `store.db` holds your message text unencrypted, and `whatsapp.db` holds the keys of your linked device. Use full-disk encryption (BitLocker on Windows) so a lost laptop does not expose them. Do not keep the chatcli data folder, or a copy of it, in a cloud-synced folder (OneDrive, Dropbox, Google Drive): the files would be uploaded and copied to every device that syncs.
 

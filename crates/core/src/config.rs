@@ -57,6 +57,16 @@ pub fn save_to(path: &Path, config: &Config) -> Result<()> {
 /// rename the other's content and the second rename would fail. The temp file is removed if
 /// writing or renaming fails, and the old file is then untouched.
 pub fn write_atomic(path: &Path, text: &str) -> Result<()> {
+    write_atomic_as(path, text, false)
+}
+
+/// `write_atomic` for a file only its owner may read: on Unix the temp file is created with
+/// mode 0600, so the content is never readable by anyone else, not even before the rename.
+pub fn write_private(path: &Path, text: &str) -> Result<()> {
+    write_atomic_as(path, text, true)
+}
+
+fn write_atomic_as(path: &Path, text: &str, private: bool) -> Result<()> {
     use std::io::Write;
     use std::sync::atomic::{AtomicU64, Ordering};
     static SAVES: AtomicU64 = AtomicU64::new(0);
@@ -70,9 +80,15 @@ pub fn write_atomic(path: &Path, text: &str) -> Result<()> {
         std::process::id(),
         SAVES.fetch_add(1, Ordering::Relaxed)
     ));
-    let written = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    if private {
+        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    }
+    #[cfg(not(unix))]
+    let _ = private;
+    let written = options
         .open(&tmp)
         .and_then(|mut f| f.write_all(text.as_bytes()).and_then(|()| f.sync_all()));
     if let Err(e) = written {

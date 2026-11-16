@@ -8,7 +8,7 @@
 //! - `media`, `limits`, `open`: the capped media cache, size limits and opening links/files.
 //! - `runtime`: what `main` hands to each backend and the TUI.
 //! - `doctor`: result types for `chatcli doctor`.
-//! - `secrets`: the OS credential store (Windows Credential Manager, macOS Keychain, Linux Secret Service), chunked past its 2560-byte limit.
+//! - `secrets`: the OS credential store (Windows Credential Manager, macOS Keychain, Linux Secret Service, or a private file on Linux with `CHATCLI_SECRET_STORE=file`), chunked past its 2560-byte limit.
 //! - `config`, `paths`, `log`: `config.json`, where data lives, and the rolling log file.
 
 pub mod config;
