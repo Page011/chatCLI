@@ -8,6 +8,7 @@
 use chatcli_core::model::{ChatFlag, ChatMessage, Command, Event, Network, Status};
 use chatcli_core::runtime::Toast;
 use chatcli_core::store::SearchHit;
+use ratatui::layout::Position;
 
 use super::{App, Focus, Out, Prompt};
 use crate::chats;
@@ -477,6 +478,34 @@ impl App {
             _ => {}
         }
         Vec::new()
+    }
+
+    /// A left click in the search box: a hit opens like Enter on it, outside the box closes it.
+    pub(super) fn search_click(&mut self, pos: Position) -> Out {
+        let Some(g) = ui::search_geometry(self.layout_in(self.size).body) else {
+            // Too small to draw: the note says Esc closes, a click does too.
+            self.search = None;
+            return Vec::new();
+        };
+        if !g.outer.contains(pos) {
+            self.search = None;
+        } else if g.list.contains(pos) {
+            let i = (pos.y - g.list.y) as usize + self.search.as_ref().map_or(0, |s| s.top);
+            if let Some(s) = self.search.as_mut().filter(|s| i < s.hits.len()) {
+                s.sel = i;
+                return self.search_open_hit();
+            }
+        }
+        Vec::new()
+    }
+
+    /// The wheel in the search box moves the choice a few hits, and the window follows.
+    pub(super) fn search_wheel(&mut self, up: bool) {
+        self.search_move(if up {
+            -super::WHEEL_LINES
+        } else {
+            super::WHEEL_LINES
+        });
     }
 
     /// Enter on a hit: open its chat, like choosing it in the list. The conversation shows the
@@ -1506,6 +1535,52 @@ mod tests {
         });
         assert_eq!(app.active().selected, before);
         assert!(app.search().is_some());
+    }
+
+    fn mouse_at(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
+        MouseEvent {
+            kind,
+            column,
+            row,
+            modifiers: KeyModifiers::NONE,
+        }
+    }
+
+    #[test]
+    fn a_clicked_hit_opens_like_enter_the_wheel_moves_and_outside_closes() {
+        let mut app = search_app();
+        ctrl_f(&mut app);
+        typed(&mut app, "budget");
+        let g = ui::search_geometry(app.layout_in(app.size).body).unwrap();
+        let left = MouseEventKind::Down(MouseButton::Left);
+        // The query row and the empty rows below the hits open nothing.
+        app.handle_mouse(mouse_at(left, g.list.x + 2, g.query.y));
+        app.handle_mouse(mouse_at(left, g.list.x + 2, g.list.y + 4));
+        assert!(app.search().is_some());
+        // Wheel: three hits down, clamped at the last of the four.
+        app.handle_mouse(mouse_at(MouseEventKind::ScrollDown, 10, 10));
+        assert_eq!(app.search().unwrap().sel, 3);
+        app.handle_mouse(mouse_at(MouseEventKind::ScrollUp, 10, 10));
+        assert_eq!(app.search().unwrap().sel, 0);
+        // The second hit is chat "b", as Down + Enter gives.
+        let out = app.handle_mouse(mouse_at(left, g.list.x + 2, g.list.y + 1));
+        assert!(app.search().is_none());
+        assert_eq!(app.active().open.as_deref(), Some("b"));
+        assert_eq!(app.active().focus, Focus::Composer);
+        assert_eq!(
+            out,
+            vec![(
+                Network::Teams,
+                Command::OpenChat {
+                    chat_id: "b".into()
+                }
+            )]
+        );
+
+        let mut app = search_app();
+        ctrl_f(&mut app);
+        app.handle_mouse(mouse_at(left, 10, 0));
+        assert!(app.search().is_none(), "outside the box");
     }
 
     // ---- typing ----

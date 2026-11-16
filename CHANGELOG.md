@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Mouse: click a message, a link (asks y/n with the host), an attachment chip, a chat row (a second click opens it), the message box text, a completion item, a footer key hint (not send or quit), the y or n of a question, and items in the command bar, search, settings and the attach prompt; the wheel scrolls them. Pointer moves do nothing.
 - `settings.toml`: one hand-edited file for key bindings, theme, layout, notifications, media limits, optional Teams scopes and WhatsApp privacy options. A broken section falls back to its defaults with one notice naming the line and key. `chatcli settings path` and `chatcli settings check`.
 - Keys are named actions in a keymap. Rebind them in `settings.toml` (`[keys.<context>]`), with a notice for every mistake and a suggested name. `?` opens a help screen generated from the active keys.
 - Vim key preset (`[keys] preset = "vim"`, `--keys vim`, or `/keys vim` live): Normal, Insert and Select modes, `gg` `gt` `gT`, and a `:` command box.

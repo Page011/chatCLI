@@ -5,6 +5,7 @@
 pub(crate) mod cmds;
 pub(crate) mod everyday;
 pub(crate) mod media;
+pub(crate) mod mouse;
 pub(crate) mod msg;
 pub(crate) mod settings;
 pub(crate) mod tour;
@@ -308,6 +309,8 @@ pub struct App {
     prompt: Option<Prompt>,
     /// Links the user confirmed; the run loop opens them (App stays pure).
     open_urls: Vec<String>,
+    /// When a click last raised a y/n question (a double-click must not answer it).
+    prompt_opened_ms: i64,
     /// Attachments: the path prompt, queues for the run loop, thumbnail settings (issues 16-37).
     media: media::Ctl,
     /// Colours by role (issue 22).
@@ -489,6 +492,7 @@ impl App {
             store: None,
             prompt: None,
             open_urls: Vec::new(),
+            prompt_opened_ms: i64::MIN / 2,
             media: media::Ctl::default(),
             theme: Theme::default(),
             layout: LayoutSettings::default(),
@@ -2279,11 +2283,34 @@ impl App {
     }
 
     pub fn handle_mouse(&mut self, m: MouseEvent) -> Out {
+        let had_prompt = self.prompt.is_some();
+        let out = self.mouse_now(m);
+        if !had_prompt && self.prompt.is_some() {
+            self.prompt_opened_ms = self.clock.now_ms;
+        }
+        out
+    }
+
+    fn mouse_now(&mut self, m: MouseEvent) -> Out {
         if self.tour.as_ref().is_some_and(|t| !t.done) {
             return Vec::new();
         }
-        // A held vim `g` is about the keyboard; a click or wheel ends it. The help overlay
-        // takes keys only, so the screen behind it stays put.
+        // Pointer moves, drags and releases do nothing: they must not close the completion
+        // list or end a held `g` on the way to a click.
+        if matches!(
+            m.kind,
+            MouseEventKind::Moved | MouseEventKind::Drag(_) | MouseEventKind::Up(_)
+        ) {
+            return Vec::new();
+        }
+        // Nothing is drawn but a notice: nothing can be clicked.
+        if ui::too_small(self.size) {
+            return Vec::new();
+        }
+        let foot = self.footer_click_hit(m);
+        // A held vim `g` is about the keyboard; a click or wheel ends it. Something open over
+        // the screen (help, a question, the attach prompt, search, the command bar, settings)
+        // gets the mouse first, so the screen behind it stays put.
         self.pending = None;
         if self.help.is_some()
             || self.prompt.is_some()
@@ -2292,15 +2319,24 @@ impl App {
             || self.palette.is_some()
             || self.settings_page.is_some()
         {
-            return Vec::new();
+            return self.overlay_mouse(m);
         }
         if self.picker.is_some() {
             return self.picker_mouse(m);
         }
-        self.popup = None;
         let pos = Position::new(m.column, m.row);
         let n = self.active;
         let lay = self.layout_for(n);
+        // The completion list takes clicks on it; any other mouse event closes it.
+        if let Some(out) = self.popup_mouse(m, &lay, pos) {
+            return out;
+        }
+        // A click on a footer key hint runs that key's action (before the popup is closed: the
+        // footer drawn with the list open is the one that was clicked).
+        if let Some(action) = foot {
+            return self.run_click_action(action);
+        }
+        self.popup = None;
         match m.kind {
             MouseEventKind::Down(MouseButton::Left) => {
                 if lay.header.contains(pos) {
@@ -2314,8 +2350,12 @@ impl App {
                     let ns = self.ns(n);
                     let row = ns.list_top + (pos.y - lay.list.y) as usize / self.row_h() as usize;
                     if let Some(&i) = ns.visible().get(row) {
-                        // A click previews like a cursor move; Enter replies.
+                        // A click previews like a cursor move; a click on the chat already
+                        // shown opens it, as Enter does.
                         let id = ns.chats[i].id.clone();
+                        if ns.selected.as_ref() == Some(&id) && ns.open.as_ref() == Some(&id) {
+                            return self.open_selected(n);
+                        }
                         let ns = self.ns_mut(n);
                         ns.selected = Some(id.clone());
                         ns.focus = Focus::List;
@@ -2326,7 +2366,11 @@ impl App {
                     && lay.composer.contains(pos)
                     && self.ns(n).open.is_some()
                 {
-                    return self.commit(n);
+                    return self.click_composer(n, &lay, pos);
+                } else if !self.ns(n).panel() && lay.messages.contains(pos) {
+                    if let Some((id, kind)) = ui::convo_hit(self, &lay, pos) {
+                        return self.click_message(n, id, kind);
+                    }
                 }
             }
             MouseEventKind::ScrollUp | MouseEventKind::ScrollDown if !self.ns(n).panel() => {
@@ -5303,5 +5347,18 @@ mod tests {
         assert_eq!(entries.len(), commands::COMMANDS.len());
         assert_eq!(entries[0], (&"/help".to_string(), &"F1".to_string()));
         assert_eq!(entries[1], (&"/settings".to_string(), &"F2".to_string()));
+    }
+
+    #[test]
+    fn clicking_the_chat_already_shown_opens_it_like_enter() {
+        let mut app = online_app();
+        // First click previews and keeps the list focus.
+        assert!(app.handle_mouse(click(5, 4)).is_empty());
+        assert_eq!(app.active().focus, Focus::List);
+        // The second click on the same row is Enter: the message box takes focus.
+        let out = app.handle_mouse(click(5, 4));
+        assert_eq!(app.active().focus, Focus::Composer);
+        assert_eq!(app.active().open.as_deref(), Some("b"));
+        assert!(out.contains(&open_chat_cmd("b")), "{out:?}");
     }
 }

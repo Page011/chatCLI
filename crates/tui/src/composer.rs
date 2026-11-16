@@ -252,6 +252,32 @@ impl Composer {
         self.insert_str(with);
     }
 
+    /// Puts the cursor on the character under a click: `row` and `col` are in the wrapped draft
+    /// (`layout(width)`), the column counted in display cells. A click past the end of a row
+    /// lands at its end; a wide character takes the click on either of its two cells.
+    pub fn click(&mut self, width: usize, row: usize, col: usize) {
+        let (rows, _, _) = self.layout(width);
+        let Some(r) = rows.get(row.min(rows.len() - 1)) else {
+            return;
+        };
+        let wrapped = rows.get(row + 1).is_some_and(|n| n.start == r.end);
+        let (mut used, mut at) = (0, r.start);
+        for g in graphemes(&r.text) {
+            let w = cluster_width(g);
+            if col < used + w {
+                break;
+            }
+            used += w;
+            at += 1;
+        }
+        // The cursor at the end of a wrapped row would draw on the next row.
+        self.cursor = if wrapped && at == r.end {
+            at.saturating_sub(1).max(r.start)
+        } else {
+            at
+        };
+    }
+
     /// The draft wrapped to `width` columns, and the cursor's row and column. One column is kept
     /// free so a cursor at the end of a full row still has a cell.
     pub fn layout(&self, width: usize) -> (Vec<Row>, usize, usize) {
@@ -543,5 +569,26 @@ mod tests {
             2,
             "a box squeezed to 2 rows still shows the cursor row"
         );
+    }
+
+    #[test]
+    fn click_counts_display_width_and_stays_on_the_clicked_row() {
+        // `a`, a wide emoji (2 cells), `b`: cells 0 | 1 2 | 3.
+        let mut x = c("a\u{1F600}b");
+        for (col, want) in [(0, 0), (1, 1), (2, 1), (3, 2), (9, 3)] {
+            x.click(20, 0, col);
+            assert_eq!(x.cursor(), want, "col {col}");
+        }
+        // Wrapped rows: a click past the end of a wrapped row stays on that row.
+        let mut x = c("aaaa bbbb cccc");
+        let (rows, _, _) = x.layout(6);
+        assert!(rows.len() >= 3);
+        x.click(6, 0, 30);
+        assert_eq!(x.layout(6).1, 0);
+        x.click(6, 1, 0);
+        assert_eq!(x.cursor(), rows[1].start);
+        // A row below the last one is the last.
+        x.click(6, 99, 0);
+        assert_eq!(x.cursor(), rows[rows.len() - 1].start);
     }
 }

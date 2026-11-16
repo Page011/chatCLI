@@ -9,6 +9,7 @@ use chatcli_core::paths;
 use chatcli_core::runtime::UiCtx;
 use chatcli_core::settings::{SettingEdit, Settings};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::layout::Position;
 
 use super::{App, Out, Prompt};
 use crate::keymap::{Action, Context, KeyChord, Keymap, Preset, CTRL_C};
@@ -489,6 +490,70 @@ impl App {
             _ => return self.settings_global(global, key),
         }
         Vec::new()
+    }
+
+    /// A left click on the settings page. While a value is typed or a key is captured it is Esc
+    /// (nothing saves). A section on the left is shown (a narrow screen goes into it); a row is
+    /// chosen, and a click on the chosen row does what Enter does there.
+    pub(super) fn settings_click(&mut self, pos: Position) -> Out {
+        let Some(g) = crate::settings_ui::geometry(self.layout_in(self.size).body) else {
+            return Vec::new();
+        };
+        let Some(page) = self.settings_page.as_ref() else {
+            return Vec::new();
+        };
+        if page.edit.is_some() {
+            self.set_edit(None);
+            self.set_error(None);
+            return Vec::new();
+        }
+        if let Some(section) = crate::settings_ui::section_at(page, &g, pos) {
+            if let Some(p) = self.settings_page.as_mut() {
+                p.section = section;
+                p.row = 0;
+                p.top = 0;
+                p.in_rows = false;
+                p.error = None;
+            }
+            self.settings_fit();
+            if g.left.is_none() {
+                self.enter_rows();
+            }
+            return Vec::new();
+        }
+        let rows = self.page_rows();
+        let Some(k) = crate::settings_ui::row_at(page, &rows, &g, pos)
+            .filter(|k| rows.get(*k).is_some_and(Row::selectable))
+        else {
+            return Vec::new();
+        };
+        if page.in_rows && page.row == k {
+            self.set_error(None);
+            return self.enter_row();
+        }
+        if let Some(p) = self.settings_page.as_mut() {
+            p.in_rows = true;
+            p.row = k;
+            p.error = None;
+        }
+        self.settings_fit();
+        Vec::new()
+    }
+
+    /// The wheel on the settings page: Up/Down, on the rows or on the sections.
+    pub(super) fn settings_wheel(&mut self, up: bool) {
+        let Some(p) = self.settings_page.as_ref() else {
+            return;
+        };
+        if p.edit.is_some() {
+            return;
+        }
+        let step = if up { -1 } else { 1 };
+        if p.in_rows {
+            self.move_row(step);
+        } else {
+            self.move_section(step);
+        }
     }
 
     /// F1, F2 and Esc.

@@ -348,6 +348,7 @@ impl App {
         &self,
         n: Network,
         image: bool,
+        from: usize,
     ) -> Result<(String, String, u32, Attachment), String> {
         let chat = self
             .ns(n)
@@ -361,6 +362,7 @@ impl App {
             .attachments
             .iter()
             .enumerate()
+            .skip(from)
             .find(|(_, a)| !image || a.kind == MediaKind::Image)
         {
             Some((i, a)) => Ok((chat, m.id.clone(), i as u32, a.clone())),
@@ -383,7 +385,12 @@ impl App {
     /// `o`: download the first attachment of the selected message if needed, then open it with
     /// the default app. Executable types are refused before anything is fetched.
     pub(super) fn open_media(&mut self, n: Network) -> Out {
-        let (chat, msg, idx, att) = match self.pick_attachment(n, false) {
+        self.open_media_at(n, 0)
+    }
+
+    /// `o` for attachment `from` (a click on its chip): the same flow, the same refusals.
+    pub(super) fn open_media_at(&mut self, n: Network, from: usize) -> Out {
+        let (chat, msg, idx, att) = match self.pick_attachment(n, false, from) {
             Ok(t) => t,
             Err(e) => {
                 self.push_notice(n, &e, false);
@@ -457,7 +464,7 @@ impl App {
             );
             return Vec::new();
         }
-        let (chat, msg, idx, att) = match self.pick_attachment(n, true) {
+        let (chat, msg, idx, att) = match self.pick_attachment(n, true, 0) {
             Ok(t) => t,
             Err(e) => {
                 self.push_notice(n, &e, false);

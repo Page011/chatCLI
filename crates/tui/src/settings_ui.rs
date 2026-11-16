@@ -1,6 +1,6 @@
 //! Drawing the settings screen. The model is `settings_view`, the keys are `app/settings.rs`.
 
-use ratatui::layout::{Margin, Rect};
+use ratatui::layout::{Margin, Position, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph};
@@ -59,6 +59,38 @@ pub(crate) fn geometry(body: Rect) -> Option<Geom> {
         list: Rect::new(inner.x, inner.y, inner.width, inner.height - 1),
         status: Rect::new(inner.x, inner.y + inner.height - 1, inner.width, 1),
     })
+}
+
+/// The section list as drawn: the left pane, or the whole list while narrow and not in a section.
+fn sections_area(g: &Geom, page: &SettingsPage) -> Option<Rect> {
+    match g.left {
+        Some(left) => Some(left.inner(Margin::new(1, 1))),
+        None if !page.in_rows => Some(g.list),
+        None => None,
+    }
+}
+
+/// The section drawn at `pos`, if any.
+pub(crate) fn section_at(page: &SettingsPage, g: &Geom, pos: Position) -> Option<Section> {
+    let area = sections_area(g, page).filter(|a| a.contains(pos))?;
+    let idx = Section::ALL.iter().position(|s| *s == page.section)?;
+    let top = fit_top(0, idx, area.height as usize, Section::ALL.len());
+    Section::ALL.get(top + (pos.y - area.y) as usize).copied()
+}
+
+/// The index of the row drawn at `pos`, if any (a heading or a wrapped problem line counts: the
+/// caller checks whether it can be chosen).
+pub(crate) fn row_at(page: &SettingsPage, rows: &[Row], g: &Geom, pos: Position) -> Option<usize> {
+    if (g.left.is_none() && !page.in_rows) || !g.list.contains(pos) {
+        return None;
+    }
+    let (w, h) = (g.list.width as usize, g.list.height as usize);
+    let top = fit_top(page.top, page.row, h, rows.len());
+    let line = (pos.y - g.list.y) as usize;
+    row_layout(rows, top, w, h)
+        .into_iter()
+        .find(|(_, at, n)| (*at..at + n).contains(&line))
+        .map(|(k, ..)| k)
 }
 
 /// Rows of the list that fit on screen.
@@ -144,6 +176,32 @@ fn draw_sections(f: &mut Frame, page: &SettingsPage, area: Rect, t: &Theme, focu
     }
 }
 
+/// Where each row from `top` sits in a list `w` wide and `h` lines tall: (row index, first
+/// line, lines). A problem row wraps over several lines; the rest take one. Drawing and the
+/// mouse both read this.
+pub(crate) fn row_layout(
+    rows: &[Row],
+    top: usize,
+    w: usize,
+    h: usize,
+) -> Vec<(usize, usize, usize)> {
+    let mut out = Vec::new();
+    let mut used = 0usize;
+    for (k, row) in rows.iter().enumerate().skip(top) {
+        if used >= h {
+            break;
+        }
+        let lines = if matches!(row.id, RowId::Problem(_)) {
+            wrap(&row.value, w).len().min(h - used).max(1)
+        } else {
+            1
+        };
+        out.push((k, used, lines));
+        used += lines;
+    }
+    out
+}
+
 fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Geom) {
     let t = app.theme();
     let area = g.list;
@@ -165,14 +223,9 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
     let show_hint = g.left.is_some() && after_label >= want_w + 1 + longest_hint;
     let value_w = if show_hint { want_w } else { after_label };
     let top = fit_top(page.top, page.row, h, rows.len());
-    // A problem line wraps over several screen rows: `used` counts the rows drawn.
-    let mut used = 0usize;
-    for (k, row) in rows.iter().enumerate().skip(top) {
-        if used >= h {
-            break;
-        }
+    for (k, used, lines) in row_layout(rows, top, w, h) {
+        let row = &rows[k];
         let y = area.y + used as u16;
-        used += 1;
         let selected = page.in_rows && k == page.row;
         let line_area = Rect::new(area.x, y, area.width, 1);
         let base = if selected { t.selected } else { Style::new() };
@@ -184,11 +237,7 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
             continue;
         }
         if matches!(row.id, RowId::Problem(_)) {
-            let lines = wrap(&row.value, w);
-            for (i, text) in lines.iter().take(h - (used - 1)).enumerate() {
-                if i > 0 {
-                    used += 1;
-                }
+            for (i, text) in wrap(&row.value, w).iter().take(lines).enumerate() {
                 f.render_widget(
                     Paragraph::new(Span::styled(text.clone(), t.error)),
                     Rect::new(area.x, y + i as u16, area.width, 1),
