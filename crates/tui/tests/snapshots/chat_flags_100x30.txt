@@ -8,7 +8,7 @@
 ║     Sam Sample: thanks     ║│                                                                    │
 ║     田中太郎 (Tar… 05/11/26║│                                                                    │
 ║     了解しました           ║│              Select a chat and press Enter to open it.             │
-║     Jordan Placeh… 09/10/26║│             Type / for commands: /help /settings /keys             │
+║     Jordan Placeh… 09/10/26║│             Press : for commands: help, settings, keys             │
 ║     You: thanks            ║│                                                                    │
 ║                            ║│                                                                    │
 ║                            ║│                                                                    │
@@ -27,7 +27,7 @@
 ║                            ║┌ Message ───────────────────────────────────────────────────────────┐
 ║                            ║│Open a chat to type                                                 │
 ╚════════════════════════════╝└────────────────────────────────────────────────────────────────────┘
-Up/Down chat  Enter open  / commands  ? help  Tab network  r refresh  q quit
+Up/Down chat  Enter open  i type  / filter  : commands  ? help  Tab network  r refresh  Ctrl+C quit
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-22: fg=Reset bg=Reset BOLD | REVERSED
@@ -68,4 +68,4 @@ row 22 cols 31-98: fg=Reset bg=Reset DIM
 row 23 cols 31-98: fg=Reset bg=Reset DIM
 row 24 cols 31-98: fg=Reset bg=Reset DIM
 row 27 cols 31-49: fg=Reset bg=Reset DIM
-row 29 cols 0-75: fg=Reset bg=Reset DIM
+row 29 cols 0-98: fg=Reset bg=Reset DIM

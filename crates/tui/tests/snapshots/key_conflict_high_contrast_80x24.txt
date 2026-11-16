@@ -1,23 +1,23 @@
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ┌ Settings ──────┐╔ Keys - Everywhere ═════════════════════════════════════════╗
-│Appearance      │║Line start          Home                                    ║
-│Layout          │║Line end            End                                     ║
-│Notifications   │║Delete back         Backspace                               ║
-│Media           │║Delete forward      Delete                                  ║
-│Teams           │║Delete word back    Ctrl+W, Ctrl+Backspace                  ║
-│WhatsApp        │║Clear line          Ctrl+U                                  ║
-│Keys            │║Sign-in panel                                               ║
-│About           │║Accept              Enter                                   ║
-│                │║Command bar         /                                       ║
-│                │║Quit                q                                       ║
-│                │║Help                ?                                       ║
+│Appearance      │║Accept              Enter                                   ║
+│Layout          │║Back                Esc                                     ║
+│Notifications   │║Cursor left         Left                                    ║
+│Media           │║Cursor right        Right                                   ║
+│Teams           │║Word left           Ctrl+Left                               ║
+│WhatsApp        │║Word right          Ctrl+Right                              ║
+│Keys            │║Line start          Home                                    ║
+│About           │║Line end            End                                     ║
+│                │║Delete back         Backspace                               ║
+│                │║Delete forward      Delete                                  ║
+│                │║Delete word back    Ctrl+W, Ctrl+Backspace                  ║
+│                │║Clear line          Ctrl+U                                  ║
+│                │║Top                 g g                                     ║
 │                │║Chat list                                                   ║
-│                │║Up                  Up, k                                   ║
-│                │║Down                Down, j                                 ║
+│                │║Accept              l, Right                                ║
+│                │║Compose             i                                       ║
 │                │║Top                 Home                                    ║
 │                │║Bottom              End                                     ║
-│                │║Accept              Enter                                   ║
-│                │║Command bar         /                                       ║
 │                │║Refresh             p? Enter swaps                          ║
 │                │║ask the network for a fresh chat list                       ║
 └────────────────┘╚════════════════════════════════════════════════════════════╝
@@ -29,7 +29,6 @@ row 0 cols 27-34: fg=Reset bg=Reset BOLD
 row 0 cols 36-45: fg=Reset bg=Reset BOLD
 row 1 cols 19-37: fg=Reset bg=Reset BOLD
 row 8 cols 1-16: fg=Reset bg=Reset BOLD
-row 8 cols 19-31: fg=Reset bg=Reset BOLD
-row 13 cols 19-27: fg=Reset bg=Reset BOLD
+row 15 cols 19-27: fg=Reset bg=Reset BOLD
 row 20 cols 19-78: fg=Reset bg=Reset BOLD | REVERSED
 row 23 cols 0-73: fg=Reset bg=Reset BOLD

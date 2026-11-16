@@ -29,6 +29,7 @@ impl App {
         let label = ns.network.label();
         match id {
             CmdId::Refresh if ns.panel() => Some("REFRESH - sign in first".to_string()),
+            CmdId::ReadAll if ns.panel() => Some("READALL - sign in first".to_string()),
             CmdId::SignIn => match ns.status {
                 Status::NeedsLogin { .. } => None,
                 Status::LoggingIn | Status::Qr { .. } => {
@@ -78,6 +79,7 @@ impl App {
             CmdId::About => self.open_settings(Section::About),
             CmdId::Search => self.open_search(),
             CmdId::Refresh => return self.refresh(n),
+            CmdId::ReadAll => self.ask_mark_all_read(n),
             CmdId::SignIn => return vec![(n, Command::Login)],
             CmdId::SignOut => self.prompt = Some(Prompt::SignOut(n)),
             CmdId::Tour => self.start_tour(),

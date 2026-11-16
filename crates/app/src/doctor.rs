@@ -251,7 +251,7 @@ fn online_plan(online: bool, app_running: bool) -> (bool, Option<Check>) {
             "Teams: live subscription (--online)",
             Level::Warn,
             "skipped: chatcli is running and may be refreshing the sign-in",
-            Some("Quit chatcli (q or Ctrl+C), then run chatcli doctor --online."),
+            Some("Quit chatcli (Ctrl+C or :quit), then run chatcli doctor --online."),
         );
         (false, Some(skipped))
     } else {

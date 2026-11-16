@@ -19,7 +19,7 @@
 ║                          ║│                    andbook for details           │
 ║                          ║└──────────────────────────────────────────────────┘
 ║                          ║┌ Message ─────────────────────────────────────────┐
-║                          ║│Enter on a chat to type                           │
+║                          ║│i to type                                         │
 ╚══════════════════════════╝└──────────────────────────────────────────────────┘
 Open docs.example.invalid? y/n
 --- styled runs (everything else is default style) ---
@@ -64,5 +64,5 @@ row 16 cols 29-33: fg=DarkGray bg=Reset NONE
 row 16 cols 35-46: fg=Reset bg=Reset BOLD
 row 17 cols 49-78: fg=Reset bg=Reset UNDERLINED
 row 18 cols 49-55: fg=Reset bg=Reset UNDERLINED
-row 21 cols 29-51: fg=Reset bg=Reset DIM
+row 21 cols 29-37: fg=Reset bg=Reset DIM
 row 23 cols 0-29: fg=Reset bg=Reset BOLD

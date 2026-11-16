@@ -34,7 +34,7 @@ Right now you can host everything yourself.
 │                      │║> typing a draft                                      ║
 └──────────────────────┘╚══════════════════════════════════════════════════════╝
 
-Enter send  Ctrl+Up select  Ctrl+J newline  Ctrl+E emoji  Esc back to list
+Enter send  F1 help  Esc back  Shift+Up select  Ctrl+J newline  Ctrl+E emoji
 ```
 
 ## Read this first
@@ -238,46 +238,48 @@ You can unlink at any time from the same **Linked devices** screen on your phone
 
 ## Using it
 
-Start it with `chatcli`. Press `?` in the chat list for a help screen generated from the keys that are active right now (so it is always right, also after you rebind keys). Quit with `q` or `Ctrl+C`, not by closing the window: chatcli deletes its Teams subscription as it quits.
+Start it with `chatcli`. Press `?` for a help screen generated from the keys that are active right now (so it is always right, also after you rebind keys). Quit with `Ctrl+C` or `:quit`, not by closing the window: chatcli deletes its Teams subscription as it quits.
 
 ### First run
 
-- Type `/` for the command bar: every command, and your chats. `/settings` opens the settings screen, `/keys` the key bindings, `/help` (or `F1`) the help screen.
+- Press `:` for the command bar: every command, and your chats. `:settings` opens the settings screen, `:keys` the key bindings, `:help` (or `?`) the help screen.
 - Everything in the settings screen applies at once and is saved: theme and colours, layout, notifications, media limits, Teams file permissions, WhatsApp privacy options and every key binding.
 - chatcli writes `settings.toml` itself from that screen, one key at a time, and keeps your comments. Editing the file by hand is optional and still works (restart chatcli to read a hand edit).
 - To watch it all first: `chatcli --demo --tour` (fake data, no accounts, nothing saved to your real files).
 
 ### Keys
 
-These are the default keys. Your own bindings are below.
+These are the default keys. Your own bindings are below. The same keys mean the same thing everywhere they work: `j` / `k` move in the chat list, in message selection, in lists and in help; `Enter` goes in or accepts, `Esc` goes back out.
 
 | Key | Does |
 |---|---|
 | `Tab` / `Shift+Tab` | Next / previous network |
 | `Alt+1`, `Alt+2` | Jump to Teams, WhatsApp |
-| `F1` | Help |
-| `F2` | Settings screen (`/settings`): theme, layout, notifications, media, Teams, WhatsApp and every key binding. `Up`/`Down` move, `Left`/`Right` change, `Enter` edits a number or colour, `r` resets, `Tab` switches between the section list and the rows, `Esc` closes |
+| `?` or `F1` | Help (`?` types a question mark in the boxes you type in; `F1` works there too). `Esc` closes it |
+| `F2` | Settings screen (`:settings`): theme, layout, notifications, media, Teams, WhatsApp and every key binding. `Up`/`Down` move, `Left`/`Right` change, `Enter` edits a number or colour, `r` resets, `Tab` switches between the section list and the rows, `Esc` closes |
+| `:` | The command bar: type to list commands and chats, `Enter` runs or opens the highlighted one, `Esc` closes it |
+| `/` | Filter the chat list by name: `Enter` keeps the filter, `Esc` clears it |
 | `Ctrl+F` | [Search](#search) every stored message |
-| `Ctrl+C` | Quit from anywhere |
-| `?` | Help (chat list and sign-in panel) |
-| `/` | The command bar: type to list commands and chats, `Enter` runs or opens the highlighted one (chat list, sign-in panel, message selection; `Esc` closes it) |
+| `Up` / `Down`, `k` / `j` | Move |
+| `g g` / `G`, `Home` / `End` | To the top / the bottom |
+| `H` / `L` | To the first / last chat or message on screen |
+| `PgUp` / `PgDn` | A page up / down |
+| `Ctrl+C` | Quit from anywhere (also `:quit`) |
 
 Chat list:
 
 | Key | Does |
 |---|---|
-| `Up` / `Down`, or `k` / `j` | Move in the chat list. The chat under the cursor shows in the message pane at once (a preview) |
-| `Home` / `End`, `PgUp` / `PgDn` | First / last chat, a page of chats |
-| `Enter` | Reply to the previewed chat: focus its message box |
-| `/` | Command bar (see above). The old plain filter is the `filter_start` action: bind a key to it if you want it |
+| `Up` / `Down`, `k` / `j` | Move in the chat list. The chat under the cursor shows in the message pane at once (a preview) |
+| `Enter`, `l` or `Right` | Into the chat: its newest message is selected (see message selection below) |
+| `i` | Straight to the chat's message box |
+| `Esc` | Clear the filter; with no filter, close the chat in the message pane |
 | `r` | Refresh the chat list (you trigger it; chatcli never polls) |
 | `n` / `N` | Next / previous chat with unread messages (wraps; muted chats are skipped) |
-| `M` | Mark every chat of this network read, after a `y/n` |
+| `R` | Mark the chat read. `:readall` marks every chat of this network read, after a `y/n` |
 | `p` | Pin or unpin the chat (pinned chats sort first) |
 | `m` | Mute (for good) or unmute: no toast, not counted in the tab total |
-| `x` | Hide or show the chat. `H` shows or hides the chats you hid |
-| `u` | Open a link from the newest message that has one |
-| `q` | Quit |
+| `z` | Hide or show the chat. `Z` shows or hides the chats you hid |
 
 Message box:
 
@@ -285,7 +287,8 @@ Message box:
 |---|---|
 | `Enter` | Send the whole message |
 | `/command` | A message that starts with `/` is a command, not text: `/help`, `/settings`, `/keys`, `/signout`. A list of commands opens as you type; `Enter` runs the chosen one. An unknown word shows `UNKNOWN COMMAND` and keeps your text. Start with `//` to send a message that begins with a slash (`//usr/bin` sends `/usr/bin`) |
-| `Esc` | Cancel a pending reply or edit; otherwise back to the chat list |
+| `Esc` | Cancel a pending reply or edit; otherwise to message selection (to the chat list when the chat has no message yet) |
+| `Shift+Up` | Message selection |
 | `Left` / `Right`, `Ctrl+Left` / `Ctrl+Right` | Move the cursor by character, by word. These editing keys, down to `Ctrl+U`, work the same in every box you type in: the chat filter, the command bar, search, the emoji search and the file prompt (in the emoji picker `Left` and `Right` move through the grid) |
 | `Home` / `End` | Start / end of the line |
 | `Backspace` / `Delete` | Delete a character (an emoji goes whole) |
@@ -296,30 +299,32 @@ Message box:
 | `Ctrl+E` | Emoji picker |
 | `Ctrl+O` | Attach a file |
 | `Alt+V` or `Ctrl+Shift+V` | Attach the picture on the clipboard (Windows Terminal keeps `Ctrl+Shift+V` for its own text paste, so use `Alt+V` there) |
-| `Ctrl+Up` | Select a message |
 
-Select mode (`Ctrl+Up` from the message box). The footer lists the actions: the ones that apply are bold, the rest are dimmed (plain text in the high-contrast theme):
+Message selection (`Enter` on a chat, or `Shift+Up` from the message box). The footer lists the actions: the ones that apply are bold, the rest are dimmed (plain text in the high-contrast theme):
 
 | Key | Does |
 |---|---|
-| `Up` / `Down`, `k` / `j`, `PgUp` / `PgDn`, `Home` / `End`, `G` | Move the selection |
+| `Up` / `Down`, `k` / `j`, `PgUp` / `PgDn`, `g g` / `G`, `Home` / `End` | Move the selection. Up from the oldest message held loads older ones |
+| `H` / `M` / `L` | The first / middle / last message on screen |
+| `i` | To the message box |
+| `Esc`, `h` or `Left` | Back to the chat list |
 | `r` | Reply: quote this message |
 | `e` | React: opens the emoji picker. Choose the emoji you already used to remove it |
-| `E` | Edit your own message (your unsent draft comes back afterwards) |
-| `d` | Delete your own message for everyone, after a `y/n` |
+| `c` | Change (edit) your own message (your unsent draft comes back afterwards) |
+| `d` or `x` | Delete your own message for everyone, after a `y/n` |
 | `u` | Open a link from this message |
 | `o` | Open the attachment (downloads first if needed) |
-| `v` | Show or hide a thumbnail of an image |
-| `Esc` | Back to the message box |
 
-The mouse works too: click a tab, click a chat (previews it, like moving the cursor), scroll the wheel. A preview does not mark the chat read: `Enter`, sending, or two seconds on it does. Unsent text is kept per chat. Times are local.
+Popups and pickers take `Enter` (not `Tab`) for the chosen item. `view_image` (a thumbnail of an image, in message selection) and `open_link` in the chat list (a link from the newest message) have no default key: bind one if you want them.
 
-If your terminal uses `Ctrl+Up` for its own scrollback, rebind it (see [Key bindings](#key-bindings)):
+The mouse works too: click a tab, click a chat (previews it, like moving the cursor), scroll the wheel. A preview does not mark the chat read: going into the chat, sending, or two seconds on it does. Unsent text is kept per chat. Times are local.
+
+If your terminal uses `Shift+Up` for its own scrollback, rebind it (see [Key bindings](#key-bindings)):
 
 ```toml
 [keys.composer]
 "alt+up" = "select_messages"
-"ctrl+up" = "unbound"
+"shift+up" = "unbound"
 ```
 
 ### Writing
@@ -431,7 +436,7 @@ Your own bindings sit in one table per context, `key = "action"`, over the built
 [keys.list]
 "ctrl+n" = "down"
 "ctrl+p" = "up"
-"x" = "unbound"        # removes the built-in binding of x
+"z" = "unbound"        # removes the built-in binding of z (hide)
 
 [keys.composer]
 "ctrl+s" = "send"
@@ -439,13 +444,13 @@ Your own bindings sit in one table per context, `key = "action"`, over the built
 
 - **Key strings:** a single character (`a`, `G`, `/`), or `enter` `esc` `tab` `up` `down` `left` `right` `home` `end` `pgup` `pgdn` `backspace` `delete` `insert` `space` `f1` to `f24`, with `ctrl+`, `alt+` or `shift+` in front (`shift+tab`).
 - **Contexts:** `common` (see below), `panel` (sign-in), `list` (chat list), `filter`, `composer` (message box), `select` (message selection), `popup` (suggestions, emoji picker, file prompt, search box, command bar), `confirm` (the `y/n` questions), `help`.
-- **`[keys.common]`** binds a key once for every context where its action makes sense: quitting everywhere; the tabs, help, settings, search and the command bar outside the overlays; the editing keys in every box you type in; any other action where chatcli itself gives it a key. A context's own table wins over `common`, and a `common` key that types a character (a letter, `?`, `/`) is skipped in the boxes you type in, so it never stops you typing.
+- **`[keys.common]`** binds a key once for every context where its action makes sense: quitting everywhere; the tabs, help, settings, search and the command bar outside the overlays; the filter in the chat list; moving, `accept` and `back` in the chat list, message selection, the lists and help; the editing keys in every box you type in; any other action where chatcli itself gives it a key. Most default keys live here. A context's own table wins over `common`, `"key" = "unbound"` in a context's own table stops a `common` key there, and a `common` key that types a character (a letter, `?`, `/`, `:`) is skipped in the boxes you type in, so it never stops you typing.
 - **Text contexts** (`filter`, `composer`, `popup`) refuse plain letters and `Backspace` in their own tables, because that would stop you typing. Use `ctrl+` or `alt+`, or `[keys.common]`.
 - **Ways out:** `Ctrl+C` (`quit`) and `Esc` (`back`) are ordinary bindings: a context can give `Ctrl+C` to another action, or you can move `quit` to another key. chatcli only checks that some key still quits from every context (a `common` key that types a character does not count in the boxes you type in), and that `popup`, `confirm` and `help` each keep a key that backs out (`confirm_no` counts in `confirm`). If not, `Ctrl+C` quits and `Esc` backs out in the contexts named by the notice until you bind one.
 - A bad binding (unknown action, unreadable key, the same key twice in one table) is skipped with one notice, and the rest load. The notice suggests the closest name. Some terminals send `Ctrl+I` as `Tab`, `Ctrl+M` and `Ctrl+J` as `Enter`, `Ctrl+[` as `Esc` and `Ctrl+H` as `Backspace`: these are warned about and still applied.
-- User key sequences (like `gg`) are not supported.
+- Two-key sequences (`g g`, top) are built in; you cannot add your own yet. A single key bound to `g` replaces them in that context.
 
-Actions (the names are stable): `quit` `next_network` `prev_network` `goto_network_1` `goto_network_2` `help` `up` `down` `top` `bottom` `page_up` `page_down` `accept` `back` `filter_start` `refresh` `send` `cursor_left` `cursor_right` `word_left` `word_right` `line_start` `line_end` `delete_back` `delete_forward` `delete_word_back` `clear_line` `insert_newline` `emoji_picker` `open_link` `confirm_yes` `confirm_no` `select_messages` `reply` `cancel_reply` `react` `edit` `delete` `open_media` `view_image` `attach` `paste_image` `next_unread` `prev_unread` `mark_all_read` `pin` `mute` `hide` `show_hidden` `search` `command_bar` `settings`, and `unbound`. `up`, `down`, `top`, `bottom`, `page_up`, `page_down`, `accept` and `back` do what they mean where they are pressed: `down` is the next chat in the list, the next message in selection, the next suggestion in a popup, and scrolls help; `accept` opens a chat, signs in, keeps the filter or takes a suggestion; `back` leaves the message box or selection, closes help or a popup, clears the filter, or answers no. The `?` screen lists every action next to its keys. The footer hints follow your bindings too. A binding on an action that makes no sense in that context is accepted and does nothing.
+Actions (the names are stable): `quit` `next_network` `prev_network` `goto_network_1` `goto_network_2` `help` `up` `down` `top` `bottom` `screen_top` `screen_middle` `screen_bottom` `page_up` `page_down` `accept` `back` `compose` `filter_start` `refresh` `send` `cursor_left` `cursor_right` `word_left` `word_right` `line_start` `line_end` `delete_back` `delete_forward` `delete_word_back` `clear_line` `insert_newline` `emoji_picker` `open_link` `confirm_yes` `confirm_no` `select_messages` `reply` `cancel_reply` `react` `edit` `delete` `open_media` `view_image` `attach` `paste_image` `next_unread` `prev_unread` `mark_read` `mark_all_read` `pin` `mute` `hide` `show_hidden` `search` `command_bar` `settings`, and `unbound`. `up`, `down`, `top`, `bottom`, `screen_top`, `screen_middle`, `screen_bottom`, `page_up`, `page_down`, `accept` and `back` do what they mean where they are pressed: `down` is the next chat in the list, the next message in selection, the next suggestion in a popup, and scrolls help; `accept` goes into a chat (its newest message selected), signs in, keeps the filter or takes a suggestion; `back` goes from the message box to selection and from selection to the chat list, closes the open chat, help or a popup, clears the filter, or answers no. `compose` goes to the message box. The `?` screen lists every action next to its keys. The footer hints follow your bindings too. A binding on an action that makes no sense in that context is accepted and does nothing.
 
 ### Themes
 
@@ -529,7 +534,7 @@ On macOS they are in the Keychain (Keychain Access, search for `chatcli`). On Li
 
 ### Remove everything
 
-1. Quit chatcli with `q` or `Ctrl+C`. chatcli deletes its Teams subscription as it quits. Closing the window, killing the process or switching the machine off skips that, and the subscription stays alive until it expires (within 24 hours). Nothing breaks while it waits, but the next start may find an orphan; chatcli removes it then.
+1. Quit chatcli with `Ctrl+C` or `:quit`. chatcli deletes its Teams subscription as it quits. Closing the window, killing the process or switching the machine off skips that, and the subscription stays alive until it expires (within 24 hours). Nothing breaks while it waits, but the next start may find an orphan; chatcli removes it then.
 2. Sign out of Teams: `chatcli teams logout`
 3. Delete the data folder: `%LOCALAPPDATA%\chatcli` on Windows (see [Linux and macOS](#linux-and-macos-experimental) for the other folders).
 4. In Credential Manager, delete every Generic Credential whose name ends in `.chatcli`. On macOS, delete the `chatcli` items in Keychain Access. On Linux, run `secret-tool clear service chatcli` (with `CHATCLI_SECRET_STORE=file` the secrets went with the data folder).

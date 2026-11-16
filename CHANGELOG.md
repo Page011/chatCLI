@@ -10,23 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `settings.toml`: one hand-edited file for key bindings, theme, layout, notifications, media limits, optional Teams scopes and WhatsApp privacy options. A broken section falls back to its defaults with one notice naming the line and key. `chatcli settings path` and `chatcli settings check`.
 - Keys are named actions in a keymap. Rebind them in `settings.toml` (`[keys.<context>]`), with a notice for every mistake and a suggested name. `?` opens a help screen generated from the active keys.
-- Message selection (`Ctrl+Up`): reply with a quote, react, edit and delete your own messages, open links, open attachments.
+- Message selection (`Enter` on a chat, or `Shift+Up` from the message box): reply with a quote, react, edit and delete your own messages, open links, open attachments.
 - Replies with a quote on Teams and WhatsApp. Teams needs the new `ChatMessage.Send` permission: log out of Teams and sign in again after upgrading.
 - Reactions on Teams and WhatsApp, shown as counts under each message, with an emoji picker (`Ctrl+E`, Recent first) and `:shortcode` completion.
 - Edit and delete your own messages on Teams and WhatsApp. Edits and deletes from other people update in place.
 - `@mention` completion in group chats on both networks. Chats where you were mentioned show `@` after the unread count.
 - `[keys.common]`: bind a key once for every context its action applies to. The movement, accept and back keys are one action each wherever they work (`up`, `down`, `top`, `bottom`, `page_up`, `page_down`, `accept`, `back`), so one binding moves through the chat list, a message selection, a popup and help alike. The editing keys (cursor, word jumps, `Ctrl+W`, `Ctrl+Backspace`, `Delete`, `Ctrl+U`, `Home`, `End`) work in every box you type in: the chat filter, the command bar, search, the emoji search and the file prompt.
 - Message box editing: cursor movement, word jumps, whole-emoji delete, multi-line drafts (`Shift+Enter`, `Ctrl+J`, `Alt+Enter`), safe paste that never sends, and a length check before sending. Shift+Enter works on Unix terminals that offer the kitty keyboard protocol: chatcli turns it on at start and off at exit.
-- Media: attachments show as chips; `o` downloads on demand into a capped cache and opens the file in the default app; `v` shows image thumbnails with half-block characters, or Sixel, Kitty or iTerm2 graphics where the terminal supports them. `chatcli media clear`.
+- Media: attachments show as chips; `o` downloads on demand into a capped cache and opens the file in the default app; `view_image` (no default key) shows image thumbnails with half-block characters, or Sixel, Kitty or iTerm2 graphics where the terminal supports them. `chatcli media clear`.
 - Send pictures and files on both networks: `Ctrl+O` path prompt with Tab completion, dropped paths, and clipboard pictures (`Alt+V`). Pictures are re-encoded, which drops EXIF data. Teams files go through your OneDrive and need the optional `files_write` setting.
 - Optional Teams file downloads (`[teams] files_read`).
-- Open links from messages in the browser (`u`), after an `Open <host>? y/n` line that shows the real host.
+- Open links from messages in the browser (`u` in message selection), after an `Open <host>? y/n` line that shows the real host.
 - Colour themes with named roles (`[theme]`, `high-contrast`, `light`, `dark`) and `NO_COLOR` support.
 - Layout options: sidebar width, 12-hour time, date order, compact rows, hidden previews.
 - Windows toast notifications for new messages, off by default for message text (`[notifications] preview`), folded per chat.
 - Scroll past the top to load older messages on Teams (one page per scroll) and WhatsApp (asks your phone).
-- `n` and `N` jump to the next and previous unread chat; `M` marks every chat read.
-- Pin, mute and hide chats (`p`, `m`, `x`, `H`). WhatsApp syncs them with the phone.
+- `n` and `N` jump to the next and previous unread chat; `R` marks the chat read, and `:readall` every chat after a y/n.
+- Pin, mute and hide chats (`p`, `m`, `z`, `Z`). WhatsApp syncs them with the phone.
 - Local full-text search across both networks (`Ctrl+F`, `chatcli search <text>`).
 - WhatsApp typing indicator, and your own typing only with `[whatsapp] send_typing`.
 - `chatcli doctor [--online] [--json]` checks the setup and prints fixes.
@@ -37,7 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Linux: `CHATCLI_SECRET_STORE=file` keeps secrets in `secrets.json` in the data folder (mode 0600, not encrypted) for systems with no Secret Service.
 - Winget and Scoop manifests (not yet submitted), a code-signing write-up, a memory benchmark script, a relay end-to-end test, WhatsApp fake-transport tests, and release notes built from this file.
 - Sidebar preview: moving through the chat list (arrow keys, j/k, page keys, a click) shows each chat in the message pane at once. Enter replies, Esc goes back. A previewed chat counts as read after 2 s on screen, never while its pane is hidden.
-- `/` command bar (chat list, sign-in panel, message selection): lists every command and your chats. Commands also work as `/command` in the message box (`//` sends a message that starts with a slash): `/help` `/settings` `/keys` `/theme` `/layout` `/notifications` `/search` `/refresh` `/signin` `/signout` `/about` `/tour` `/quit`.
+- `:` command bar (everywhere outside the boxes you type in): lists every command and your chats. Commands also work as `/command` in the message box (`//` sends a message that starts with a slash): `/help` `/settings` `/keys` `/theme` `/layout` `/notifications` `/search` `/refresh` `/signin` `/signout` `/about` `/tour` `/quit`.
 - Settings screen (`F2`, `/settings`): theme and the 14 colour roles with a live preview, layout, notifications, media limits, Teams file permissions and WhatsApp privacy options. Every change applies at once and is saved to `settings.toml`, one key at a time, with comments kept. A `settings.toml` that does not parse is never written: the change applies for the session and `NOT SAVED` says why.
 - Key bindings page (`/keys`): change any key by pressing the new one, swap on a clash, remove, and reset one or all. Saved to `[keys]` in `settings.toml`.
 - `Ctrl+C` and `Esc` are ordinary keys: a context can bind `Ctrl+C` to something else and `quit` can move to another key. chatcli checks instead that some key quits from every context and that help, popups and `y/n` questions keep a key that backs out; the keys page refuses a change that breaks this, and `settings.toml` falls back to `Ctrl+C` or `Esc` there with a notice. Capturing a key on the keys page takes every key, `Esc` and `Backspace` included. The header shows the key that quits.
@@ -46,7 +46,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- `/` opens the command bar instead of the plain chat filter; bind a key to `filter_start` to keep the filter. A message that starts with `/` is a command: type `//` to send it as text.
+- `:` opens the command bar and `/` filters the chat list. A message that starts with `/` is a command: type `//` to send it as text.
+- New default keys and chat flow, the same keys meaning the same thing everywhere. `Enter` (or `l`, `Right`) goes into a chat with its newest message selected, `i` goes to its message box; `Esc` steps back out: the message box to selection, selection (also `h`, `Left`) to the chat list, and on the list it clears the filter or closes the open chat. `j`/`k`, `g g`/`G`, `H`/`L` (and `M` in selection) move in the chat list, message selection and help. `Shift+Up` selects from the message box. In selection `c` edits and `x` or `d` deletes. `?` helps from anywhere outside a text box. Removed: `q` (use `Ctrl+C` or `:quit`), `Tab` to accept in popups (use `Enter`), and the help's `q`, `?` and `F1` to close it (use `Esc`). `open_link` in the chat list and `view_image` keep their actions with no default key.
+- Most default keys now live in `[keys.common]`, and `"key" = "unbound"` in a context's table stops a `common` key there.
 - `settings.toml` is no longer read-only to chatcli: the settings screen writes it (see Added).
 - WhatsApp read receipts are now off by default (`[whatsapp] send_read_receipts`). Before, they were always sent.
 - An edited WhatsApp message no longer gets an `(edited)` text suffix: the message carries an edited flag. A deleted message has empty text and shows `[message deleted]`.

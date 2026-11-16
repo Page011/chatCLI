@@ -389,6 +389,12 @@ fn key_rows(out: &mut Vec<Row>, s: &Settings, keys: &Keymap) {
         false,
     ));
     for ctx in Context::ALL {
+        // A context whose keys all come from `common` (the sign-in panel, the filter, the
+        // popups) has no rows of its own: no heading either.
+        let actions = actions_for(ctx, &s.keys);
+        if actions.is_empty() {
+            continue;
+        }
         out.push(row(
             RowId::KeyHeading(ctx),
             ctx.title(),
@@ -396,7 +402,7 @@ fn key_rows(out: &mut Vec<Row>, s: &Settings, keys: &Keymap) {
             "",
             false,
         ));
-        for a in actions_for(ctx, &s.keys) {
+        for a in actions {
             let custom = key_is_custom(s, ctx, a);
             out.push(row(
                 RowId::KeyAction(ctx, a),

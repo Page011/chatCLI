@@ -15,9 +15,9 @@
 │                          │║09:12 You           I         ║
 │                          │╚══════════════════════════════╝
 │                          │┌ Message ─────────────────────┐
-│                          ││Esc to go back and type       │
+│                          ││i to type                     │
 └──────────────────────────┘└──────────────────────────────┘
-Up/Down move  r reply  e react  u link  E edit  d delete
+Up/Down move  r reply  e react  u link  c edit  x delete
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -60,7 +60,7 @@ row 13 cols 1-16: fg=DarkGray bg=Reset NONE
 row 13 cols 29-58: fg=Reset bg=Reset BOLD | REVERSED
 row 14 cols 29-33: fg=DarkGray bg=Reset NONE
 row 14 cols 35-46: fg=Cyan bg=Reset BOLD
-row 17 cols 29-51: fg=Reset bg=Reset DIM
+row 17 cols 29-37: fg=Reset bg=Reset DIM
 row 19 cols 0-11: fg=Reset bg=Reset BOLD
 row 19 cols 12-13: fg=Reset bg=Reset DIM
 row 19 cols 14-20: fg=Reset bg=Reset BOLD

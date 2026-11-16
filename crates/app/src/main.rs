@@ -25,7 +25,7 @@ const ALREADY_RUNNING: &str = "chatcli is already running";
 
 /// What a command that changes sign-in state says when the full client holds the lock.
 const COMMAND_BLOCKED: &str =
-    "chatcli is running: quit it (q or Ctrl+C), then run this command again.";
+    "chatcli is running: quit it (Ctrl+C or :quit), then run this command again.";
 
 /// Holds an exclusive OS file lock while this chatcli runs, so a second one stops. The OS frees
 /// the lock when the process dies, so a crash never leaves a stale lock.

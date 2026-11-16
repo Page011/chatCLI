@@ -21,7 +21,7 @@
 │                          │║> /foo                                            ║
 └──────────────────────────┘╚══════════════════════════════════════════════════╝
 UNKNOWN COMMAND /foo - start with // to send as text
-Enter send  F1 help  Esc back to list  Ctrl+Up select  Ctrl+J newline
+Enter send  F1 help  Esc back  Shift+Up select  Ctrl+J newline  Ctrl+E emoji
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -63,4 +63,4 @@ row 16 cols 35-46: fg=Cyan bg=Reset BOLD
 row 19 cols 29-37: fg=Reset bg=Reset BOLD
 row 20 cols 29-30: fg=Reset bg=Reset BOLD
 row 22 cols 0-51: fg=Red bg=Reset NONE
-row 23 cols 0-68: fg=Reset bg=Reset DIM
+row 23 cols 0-75: fg=Reset bg=Reset DIM

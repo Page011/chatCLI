@@ -929,7 +929,7 @@ mod tests {
             && !r.selectable()));
         assert_eq!(value_of(&a, keys_row(Context::List, Action::Refresh)), "r");
         assert_eq!(
-            value_of(&a, keys_row(Context::List, Action::FilterStart)),
+            value_of(&a, keys_row(Context::List, Action::OpenLink)),
             "-",
             "an action with no key still has a row"
         );
@@ -1004,15 +1004,14 @@ mod tests {
             a.take_setting_edits(),
             vec![kset("keys.list", "f5", "refresh")]
         );
-        // Esc is a key like any other: here it already backs out, so it is refused by name.
+        // Esc is a key like any other: it backs out everywhere, so the page warns first, and Esc
+        // answers no.
         press(&mut a, KeyCode::Char('a'));
         press(&mut a, KeyCode::Esc);
         let p = a.settings_page().expect("the page stays open");
-        assert_eq!(
-            p.error.as_deref(),
-            Some("Esc is already Back (Chat list): delete it there first")
-        );
-        assert!(matches!(p.edit, Some(PageEdit::Add { .. })));
+        assert!(matches!(p.edit, Some(PageEdit::AddOverlap { .. })));
+        press(&mut a, KeyCode::Esc);
+        assert!(a.settings_page().unwrap().edit.is_none());
         assert!(a.take_setting_edits().is_empty());
     }
 
@@ -1132,7 +1131,7 @@ mod tests {
         let p = a.settings_page().unwrap();
         assert_eq!(
             p.error.as_deref(),
-            Some("KEY NOT SAVED - Quit would have no key in Filter box and 5 more places")
+            Some("KEY NOT SAVED - Quit would have no key in any context")
         );
         assert!(
             matches!(p.edit, Some(PageEdit::Pick { .. })),
@@ -1140,13 +1139,10 @@ mod tests {
         );
         assert!(a.take_setting_edits().is_empty());
         press(&mut a, KeyCode::Esc);
-        goto(&mut a, keys_row(Context::List, Action::FilterStart));
+        goto(&mut a, keys_row(Context::List, Action::OpenLink));
         press(&mut a, KeyCode::Char('d'));
         let p = a.settings_page().unwrap();
-        assert_eq!(
-            p.error.as_deref(),
-            Some("Filter start has no keys to delete")
-        );
+        assert_eq!(p.error.as_deref(), Some("Open link has no keys to delete"));
         assert!(p.edit.is_none());
     }
 
@@ -1242,26 +1238,20 @@ mod tests {
             a.keys.lookup(Context::List, plain(KeyCode::Backspace)),
             Some(Action::Refresh)
         );
-        // Ctrl+C: the chat list still has q to quit, so the list may take it.
-        let mut b = on_key_row(Context::List, Action::Refresh);
-        press(&mut b, KeyCode::Enter);
-        press_mod(&mut b, KeyCode::Char('c'), KeyModifiers::CONTROL);
-        assert!(!b.should_quit());
-        assert_eq!(
-            b.take_setting_edits(),
-            vec![
-                kset("keys.list", "ctrl+c", "refresh"),
-                kset("keys.list", "r", "unbound")
-            ]
-        );
-        // Message selection has no other quit key: refused, and Ctrl+C still quits there.
+        // Ctrl+C quits in message selection, so it asks before swapping; Esc answers no and
+        // nothing quits.
         let mut c = on_key_row(Context::Select, Action::Reply);
         press(&mut c, KeyCode::Enter);
         press_mod(&mut c, KeyCode::Char('c'), KeyModifiers::CONTROL);
-        assert_eq!(
-            c.settings_page().unwrap().error.as_deref(),
-            Some("KEY NOT SAVED - Quit would have no key in Message selection")
-        );
+        assert!(!c.should_quit());
+        assert!(matches!(
+            c.settings_page().unwrap().edit,
+            Some(PageEdit::Conflict {
+                other: Action::Quit,
+                ..
+            })
+        ));
+        press(&mut c, KeyCode::Esc);
         assert!(c.take_setting_edits().is_empty());
         assert_eq!(
             c.keys.lookup(
@@ -1383,7 +1373,7 @@ mod tests {
     #[test]
     fn slash_keys_opens_the_keys_page_ready_for_its_rows() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('/'));
+        press(&mut a, KeyCode::Char(':'));
         type_text(&mut a, "keys");
         press(&mut a, KeyCode::Enter);
         assert_eq!(a.settings_page().unwrap().section, Section::Keys);

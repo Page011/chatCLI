@@ -25,9 +25,9 @@
 │                            │║                                                                    ║
 │                            │╚════════════════════════════════════════════════════════════════════╝
 │                            │┌ Message ───────────────────────────────────────────────────────────┐
-│                            ││Esc to go back and type                                             │
+│                            ││i to type                                                           │
 └────────────────────────────┘└────────────────────────────────────────────────────────────────────┘
-Up/Down move  r reply  e react  u link  E edit  d delete  Esc back  / commands  ? help
+Up/Down move  r reply  e react  u link  c edit  x delete  Esc back  : commands  i type  ? help
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -61,3 +61,4 @@ row 29 cols 23-29: fg=Reset bg=Reset BOLD
 row 29 cols 58-65: fg=Reset bg=Reset BOLD
 row 29 cols 68-77: fg=Reset bg=Reset BOLD
 row 29 cols 80-85: fg=Reset bg=Reset BOLD
+row 29 cols 88-93: fg=Reset bg=Reset BOLD

@@ -25,9 +25,9 @@
 │                            │║                                                                    ║
 │                            │╚════════════════════════════════════════════════════════════════════╝
 │                            │┌ Message ───────────────────────────────────────────────────────────┐
-│                            ││Esc to go back and type                                             │
+│                            ││i to type                                                           │
 └────────────────────────────┘└────────────────────────────────────────────────────────────────────┘
-Up/Down move  r reply  e react  u link  o open  v view  E edit  d delete  Esc back  / commands
+Up/Down move  r reply  e react  u link  o open  v view  c edit  x delete  Esc back  : commands
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -96,7 +96,7 @@ row 19 cols 31-35: fg=DarkGray bg=Reset NONE
 row 19 cols 37-48: fg=Cyan bg=Reset BOLD
 row 20 cols 51-68: fg=Reset bg=Reset BOLD
 row 21 cols 51-70: fg=Reset bg=Reset BOLD
-row 27 cols 31-53: fg=Reset bg=Reset DIM
+row 27 cols 31-39: fg=Reset bg=Reset DIM
 row 29 cols 0-11: fg=Reset bg=Reset BOLD
 row 29 cols 12-13: fg=Reset bg=Reset DIM
 row 29 cols 14-20: fg=Reset bg=Reset BOLD

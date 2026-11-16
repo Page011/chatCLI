@@ -142,11 +142,15 @@ actions! {
     Down "down" "down one: the chat, the selected message, a list or the emoji grid; scrolls help",
     Top "top" "to the first chat, the oldest message held, or the top of help",
     Bottom "bottom" "to the last chat, the newest message, or the end of help",
+    ScreenTop "screen_top" "to the first chat or message on screen; a page up in help",
+    ScreenMiddle "screen_middle" "to the chat or message in the middle of the screen",
+    ScreenBottom "screen_bottom" "to the last chat or message on screen; a page down in help",
     PageUp "page_up" "a page up: the chat list, the messages (from the message box), the selected message, a list, or help",
     PageDown "page_down" "a page down: the chat list, the messages (from the message box), the selected message, a list, or help",
-    Accept "accept" "open the chosen chat, sign in, keep the filter, or take the chosen suggestion, command or emoji",
-    Back "back" "back out: leave the message box or selection, close help or a list, clear the filter, or answer no",
-    FilterStart "filter_start" "filter the chat list (no default key: / opens the command bar)",
+    Accept "accept" "open the chosen chat and select its newest message, sign in, keep the filter, or take the chosen suggestion, command or emoji",
+    Back "back" "back out: from the message box to selection, from selection to the chat list; close the open chat, help or a list; clear the filter; or answer no",
+    Compose "compose" "go to the message box (from the chat list: of the chosen chat)",
+    FilterStart "filter_start" "filter the chat list",
     Refresh "refresh" "ask the network for a fresh chat list",
     Send "send" "send the message",
     CursorLeft "cursor_left" "move the cursor one character left (emoji picker: one cell left)",
@@ -161,7 +165,7 @@ actions! {
     ClearLine "clear_line" "clear the line the cursor is on",
     InsertNewline "insert_newline" "add a line break instead of sending",
     EmojiPicker "emoji_picker" "open the emoji picker",
-    OpenLink "open_link" "open a link from the newest message that has one",
+    OpenLink "open_link" "open a link from the selected message (chat list: from the newest message that has one)",
     ConfirmYes "confirm_yes" "yes: open the link, delete the message, send the file or mark all read",
     ConfirmNo "confirm_no" "no, do not open it, delete it or send it",
     SelectMessages "select_messages" "select a message in the open chat",
@@ -176,13 +180,14 @@ actions! {
     PasteImage "paste_image" "attach the image on the clipboard",
     NextUnread "next_unread" "select the next chat with unread messages (wraps round)",
     PrevUnread "prev_unread" "select the previous chat with unread messages (wraps round)",
+    MarkRead "mark_read" "mark the selected chat read",
     MarkAllRead "mark_all_read" "mark every chat of this network read, after a y/n",
     Pin "pin" "pin the selected chat to the top, or unpin it",
     Mute "mute" "mute the selected chat (no toasts, not counted), or unmute it",
     Hide "hide" "hide the selected chat from the list, or show it again",
     ShowHidden "show_hidden" "show or hide the chats you hid",
     Search "search" "search every message stored on this PC, both networks",
-    CommandBar "command_bar" "open the / command bar: commands and chats",
+    CommandBar "command_bar" "open the command bar: commands and chats",
     Settings "settings" "open the settings screen",
 }
 
@@ -508,16 +513,32 @@ fn ambiguous(chord: &KeyChord) -> Option<&'static str> {
 
 type Row = (Context, &'static str, Action);
 
-/// Everywhere, the sign-in panel, the boxes and overlays, and message selection.
+/// `[keys.common]`: the keys that mean the same thing wherever they work. The order is the order
+/// footer hints prefer: `?` before F1, the arrows before `k` and `j`.
 const COMMON: &[Row] = &[
     (Context::Common, "ctrl+c", Action::Quit),
     (Context::Common, "tab", Action::NextNetwork),
     (Context::Common, "shift+tab", Action::PrevNetwork),
     (Context::Common, "alt+1", Action::GotoNetwork1),
     (Context::Common, "alt+2", Action::GotoNetwork2),
+    (Context::Common, "?", Action::Help),
     (Context::Common, "f1", Action::Help),
     (Context::Common, "f2", Action::Settings),
     (Context::Common, "ctrl+f", Action::Search),
+    (Context::Common, ":", Action::CommandBar),
+    (Context::Common, "/", Action::FilterStart),
+    // Movement, accept and back: the chat list, message selection, lists and help.
+    (Context::Common, "up", Action::Up),
+    (Context::Common, "k", Action::Up),
+    (Context::Common, "down", Action::Down),
+    (Context::Common, "j", Action::Down),
+    (Context::Common, "G", Action::Bottom),
+    (Context::Common, "pgup", Action::PageUp),
+    (Context::Common, "pgdn", Action::PageDown),
+    (Context::Common, "H", Action::ScreenTop),
+    (Context::Common, "L", Action::ScreenBottom),
+    (Context::Common, "enter", Action::Accept),
+    (Context::Common, "esc", Action::Back),
     // Editing, in every box you type in: the message box, the filter, the command bar, search,
     // the emoji search and the file prompt.
     (Context::Common, "left", Action::CursorLeft),
@@ -531,121 +552,68 @@ const COMMON: &[Row] = &[
     (Context::Common, "ctrl+w", Action::DeleteWordBack),
     (Context::Common, "ctrl+backspace", Action::DeleteWordBack),
     (Context::Common, "ctrl+u", Action::ClearLine),
-    (Context::Panel, "enter", Action::Accept),
-    (Context::Panel, "/", Action::CommandBar),
-    (Context::Panel, "q", Action::Quit),
-    (Context::Panel, "?", Action::Help),
-    (Context::Filter, "up", Action::Up),
-    (Context::Filter, "down", Action::Down),
-    (Context::Filter, "enter", Action::Accept),
-    (Context::Filter, "esc", Action::Back),
-    (Context::Help, "esc", Action::Back),
-    (Context::Help, "f1", Action::Back),
-    (Context::Help, "q", Action::Back),
-    (Context::Help, "?", Action::Back),
-    (Context::Help, "up", Action::Up),
-    (Context::Help, "down", Action::Down),
-    (Context::Help, "pgup", Action::PageUp),
-    (Context::Help, "pgdn", Action::PageDown),
-    // The overlays and the `:shortcode` list (which reads only the popup_* rows). Left and Right
-    // (from `common`) move through the emoji picker's grid.
-    (Context::Popup, "up", Action::Up),
-    (Context::Popup, "down", Action::Down),
-    (Context::Popup, "enter", Action::Accept),
-    (Context::Popup, "tab", Action::Accept),
-    (Context::Popup, "esc", Action::Back),
-    (Context::Popup, "pgup", Action::PageUp),
-    (Context::Popup, "pgdn", Action::PageDown),
-    (Context::Confirm, "y", Action::ConfirmYes),
-    (Context::Confirm, "n", Action::ConfirmNo),
-    (Context::Confirm, "esc", Action::Back),
-    // Message selection (Ctrl+Up from the message box). The per-message keys
-    // act on the highlighted message; ones that do not apply to it are dimmed in the footer.
-    (Context::Select, "up", Action::Up),
-    (Context::Select, "k", Action::Up),
-    (Context::Select, "down", Action::Down),
-    (Context::Select, "j", Action::Down),
-    (Context::Select, "pgup", Action::PageUp),
-    (Context::Select, "pgdn", Action::PageDown),
+];
+
+/// What each context adds to `common`. Home and End are the line keys in `common` (for the
+/// boxes you type in), so the lists bind them to `top` and `bottom` themselves.
+const OWN: &[Row] = &[
+    // The chat list: Enter (or l, Right) goes into the chat with its newest message selected,
+    // i goes straight to its message box.
+    (Context::List, "l", Action::Accept),
+    (Context::List, "right", Action::Accept),
+    (Context::List, "i", Action::Compose),
+    (Context::List, "home", Action::Top),
+    (Context::List, "end", Action::Bottom),
+    (Context::List, "r", Action::Refresh),
+    (Context::List, "n", Action::NextUnread),
+    (Context::List, "N", Action::PrevUnread),
+    (Context::List, "R", Action::MarkRead),
+    (Context::List, "p", Action::Pin),
+    (Context::List, "m", Action::Mute),
+    (Context::List, "z", Action::Hide),
+    (Context::List, "Z", Action::ShowHidden),
+    // Message selection. The per-message keys act on the highlighted message; ones that do not
+    // apply to it are dimmed in the footer.
+    (Context::Select, "h", Action::Back),
+    (Context::Select, "left", Action::Back),
+    (Context::Select, "i", Action::Compose),
     (Context::Select, "home", Action::Top),
     (Context::Select, "end", Action::Bottom),
-    (Context::Select, "G", Action::Bottom),
-    (Context::Select, "esc", Action::Back),
+    (Context::Select, "M", Action::ScreenMiddle),
     (Context::Select, "r", Action::Reply),
     (Context::Select, "e", Action::React),
-    (Context::Select, "E", Action::Edit),
+    (Context::Select, "c", Action::Edit),
+    (Context::Select, "x", Action::Delete),
     (Context::Select, "d", Action::Delete),
     (Context::Select, "u", Action::OpenLink),
     (Context::Select, "o", Action::OpenMedia),
-    (Context::Select, "v", Action::ViewImage),
-    (Context::Select, "?", Action::Help),
-    (Context::Select, "/", Action::CommandBar),
-];
-
-/// The message box's own keys, bound in `composer` (its editing keys are in `common`).
-const COMPOSER_KEYS: &[(&str, Action)] = &[
+    // The message box (its editing keys are in `common`).
+    (Context::Composer, "enter", Action::Send),
     // Shift+Enter first: the footer shows it where the terminal reports the Shift (the Windows
     // console, or a terminal with the kitty keyboard protocol), else Ctrl+J, which reaches
     // chatcli in every terminal. Windows Terminal keeps Alt+Enter for fullscreen.
-    ("shift+enter", Action::InsertNewline),
-    ("ctrl+j", Action::InsertNewline),
-    ("alt+enter", Action::InsertNewline),
-    ("ctrl+e", Action::EmojiPicker),
-    ("ctrl+o", Action::Attach),
+    (Context::Composer, "shift+enter", Action::InsertNewline),
+    (Context::Composer, "ctrl+j", Action::InsertNewline),
+    (Context::Composer, "alt+enter", Action::InsertNewline),
+    (Context::Composer, "ctrl+e", Action::EmojiPicker),
+    (Context::Composer, "ctrl+o", Action::Attach),
     // Windows Terminal keeps Ctrl+Shift+V for its own paste (which cannot paste a picture), so
     // Alt+V reaches chatcli there.
-    ("ctrl+shift+v", Action::PasteImage),
-    ("alt+v", Action::PasteImage),
-    // Some terminals keep Ctrl+Up for scrollback: rebind `select_messages` there.
-    ("ctrl+up", Action::SelectMessages),
+    (Context::Composer, "ctrl+shift+v", Action::PasteImage),
+    (Context::Composer, "alt+v", Action::PasteImage),
+    (Context::Composer, "shift+up", Action::SelectMessages),
+    (Context::Confirm, "y", Action::ConfirmYes),
+    (Context::Confirm, "n", Action::ConfirmNo),
+    (Context::Help, "home", Action::Top),
+    (Context::Help, "end", Action::Bottom),
 ];
-
-/// The chat list and the message box.
-const CHATS: &[Row] = &[
-    (Context::List, "up", Action::Up),
-    (Context::List, "k", Action::Up),
-    (Context::List, "down", Action::Down),
-    (Context::List, "j", Action::Down),
-    (Context::List, "home", Action::Top),
-    (Context::List, "end", Action::Bottom),
-    (Context::List, "enter", Action::Accept),
-    (Context::List, "/", Action::CommandBar),
-    (Context::List, "r", Action::Refresh),
-    (Context::List, "q", Action::Quit),
-    (Context::List, "esc", Action::Back),
-    (Context::List, "pgup", Action::PageUp),
-    (Context::List, "pgdn", Action::PageDown),
-    (Context::List, "?", Action::Help),
-    (Context::List, "u", Action::OpenLink),
-    (Context::List, "n", Action::NextUnread),
-    (Context::List, "N", Action::PrevUnread),
-    (Context::List, "M", Action::MarkAllRead),
-    (Context::List, "p", Action::Pin),
-    (Context::List, "m", Action::Mute),
-    (Context::List, "x", Action::Hide),
-    (Context::List, "H", Action::ShowHidden),
-    (Context::Composer, "enter", Action::Send),
-    (Context::Composer, "esc", Action::Back),
-    (Context::Composer, "pgup", Action::PageUp),
-    (Context::Composer, "pgdn", Action::PageDown),
-];
-
-/// Two-key sequences (`g g`), held until the second key; no timer. None are bound by default
-/// yet; `step` and the keys page already handle them.
-const SEQUENCES: &[(Context, &str, &str, Action)] = &[];
+/// Two-key sequences (`g g`), held until the second key; no timer. One in `common` works where
+/// its action applies, like a single key there.
+const SEQUENCES: &[(Context, &str, &str, Action)] = &[(Context::Common, "g", "g", Action::Top)];
 
 /// Every built-in single-key binding, in display order.
 fn rows() -> Vec<Row> {
-    COMMON
-        .iter()
-        .chain(CHATS.iter())
-        .copied()
-        .chain(
-            COMPOSER_KEYS
-                .iter()
-                .map(|(k, a)| (Context::Composer, *k, *a)),
-        )
-        .collect()
+    COMMON.iter().chain(OWN.iter()).copied().collect()
 }
 
 fn builtin(key: &str) -> KeyChord {
@@ -653,7 +621,11 @@ fn builtin(key: &str) -> KeyChord {
 }
 
 /// Actions with no default key that can still be bound: the keys page lists them too.
-const EXTRA: &[(Context, Action)] = &[(Context::List, Action::FilterStart)];
+const EXTRA: &[(Context, Action)] = &[
+    (Context::List, Action::OpenLink),
+    (Context::List, Action::MarkAllRead),
+    (Context::Select, Action::ViewImage),
+];
 
 /// Where a key bound to `action` in `[keys.common]` works: quitting everywhere; the tabs, help,
 /// settings, search and the command bar outside the overlays; the editing keys in every box you
@@ -671,7 +643,9 @@ pub(crate) fn common_applies(action: Action, ctx: Context) -> bool {
         CursorLeft | CursorRight | WordLeft | WordRight | LineStart | LineEnd | DeleteBack
         | DeleteForward | DeleteWordBack | ClearLine => ctx.types_text(),
         Up | Down => matches!(ctx, C::List | C::Filter | C::Select | C::Popup | C::Help),
-        Top | Bottom => matches!(ctx, C::List | C::Select | C::Help),
+        Top | Bottom | ScreenTop | ScreenBottom => matches!(ctx, C::List | C::Select | C::Help),
+        ScreenMiddle | Compose => matches!(ctx, C::List | C::Select),
+        FilterStart => ctx == C::List,
         PageUp | PageDown => {
             matches!(ctx, C::List | C::Composer | C::Select | C::Popup | C::Help)
         }
@@ -743,6 +717,9 @@ pub struct Keymap {
     /// In display order: the first key an action has in a context is the one hints show.
     single: Vec<(Context, KeyChord, Action)>,
     seq: Vec<(Context, KeyChord, KeyChord, Action)>,
+    /// Keys a context's own table unbinds that `[keys.common]` binds: common does not reach
+    /// them there.
+    hidden: Vec<(Context, KeyChord)>,
     user: usize,
 }
 
@@ -774,7 +751,10 @@ impl Keymap {
     /// What `[keys.common]` gives `chord` in `ctx`: only an action that applies there, and never a
     /// key that types a character in a box you type in.
     pub(crate) fn common_for(&self, ctx: Context, chord: KeyChord) -> Option<Action> {
-        if ctx == Context::Common || (ctx.types_text() && chord.prints()) {
+        if ctx == Context::Common
+            || (ctx.types_text() && chord.prints())
+            || self.hidden.contains(&(ctx, chord))
+        {
             return None;
         }
         self.find(Context::Common, chord)
@@ -810,21 +790,30 @@ impl Keymap {
             .collect()
     }
 
-    /// The action `chord` has in exactly `ctx`: no `[keys.common]` fallback. For a table that is read
-    /// on top of another context (the `:shortcode` list over the message box).
-    pub fn lookup_in(&self, ctx: Context, chord: KeyChord) -> Option<Action> {
-        self.find(ctx, chord)
+    /// The sequences live in `ctx` that start with `first`: its own, then the `common` ones whose
+    /// action applies there (never in a box you type in when a key of the sequence types).
+    fn seqs_from(
+        &self,
+        ctx: Context,
+        first: KeyChord,
+    ) -> impl Iterator<Item = &(Context, KeyChord, KeyChord, Action)> {
+        let own = self.seq.iter().filter(move |s| s.0 == ctx && s.1 == first);
+        let common = self.seq.iter().filter(move |s| {
+            s.0 == Context::Common
+                && !self.hidden.contains(&(ctx, first))
+                && ctx != Context::Common
+                && s.1 == first
+                && common_applies(s.3, ctx)
+                && !(ctx.types_text() && (s.1.prints() || s.2.prints()))
+        });
+        own.chain(common)
     }
 
     /// The pending-key state machine. `pending` is the held first key, if any. A held key is
     /// dropped by any key that does not complete a sequence, and the key does nothing.
     pub fn step(&self, ctx: Context, pending: Option<KeyChord>, chord: KeyChord) -> Step {
         if let Some(first) = pending {
-            return match self
-                .seq
-                .iter()
-                .find(|s| s.0 == ctx && s.1 == first && s.2 == chord)
-            {
+            return match self.seqs_from(ctx, first).find(|s| s.2 == chord) {
                 Some(s) => Step::Action(s.3),
                 None => Step::Cancel,
             };
@@ -832,7 +821,7 @@ impl Keymap {
         if let Some(a) = self.lookup(ctx, chord) {
             return Step::Action(a);
         }
-        if self.seq.iter().any(|s| s.0 == ctx && s.1 == chord) {
+        if self.seqs_from(ctx, chord).next().is_some() {
             return Step::Pending;
         }
         Step::Unbound
@@ -846,19 +835,21 @@ impl Keymap {
             .collect()
     }
 
+    /// In keymap order: the user's keys first, then the `common` ones, then the context's own.
     fn chords_for(&self, ctx: Context, action: Action) -> Vec<KeyChord> {
-        let own = self
-            .single
+        self.single
             .iter()
-            .filter(|(c, _, a)| *c == ctx && *a == action);
-        // The common keys that reach `action` here: not shadowed by this context's own table.
-        let common = self.single.iter().filter(|(c, k, a)| {
-            *c == Context::Common
-                && *a == action
-                && self.find(ctx, *k).is_none()
-                && self.common_for(ctx, *k) == Some(action)
-        });
-        own.chain(common).map(|(_, k, _)| *k).collect()
+            .filter(|(c, k, a)| {
+                *a == action
+                    && (*c == ctx
+                        // A common key that reaches `action` here: not shadowed by this
+                        // context's own table.
+                        || (*c == Context::Common
+                            && self.find(ctx, *k).is_none()
+                            && self.common_for(ctx, *k) == Some(action)))
+            })
+            .map(|(_, k, _)| *k)
+            .collect()
     }
 
     /// Footer text for a group of actions: the first key of each that this terminal can send,
@@ -984,6 +975,7 @@ impl Keymap {
                 .iter()
                 .map(|s| (s.0, builtin(s.1), builtin(s.2), s.3))
                 .collect(),
+            hidden: Vec::new(),
             user: 0,
         };
         let mut problems = Vec::new();
@@ -1076,11 +1068,22 @@ impl Keymap {
                     ));
                 }
                 if action == Action::Unbound {
+                    // A key `common` binds stops reaching this context.
+                    let shadows = ctx != Context::Common
+                        && (map.find(Context::Common, chord).is_some()
+                            || map
+                                .seq
+                                .iter()
+                                .any(|s| s.0 == Context::Common && s.1 == chord));
+                    if shadows {
+                        map.hidden.push((ctx, chord));
+                    }
                     let before = map.single.len();
                     map.single.retain(|(c, k, _)| !(*c == ctx && *k == chord));
                     let had_seq = map.seq.len();
                     map.seq.retain(|s| !(s.0 == ctx && s.1 == chord));
-                    if map.single.len() == before
+                    if !shadows
+                        && map.single.len() == before
                         && map.seq.len() == had_seq
                         && !rows()
                             .into_iter()
@@ -1310,34 +1313,42 @@ mod tests {
             (List, "j", Down),
             (List, "home", Top),
             (List, "end", Bottom),
+            (List, "G", Bottom),
+            (List, "H", ScreenTop),
+            (List, "L", ScreenBottom),
             (List, "enter", Accept),
+            (List, "l", Accept),
+            (List, "right", Accept),
+            (List, "i", Compose),
             (Panel, "enter", Accept),
-            (List, "/", CommandBar),
-            (Panel, "/", CommandBar),
-            (Select, "/", CommandBar),
+            (List, ":", CommandBar),
+            (Panel, ":", CommandBar),
+            (Select, ":", CommandBar),
+            (List, "/", FilterStart),
             (Composer, "f1", Action::Help),
-            (Context::Help, "f1", Back),
+            (List, "?", Action::Help),
+            (Select, "?", Action::Help),
             (Filter, "enter", Accept),
             (Filter, "esc", Back),
             (Filter, "up", Up),
             (Filter, "down", Down),
             (List, "esc", Back),
             (List, "r", Refresh),
+            (List, "R", MarkRead),
+            (List, "z", Hide),
+            (List, "Z", ShowHidden),
             (List, "pgup", PageUp),
             (List, "pgdn", PageDown),
             (Composer, "pgup", PageUp),
             (Composer, "pgdn", PageDown),
             (Composer, "enter", Send),
             (Composer, "esc", Back),
-            (List, "q", Quit),
-            (Panel, "q", Quit),
-            (List, "?", Action::Help),
+            (Composer, "shift+up", SelectMessages),
             (List, "f2", Settings),
             (Composer, "f2", Settings),
             (Context::Help, "esc", Back),
-            (Context::Help, "q", Back),
-            (Context::Help, "?", Back),
-            // Message box editing (issues 9, 10, 14, 15) and links (25).
+            (Context::Help, "H", ScreenTop),
+            (Context::Help, "home", Top),
             (Composer, "left", CursorLeft),
             (Composer, "right", CursorRight),
             (Composer, "ctrl+left", WordLeft),
@@ -1356,20 +1367,24 @@ mod tests {
             (Popup, "up", Up),
             (Popup, "down", Down),
             (Popup, "enter", Accept),
-            (Popup, "tab", Accept),
             (Popup, "esc", Back),
             (Popup, "left", CursorLeft),
             (Popup, "right", CursorRight),
             (Popup, "pgup", PageUp),
             (Popup, "pgdn", PageDown),
             (Popup, "backspace", DeleteBack),
-            (List, "u", OpenLink),
-            // Attachments (issues 18, 19, 20).
             (Composer, "ctrl+o", Attach),
             (Composer, "ctrl+shift+v", PasteImage),
             (Composer, "alt+v", PasteImage),
+            (Select, "esc", Back),
+            (Select, "h", Back),
+            (Select, "left", Back),
+            (Select, "i", Compose),
+            (Select, "M", ScreenMiddle),
+            (Select, "c", Edit),
+            (Select, "x", Delete),
+            (Select, "d", Delete),
             (Select, "o", OpenMedia),
-            (Select, "v", ViewImage),
             (Confirm, "y", ConfirmYes),
             (Confirm, "n", ConfirmNo),
             (Confirm, "esc", Back),
@@ -1379,12 +1394,74 @@ mod tests {
         }
     }
 
-    /// `/` opens the command bar, not the plain filter: the filter action stays bindable but has
-    /// no default key.
+    /// Keys the redesign took away: quit and help are in `common` only, Tab no longer accepts,
+    /// and help closes on Esc alone.
     #[test]
-    fn filter_start_has_no_default_key() {
+    fn the_removed_keys_do_nothing() {
         let map = Keymap::default();
-        assert!(!map.single.iter().any(|(_, _, x)| *x == Action::FilterStart));
+        for (ctx, key) in [
+            (Context::List, "q"),
+            (Context::Panel, "q"),
+            (Context::List, "u"),
+            (Context::List, "M"),
+            (Context::List, "x"),
+            (Context::Select, "v"),
+            (Context::Select, "E"),
+            (Context::Select, "/"),
+            (Context::Popup, "tab"),
+            (Context::Help, "q"),
+            (Context::Help, "?"),
+            (Context::Help, "f1"),
+            (Context::Composer, "ctrl+up"),
+        ] {
+            assert_eq!(map.lookup(ctx, k(key)), None, "{ctx:?} {key}");
+        }
+        // The actions stay, and can be bound.
+        let (map, problems) = build(&[("select", "v", "view_image"), ("list", "u", "open_link")]);
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(map.lookup(Context::Select, k("v")), Some(Action::ViewImage));
+    }
+
+    /// `g g` is bound in `common`: it works where `top` applies and never where `g` types.
+    #[test]
+    fn the_common_sequence_works_where_its_action_applies() {
+        let map = Keymap::default();
+        for ctx in [Context::List, Context::Select, Context::Help] {
+            assert_eq!(map.step(ctx, None, k("g")), Step::Pending, "{ctx:?}");
+            assert_eq!(
+                map.step(ctx, Some(k("g")), k("g")),
+                Step::Action(Action::Top),
+                "{ctx:?}"
+            );
+            assert_eq!(map.step(ctx, Some(k("g")), k("x")), Step::Cancel);
+        }
+        for ctx in [
+            Context::Panel,
+            Context::Filter,
+            Context::Composer,
+            Context::Popup,
+            Context::Confirm,
+        ] {
+            assert_eq!(map.step(ctx, None, k("g")), Step::Unbound, "{ctx:?}");
+        }
+        assert_eq!(
+            map.sequences_in(Context::Common, Action::Top),
+            vec!["g g".to_string()]
+        );
+        // A single key on g replaces the sequence: in one context, or everywhere.
+        let (map, _) = build(&[("list", "g", "refresh")]);
+        assert_eq!(
+            map.step(Context::List, None, k("g")),
+            Step::Action(Action::Refresh)
+        );
+        assert_eq!(map.step(Context::Select, None, k("g")), Step::Pending);
+        let (map, problems) = build(&[("common", "g", "top")]);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].message.contains("starts two-key sequences"));
+        assert_eq!(
+            map.step(Context::Select, None, k("g")),
+            Step::Action(Action::Top)
+        );
     }
 
     /// Typing must win in text contexts: `q` types in the filter and the message box.
@@ -1478,7 +1555,7 @@ mod tests {
     #[test]
     fn popup_and_confirm_are_modal_and_popup_takes_typing() {
         let map = Keymap::default();
-        assert_eq!(map.lookup(Context::Popup, k("tab")), Some(Action::Accept));
+        assert_eq!(map.lookup(Context::Popup, k("tab")), None);
         assert_eq!(map.lookup(Context::Popup, k("f2")), None);
         assert_eq!(map.lookup(Context::Popup, k("alt+1")), None);
         assert_eq!(map.lookup(Context::Confirm, k("tab")), None);
@@ -1634,15 +1711,23 @@ mod tests {
 
     #[test]
     fn a_common_key_works_where_its_action_applies_and_never_where_you_type() {
-        let (map, problems) = build(&[("common", "z", "refresh"), ("common", "ctrl+y", "pin")]);
+        // A context can unbind a common key for itself.
+        let (map, problems) = build(&[("select", "j", "unbound")]);
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(map.lookup(Context::Select, k("j")), None);
+        assert_eq!(map.lookup(Context::List, k("j")), Some(Action::Down));
+        let (map, _) = build(&[("select", "g", "unbound")]);
+        assert_eq!(map.step(Context::Select, None, k("g")), Step::Unbound);
+        assert_eq!(map.step(Context::List, None, k("g")), Step::Pending);
+        let (map, problems) = build(&[("common", "w", "refresh"), ("common", "ctrl+y", "pin")]);
         assert!(problems.is_empty(), "{problems:?}");
         // Refresh applies in the chat list (it has a key there): z refreshes there.
-        assert_eq!(map.lookup(Context::List, k("z")), Some(Action::Refresh));
+        assert_eq!(map.lookup(Context::List, k("w")), Some(Action::Refresh));
         // In a box you type in, a printable common key types instead.
-        assert_eq!(map.lookup(Context::Filter, k("z")), None);
-        assert_eq!(map.lookup(Context::Composer, k("z")), None);
+        assert_eq!(map.lookup(Context::Filter, k("w")), None);
+        assert_eq!(map.lookup(Context::Composer, k("w")), None);
         // Where refresh means nothing (help), the key does nothing.
-        assert_eq!(map.lookup(Context::Help, k("z")), None);
+        assert_eq!(map.lookup(Context::Help, k("w")), None);
         // A context's own key wins over the common one.
         let (map, _) = build(&[("common", "p", "refresh")]);
         assert_eq!(map.lookup(Context::List, k("p")), Some(Action::Pin));
@@ -1653,11 +1738,7 @@ mod tests {
             Some(Action::NextNetwork)
         );
         for ctx in [Context::Help, Context::Popup, Context::Confirm] {
-            assert_eq!(
-                map.lookup(ctx, k("tab")),
-                (ctx == Context::Popup).then_some(Action::Accept),
-                "{ctx:?}"
-            );
+            assert_eq!(map.lookup(ctx, k("tab")), None, "{ctx:?}");
             assert_eq!(map.lookup(ctx, k("ctrl+f")), None, "{ctx:?}");
         }
     }
@@ -1707,8 +1788,8 @@ mod tests {
 
     #[test]
     fn a_context_may_take_ctrl_c_while_another_key_quits_there() {
-        // The chat list has q.
-        let (map, problems) = build(&[("list", "ctrl+c", "refresh")]);
+        // The chat list has another quit key here.
+        let (map, problems) = build(&[("list", "ctrl+c", "refresh"), ("list", "q", "quit")]);
         assert!(problems.is_empty(), "{problems:?}");
         assert_eq!(
             map.lookup(Context::List, k("ctrl+c")),
@@ -1738,8 +1819,12 @@ mod tests {
 
     #[test]
     fn quit_must_reach_every_context() {
-        // Unbound everywhere: the panel and the chat list still have q.
-        let (map, problems) = build(&[("common", "ctrl+c", "unbound")]);
+        // Unbound everywhere, with q left on the panel and the chat list.
+        let (map, problems) = build(&[
+            ("common", "ctrl+c", "unbound"),
+            ("panel", "q", "quit"),
+            ("list", "q", "quit"),
+        ]);
         assert_eq!(problems.len(), 1, "{problems:?}");
         assert!(
             problems[0].message.starts_with(
@@ -1772,7 +1857,12 @@ mod tests {
 
     #[test]
     fn back_must_keep_a_key_in_every_overlay() {
+        // Esc is bound once, in common. Unbinding it in the popup table hides it there, which
+        // leaves the popup with no way out.
         let (map, problems) = build(&[("popup", "esc", "unbound")]);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert_eq!(map.lookup(Context::Popup, k("esc")), Some(Action::Back));
+        let (map, problems) = build(&[("popup", "esc", "accept")]);
         assert_eq!(problems.len(), 1, "{problems:?}");
         assert!(
             problems[0].message.starts_with(
@@ -1787,15 +1877,30 @@ mod tests {
         let (map, problems) = build(&[("popup", "esc", "accept"), ("popup", "f9", "back")]);
         assert!(problems.is_empty(), "{problems:?}");
         assert_eq!(map.lookup(Context::Popup, k("esc")), Some(Action::Accept));
-        // Help has other keys, and n answers a y/n question.
-        let (_, problems) = build(&[("help", "esc", "unbound"), ("confirm", "esc", "unbound")]);
+        // n answers a y/n question, so Esc may go there; help has only Esc.
+        let (_, problems) = build(&[("confirm", "esc", "confirm_yes")]);
         assert!(problems.is_empty(), "{problems:?}");
-        let (map, problems) = build(&[("confirm", "esc", "unbound"), ("confirm", "n", "unbound")]);
+        let (_, problems) = build(&[("help", "esc", "down")]);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        let (map, problems) = build(&[
+            ("confirm", "esc", "confirm_yes"),
+            ("confirm", "n", "unbound"),
+        ]);
         assert_eq!(problems.len(), 1, "{problems:?}");
         assert_eq!(map.lookup(Context::Confirm, k("esc")), Some(Action::Back));
         // A back key in common reaches the overlays too.
-        let (_, problems) = build(&[("popup", "esc", "unbound"), ("common", "f9", "back")]);
+        let (_, problems) = build(&[("popup", "esc", "accept"), ("common", "f9", "back")]);
         assert!(problems.is_empty(), "{problems:?}");
+        // Unbinding it everywhere leaves every overlay without one.
+        let (map, problems) = build(&[("common", "esc", "unbound")]);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(
+            problems[0]
+                .message
+                .starts_with("no key backs out in [keys.popup], [keys.help]:"),
+            "{problems:?}"
+        );
+        assert_eq!(map.lookup(Context::Help, k("esc")), Some(Action::Back));
     }
 
     #[test]
@@ -1849,22 +1954,21 @@ mod tests {
         let map = Keymap::default();
         // Tab would switch network under the overlay if Global leaked through.
         assert_eq!(map.lookup(Context::Help, k("tab")), None);
-        assert_eq!(map.lookup(Context::Help, k("?")), Some(Action::Back));
+        assert_eq!(map.lookup(Context::Help, k("?")), None);
+        assert_eq!(map.lookup(Context::Help, k("esc")), Some(Action::Back));
         let sections = map.help_sections();
         let ctxs: Vec<_> = sections.iter().map(|s| s.0).collect();
         assert_eq!(
             ctxs,
             [
                 Context::Common,
-                Context::Panel,
                 Context::List,
-                Context::Filter,
                 Context::Composer,
                 Context::Select,
-                Context::Popup,
                 Context::Confirm,
                 Context::Help
-            ]
+            ],
+            "a context with no keys of its own (they are all in common) has no section"
         );
         // Every built-in action is listed.
         let listed: Vec<Action> = sections
@@ -1900,14 +2004,14 @@ mod tests {
         );
     }
 
-    /// Message selection keys: Ctrl+Up from the message box, and the per-message keys in the
+    /// Message selection keys: Shift+Up from the message box, and the per-message keys in the
     /// `select` table.
     #[test]
     fn selection_keys() {
         use Action::*;
         let def = Keymap::default();
         assert_eq!(
-            def.lookup(Context::Composer, k("ctrl+up")),
+            def.lookup(Context::Composer, k("shift+up")),
             Some(SelectMessages)
         );
         assert_eq!(def.lookup(Context::List, k("v")), None);
@@ -1924,7 +2028,7 @@ mod tests {
             ("esc", Back),
             ("r", Reply),
             ("e", React),
-            ("E", Edit),
+            ("c", Edit),
             ("d", Delete),
             ("u", OpenLink),
             ("?", Help),
@@ -1933,19 +2037,19 @@ mod tests {
         }
         // Tab and Ctrl+C still work while selecting (Global fallback); help is modal.
         assert_eq!(def.lookup(Context::Select, k("tab")), Some(NextNetwork));
-        assert_eq!(def.step(Context::Select, None, k("g")), Step::Unbound);
+        assert_eq!(def.step(Context::Select, None, k("g")), Step::Pending);
         // `cancel_reply` has no default key: Esc cancels through leave_composer.
         assert!(def.keys_for(Context::Composer, CancelReply).is_empty());
     }
 
     /// The `select` table takes user bindings, plain letters included (it is not a text box),
-    /// and `select_messages` can move off Ctrl+Up for terminals that keep it.
+    /// and `select_messages` can move off Shift+Up for terminals that keep it.
     #[test]
     fn selection_keys_can_be_rebound() {
         let (map, problems) = build(&[
             ("select", "x", "react"),
             ("composer", "alt+up", "select_messages"),
-            ("composer", "ctrl+up", "unbound"),
+            ("composer", "shift+up", "unbound"),
         ]);
         assert!(problems.is_empty(), "{:?}", texts(&problems));
         assert_eq!(map.lookup(Context::Select, k("x")), Some(Action::React));
@@ -1953,6 +2057,6 @@ mod tests {
             map.lookup(Context::Composer, k("alt+up")),
             Some(Action::SelectMessages)
         );
-        assert_eq!(map.lookup(Context::Composer, k("ctrl+up")), None);
+        assert_eq!(map.lookup(Context::Composer, k("shift+up")), None);
     }
 }

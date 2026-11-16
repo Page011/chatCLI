@@ -1254,7 +1254,7 @@ impl App {
         if self.popup.is_some() && ctx == Context::Composer {
             let own = self
                 .keys
-                .lookup_in(Context::Popup, chord)
+                .lookup(Context::Popup, chord)
                 .filter(|a| matches!(a, Action::Up | Action::Down | Action::Accept | Action::Back));
             if let Some(a) = own {
                 return self.popup_action(a, ctx);
@@ -1341,8 +1341,14 @@ impl App {
             | Action::Bottom
             | Action::PageUp
             | Action::PageDown
+            | Action::ScreenTop
+            | Action::ScreenMiddle
+            | Action::ScreenBottom
             | Action::Accept
             | Action::Back => return self.run_verb(action, ctx),
+            Action::Compose if ctx == Context::List && !panel => return self.open_selected(n),
+            Action::Compose if ctx == Context::Select => self.leave_select(n),
+            Action::MarkRead if !panel => return self.mark_selected_read(n),
             // Left and Right move through the emoji grid; the other editing keys edit its search.
             Action::CursorLeft | Action::CursorRight
                 if ctx == Context::Popup && self.line_box_is_picker() =>
@@ -1457,7 +1463,10 @@ impl App {
     /// Up, Down, Top, Bottom, the page keys, Accept and Back: one action each, doing what it
     /// means where it is pressed. Bound where it means nothing, it does nothing.
     fn run_verb(&mut self, action: Action, ctx: Context) -> Out {
-        use Action::{Accept, Back, Bottom, Down, PageDown, PageUp, Top, Up};
+        use Action::{
+            Accept, Back, Bottom, Down, PageDown, PageUp, ScreenBottom, ScreenMiddle, ScreenTop,
+            Top, Up,
+        };
         let n = self.active;
         match ctx {
             Context::Help => {
@@ -1467,8 +1476,8 @@ impl App {
                     Down => self.scroll_help(1),
                     Top => self.scroll_help(isize::MIN),
                     Bottom => self.scroll_help(isize::MAX),
-                    PageUp => self.scroll_help(-page),
-                    PageDown => self.scroll_help(page),
+                    PageUp | ScreenTop => self.scroll_help(-page),
+                    PageDown | ScreenBottom => self.scroll_help(page),
                     Back => self.help = None,
                     _ => {}
                 }
@@ -1495,7 +1504,7 @@ impl App {
                 }
             }
             Context::Select => match action {
-                Back => self.leave_select(n),
+                Back => self.select_to_list(n),
                 Accept => {}
                 _ => return self.select_move(n, action),
             },
@@ -1520,11 +1529,13 @@ impl App {
                     Bottom => self.move_sel(n, isize::MAX),
                     PageUp => self.move_sel(n, -rows),
                     PageDown => self.move_sel(n, rows),
-                    Accept => return self.open_selected(n),
+                    ScreenTop | ScreenMiddle | ScreenBottom => self.move_sel_on_screen(n, action),
+                    Accept => return self.select_chat(n),
                     Back if !self.ns(n).filter.is_empty() => {
                         self.ns_mut(n).filter.clear();
                         self.fix_selection(n, true);
                     }
+                    Back => self.close_chat(n),
                     _ => {}
                 }
             }
@@ -1540,15 +1551,13 @@ impl App {
                     }
                 }
                 // A reply or edit in progress goes first, then a chosen file; the next Back
-                // leaves the box.
+                // leaves the box for message selection, or for the chat list when the chat has
+                // no message to select.
                 Back if self.ns(n).target().is_some() => self.cancel_target(n),
                 Back if self.ns(n).attachment().is_some() => self.drop_attachment(n),
-                Back => {
-                    let ns = self.ns_mut(n);
-                    ns.focus = Focus::List;
-                    // Leaving the chat: the next Enter on it asks the backend again.
-                    ns.requested = None;
-                }
+                // `try_select` moves to selection when it can; only when it cannot does Back go to
+                // the chat list.
+                Back if !self.try_select(n) => self.back_to_list(n),
                 _ => {}
             },
             _ => {}
@@ -1879,7 +1888,57 @@ impl App {
         };
     }
 
-    /// Enter on the selected chat: show it, ask the backend, focus the box.
+    /// Focus back on the chat list, the chat still shown. The next Enter on it asks the backend
+    /// again.
+    pub(crate) fn back_to_list(&mut self, n: Network) {
+        let ns = self.ns_mut(n);
+        ns.focus = Focus::List;
+        ns.requested = None;
+    }
+
+    /// Back on the chat list with no filter: the message pane is emptied. Moving through the
+    /// list previews a chat again.
+    fn close_chat(&mut self, n: Network) {
+        let ns = self.ns_mut(n);
+        ns.open = None;
+        ns.previewing = false;
+        ns.settle = None;
+        ns.read_due = None;
+        ns.requested = None;
+        ns.scroll = 0;
+    }
+
+    /// `screen_top`, `screen_middle`, `screen_bottom` on the chat list: the first, middle or last
+    /// chat the sidebar shows.
+    fn move_sel_on_screen(&mut self, n: Network, action: Action) {
+        let rows = self.list_rows(n);
+        let ns = self.ns(n);
+        let vis = ns.visible();
+        let shown = rows.min(vis.len().saturating_sub(ns.list_top));
+        if shown == 0 {
+            return;
+        }
+        let to = ns.list_top
+            + match action {
+                Action::ScreenTop => 0,
+                Action::ScreenMiddle => (shown - 1) / 2,
+                _ => shown - 1,
+            };
+        let delta = to as isize - ns.sel_pos(&vis) as isize;
+        self.move_sel(n, delta);
+    }
+
+    /// Accept on the chat list: into the chat, its newest message selected. A chat with no
+    /// message to select (empty, or not loaded yet) goes to its message box.
+    fn select_chat(&mut self, n: Network) -> Out {
+        let out = self.open_selected(n);
+        if self.ns(n).focus == Focus::Composer {
+            self.try_select(n);
+        }
+        out
+    }
+
+    /// The message box of the selected chat: show it, ask the backend, focus the box.
     fn open_selected(&mut self, n: Network) -> Out {
         let ns = self.ns(n);
         let vis = ns.visible();
@@ -2510,8 +2569,8 @@ mod tests {
 
     #[test]
     fn filter_selects_first_match_and_clears() {
-        let mut app = filter_app();
-        app.handle_key(key(KeyCode::Char('f')));
+        let mut app = online_app();
+        app.handle_key(key(KeyCode::Char('/')));
         type_text(&mut app, "sam");
         assert_eq!(app.active().visible().len(), 1);
         assert_eq!(app.active().selected.as_deref(), Some("b"));
@@ -2529,14 +2588,18 @@ mod tests {
             state: KeyEventState::NONE,
         });
         assert!(app.should_quit());
+        // q is not a quit key any more: :quit is.
         let mut app = online_app();
-        app.handle_key(key(KeyCode::Char('q')));
-        assert!(app.should_quit());
-        // q while typing is text, not quit.
-        let mut app = online_app();
-        app.handle_key(key(KeyCode::Enter));
         app.handle_key(key(KeyCode::Char('q')));
         assert!(!app.should_quit());
+        slash(&mut app, "quit");
+        assert!(app.should_quit());
+        // q while typing is text.
+        let mut app = online_app();
+        app.handle_key(key(KeyCode::Char('i')));
+        app.handle_key(key(KeyCode::Char('q')));
+        assert!(!app.should_quit());
+        assert_eq!(app.active().draft(), "q");
     }
 
     #[test]
@@ -3037,17 +3100,9 @@ mod tests {
         s
     }
 
-    /// `/` opens the command bar, so the plain chat filter needs a binding of its own.
-    fn filter_app() -> App {
-        online(App::with_settings(
-            clock(),
-            &settings_with(&[("list", "f", "filter_start")]),
-        ))
-    }
-
     /// `/`, the text, Enter: what a user types into the command bar.
     fn slash(app: &mut App, text: &str) -> Out {
-        app.handle_key(key(KeyCode::Char('/')));
+        app.handle_key(key(KeyCode::Char(':')));
         type_text(app, text);
         app.handle_key(key(KeyCode::Enter))
     }
@@ -3057,21 +3112,21 @@ mod tests {
     }
 
     #[test]
-    fn q_types_in_the_filter_box_and_quits_from_the_list() {
-        let mut app = filter_app();
-        app.handle_key(key(KeyCode::Char('f')));
+    fn q_types_in_the_filter_box_and_does_nothing_in_the_list() {
+        let mut app = online_app();
+        app.handle_key(key(KeyCode::Char('/')));
         type_text(&mut app, "qjr");
         assert!(!app.should_quit());
         assert_eq!(app.active().filter, "qjr");
         app.handle_key(key(KeyCode::Esc));
         app.handle_key(key(KeyCode::Char('q')));
-        assert!(app.should_quit());
+        assert!(!app.should_quit());
     }
 
     #[test]
     fn the_editing_keys_work_in_the_filter_and_the_command_bar() {
-        let mut app = filter_app();
-        app.handle_key(key(KeyCode::Char('f')));
+        let mut app = online_app();
+        app.handle_key(key(KeyCode::Char('/')));
         type_text(&mut app, "sam exa");
         app.handle_key(ctrl('w'));
         assert_eq!(app.active().filter, "sam ");
@@ -3088,7 +3143,7 @@ mod tests {
         );
         app.handle_key(key(KeyCode::Esc));
         // The command bar: Left moves the cursor, typing goes in there, and the list follows.
-        app.handle_key(key(KeyCode::Char('/')));
+        app.handle_key(key(KeyCode::Char(':')));
         type_text(&mut app, "seting");
         for _ in 0..3 {
             app.handle_key(key(KeyCode::Left));
@@ -3138,12 +3193,12 @@ mod tests {
 
     #[test]
     fn ctrl_c_can_be_rebound_by_the_user() {
-        // The chat list takes Ctrl+C for itself (q still quits there); elsewhere it quits.
-        let s = settings_with(&[("list", "ctrl+c", "refresh")]);
+        // The chat list takes Ctrl+C for itself (with q to quit there); elsewhere it quits.
+        let s = settings_with(&[("list", "ctrl+c", "refresh"), ("list", "q", "quit")]);
         let mut app = online(App::with_settings(clock(), &s));
         assert_eq!(app.handle_key(ctrl('c')).len(), 1, "refresh");
         assert!(!app.should_quit());
-        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::Char('i')));
         assert_eq!(app.context(), Context::Composer);
         app.handle_key(ctrl('c'));
         assert!(app.should_quit());
@@ -3200,14 +3255,14 @@ mod tests {
 
     #[test]
     fn a_binding_applies_only_in_its_own_context() {
-        // `z` refreshes in message selection, not in the chat list.
-        let s = settings_with(&[("select", "z", "refresh")]);
+        // `w` refreshes in message selection, not in the chat list.
+        let s = settings_with(&[("select", "w", "refresh")]);
         let mut app = online(App::with_settings(clock(), &s));
-        assert!(app.handle_key(key(KeyCode::Char('z'))).is_empty());
+        assert!(app.handle_key(key(KeyCode::Char('w'))).is_empty());
         assert_eq!(
             app.keys.lookup(
                 Context::Select,
-                KeyChord::new(KeyCode::Char('z'), KeyModifiers::NONE)
+                KeyChord::new(KeyCode::Char('w'), KeyModifiers::NONE)
             ),
             Some(Action::Refresh)
         );
@@ -3232,14 +3287,14 @@ mod tests {
 
     #[test]
     fn help_opens_from_the_list_and_types_a_question_mark_elsewhere() {
-        let mut app = filter_app();
+        let mut app = online_app();
         app.handle_key(key(KeyCode::Char('?')));
         assert_eq!(app.help_open(), Some(0));
         assert_eq!(app.context(), Context::Help);
-        app.handle_key(key(KeyCode::Char('?')));
-        assert_eq!(app.help_open(), None, "? closes");
+        app.handle_key(key(KeyCode::Esc));
+        assert_eq!(app.help_open(), None, "Esc closes");
         // In the filter box and the message box ? is a character.
-        app.handle_key(key(KeyCode::Char('f')));
+        app.handle_key(key(KeyCode::Char('/')));
         type_text(&mut app, "a?");
         assert_eq!(app.active().filter, "a?");
         assert_eq!(app.help_open(), None);
@@ -3251,8 +3306,14 @@ mod tests {
     }
 
     #[test]
-    fn help_closes_with_esc_q_or_question_mark_and_focus_is_unchanged() {
-        for close in [KeyCode::Esc, KeyCode::Char('q'), KeyCode::Char('?')] {
+    fn help_closes_with_esc_only_and_focus_is_unchanged() {
+        for close in [KeyCode::Char('q'), KeyCode::Char('?'), KeyCode::F(1)] {
+            let mut app = online_app();
+            app.handle_key(key(KeyCode::Char('?')));
+            app.handle_key(key(close));
+            assert_eq!(app.help_open(), Some(0), "{close:?} leaves help open");
+        }
+        {
             let mut app = online_app();
             app.handle_key(key(KeyCode::Down));
             let before = (
@@ -3261,15 +3322,14 @@ mod tests {
                 app.active().open.clone(),
             );
             app.handle_key(key(KeyCode::Char('?')));
-            app.handle_key(key(close));
-            assert_eq!(app.help_open(), None, "{close:?}");
-            assert!(!app.should_quit(), "q closes help, it does not quit");
+            app.handle_key(key(KeyCode::Esc));
+            assert_eq!(app.help_open(), None);
             let after = (
                 app.active().focus,
                 app.active().selected.clone(),
                 app.active().open.clone(),
             );
-            assert_eq!(before, after, "{close:?}");
+            assert_eq!(before, after);
         }
     }
 
@@ -3366,12 +3426,9 @@ mod tests {
         }
         let s = settings_with(&[("list", "ctrl+n", "down"), ("list", "j", "unbound")]);
         let t = text(&online(App::with_settings(clock(), &s)));
-        let list = &t[t.find("Chat list").unwrap()..t.find("Filter box").unwrap()];
-        assert!(list.contains("Ctrl+N, Down Down"), "{list}");
-        assert!(
-            !list.contains("Down, j Down") && !list.contains("j Up"),
-            "{list}"
-        );
+        let list = &t[t.find("Chat list").unwrap()..t.find("Message box").unwrap()];
+        assert!(list.contains("Ctrl+N Down"), "{list}");
+        assert!(!list.contains("j Down"), "{list}");
     }
 
     // ---- CodeRabbit review comments on PR 1 ----
@@ -3834,8 +3891,8 @@ mod tests {
 
     #[test]
     fn a_paste_as_keys_into_the_filter_is_flat_and_outside_a_box_it_is_dropped() {
-        let mut app = filter_app();
-        app.handle_key(key(KeyCode::Char('f')));
+        let mut app = online_app();
+        app.handle_key(key(KeyCode::Char('/')));
         app.handle_key_burst(keys_of("sam"));
         assert_eq!(app.active().filter, "sam");
         app.handle_key(key(KeyCode::Esc));
@@ -3855,8 +3912,8 @@ mod tests {
         }
         assert_eq!(app.active().draft(), "@€{\\");
         // The filter box.
-        let mut app = filter_app();
-        app.handle_key(key(KeyCode::Char('f')));
+        let mut app = online_app();
+        app.handle_key(key(KeyCode::Char('/')));
         app.handle_key(key_mod(KeyCode::Char('€'), altgr));
         assert_eq!(app.active().filter, "€");
         // A plain Alt chord is still not text.
@@ -3894,8 +3951,8 @@ mod tests {
         assert_eq!(app.active().draft(), "x[2Jyz    tab");
         assert!(!app.active().draft().contains('\u{1b}'));
         // The filter and the command box stay one line.
-        let mut app = filter_app();
-        app.handle_key(key(KeyCode::Char('f')));
+        let mut app = online_app();
+        app.handle_key(key(KeyCode::Char('/')));
         app.handle_paste("a\nb");
         assert_eq!(app.active().filter, "a b");
     }
@@ -3989,12 +4046,12 @@ mod tests {
     }
 
     #[test]
-    fn colon_thu_opens_the_popup_and_tab_inserts_thumbs_up() {
+    fn colon_thu_opens_the_popup_and_enter_inserts_thumbs_up() {
         let mut app = typing_app();
         type_text(&mut app, "ok :thu");
         assert_eq!(popup_labels(&app)[0], "\u{1F44D}");
-        let out = app.handle_key(key(KeyCode::Tab));
-        assert!(out.is_empty(), "Tab inserted, it did not switch network");
+        let out = app.handle_key(key(KeyCode::Enter));
+        assert!(out.is_empty(), "Enter inserted, it did not send");
         assert_eq!(app.active().draft(), "ok \u{1F44D}");
         assert!(app.popup().is_none());
         assert_eq!(app.active, Network::Teams);
@@ -4080,7 +4137,7 @@ mod tests {
             app.handle_key(key(KeyCode::Left));
         }
         assert!(app.popup().is_some());
-        app.handle_key(key(KeyCode::Tab));
+        app.handle_key(key(KeyCode::Enter));
         assert_eq!(app.active().draft(), "a \u{1F44D} b");
     }
 
@@ -4201,7 +4258,7 @@ mod tests {
         let (mut app, store) = app_with_store();
         app.handle_key(key(KeyCode::Enter));
         type_text(&mut app, ":thu");
-        app.handle_key(key(KeyCode::Tab));
+        app.handle_key(key(KeyCode::Enter));
         assert_eq!(
             store.recent_emoji(5).unwrap(),
             vec!["\u{1F44D}".to_string()]
@@ -4325,7 +4382,11 @@ mod tests {
     // ---- links ----
 
     fn chat_with_text(texts: &[&str]) -> App {
-        let mut app = online_app();
+        // `open_link` has no default key in the chat list: these tests bind u there.
+        let mut app = online(App::with_settings(
+            clock(),
+            &settings_with(&[("list", "u", "open_link")]),
+        ));
         app.handle_key(key(KeyCode::Enter));
         app.handle_key(key(KeyCode::Esc));
         let messages = texts
@@ -4501,7 +4562,7 @@ mod tests {
     #[test]
     fn slash_in_the_list_opens_the_bar_with_every_command() {
         let mut app = online_app();
-        assert!(app.handle_key(key(KeyCode::Char('/'))).is_empty());
+        assert!(app.handle_key(key(KeyCode::Char(':'))).is_empty());
         assert_eq!(app.context(), Context::Popup);
         // Nothing typed: every command, no chats.
         assert_eq!(app.palette_items().len(), commands::COMMANDS.len());
@@ -4514,7 +4575,7 @@ mod tests {
     #[test]
     fn typing_in_the_bar_filters_commands_and_chats() {
         let mut app = online_app();
-        app.handle_key(key(KeyCode::Char('/')));
+        app.handle_key(key(KeyCode::Char(':')));
         type_text(&mut app, "se");
         let items = app.palette_items();
         assert_eq!(items[0], crate::palette::PalItem::Cmd(CmdId::Settings));
@@ -4545,7 +4606,7 @@ mod tests {
     #[test]
     fn the_bar_keys_choose_wrap_and_run() {
         let mut app = online_app();
-        app.handle_key(key(KeyCode::Char('/')));
+        app.handle_key(key(KeyCode::Char(':')));
         app.handle_key(key(KeyCode::Up));
         assert_eq!(
             app.palette().unwrap().sel,
@@ -4560,7 +4621,7 @@ mod tests {
         assert_eq!(app.help_open(), Some(0));
         // No match: Enter keeps the bar open, Esc closes it.
         let mut app = online_app();
-        app.handle_key(key(KeyCode::Char('/')));
+        app.handle_key(key(KeyCode::Char(':')));
         type_text(&mut app, "zzzz");
         assert!(app.palette_items().is_empty());
         assert!(app.handle_key(key(KeyCode::Enter)).is_empty());
@@ -4572,7 +4633,7 @@ mod tests {
     #[test]
     fn the_bar_takes_a_paste_and_ctrl_c_quits_from_it() {
         let mut app = online_app();
-        app.handle_key(key(KeyCode::Char('/')));
+        app.handle_key(key(KeyCode::Char(':')));
         app.handle_paste("sa\nm");
         assert_eq!(app.palette().unwrap().query, "sa m");
         app.handle_key(ctrl('c'));
@@ -4612,7 +4673,7 @@ mod tests {
             Network::Teams,
             Status::NeedsLogin { reason: None },
         ));
-        app.handle_key(key(KeyCode::Char('/')));
+        app.handle_key(key(KeyCode::Char(':')));
         assert!(app.palette().is_some(), "panel");
         assert!(app
             .palette_items()
@@ -4620,7 +4681,7 @@ mod tests {
             .all(|i| matches!(i, crate::palette::PalItem::Cmd(_))));
         let mut app = online_app();
         app.ns_mut(Network::Teams).focus = Focus::Select;
-        app.handle_key(key(KeyCode::Char('/')));
+        app.handle_key(key(KeyCode::Char(':')));
         assert!(app.palette().is_some(), "select");
     }
 
@@ -4653,7 +4714,7 @@ mod tests {
         assert!(app.settings_page().is_none(), "start_tour closes the page");
         assert_eq!(app.layout_in(app.size).body.y, body_before.y + 1);
         assert_eq!(app.layout_in(app.size).header.y, 1);
-        assert!(app.tour_bar().unwrap().text.starts_with("TOUR 1/25 - "));
+        assert!(app.tour_bar().unwrap().text.starts_with("TOUR 1/26 - "));
     }
 
     #[test]
@@ -4826,8 +4887,8 @@ mod tests {
         let mut app = online_app();
         app.handle_key(key(KeyCode::F(1)));
         assert_eq!(app.help_open(), Some(0), "F1 list");
-        app.handle_key(key(KeyCode::F(1)));
-        assert_eq!(app.help_open(), None, "F1 closes help");
+        app.handle_key(key(KeyCode::Esc));
+        assert_eq!(app.help_open(), None, "Esc closes help");
         app.handle_key(key(KeyCode::F(2)));
         assert!(app.settings_page().is_some(), "F2 list");
         assert!(app.overlay_open());
@@ -4886,7 +4947,7 @@ mod tests {
             })
             .collect();
         assert_eq!(entries.len(), commands::COMMANDS.len());
-        assert_eq!(entries[0], (&"/help".to_string(), &"F1".to_string()));
-        assert_eq!(entries[1], (&"/settings".to_string(), &"F2".to_string()));
+        assert_eq!(entries[0], (&":help".to_string(), &"?".to_string()));
+        assert_eq!(entries[1], (&":settings".to_string(), &"F2".to_string()));
     }
 }

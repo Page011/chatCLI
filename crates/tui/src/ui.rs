@@ -486,14 +486,9 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             ],
         );
     }
-    // The selected chat is already on screen as a preview: Enter moves to its message box.
-    // On a narrow terminal the list hides the pane, so nothing is previewed yet: Enter opens.
-    // "type", not "reply": reply is the quote-reply key in selection mode.
-    let verb = if ns.open.is_some() && ns.open == ns.selected && app.convo_visible(ns.network) {
-        "type"
-    } else {
-        "open"
-    };
+    // Enter goes into the chat (its newest message selected); the compose key goes straight to
+    // its message box. "type", not "reply": reply is the quote-reply key in selection.
+    let verb = "open";
     let chat: &[Action] = &[Up, Down];
     if !ns.panel() && ns.focus == Focus::List && !ns.filter.is_empty() {
         return join_hints(
@@ -504,6 +499,7 @@ fn hints(app: &App) -> Vec<(String, bool)> {
                 (&[NextNetwork], "network"),
                 (chat, "chat"),
                 (&[Accept], verb),
+                (&[Compose], "type"),
                 (&[FilterStart], "filter"),
                 (&[Quit], "quit"),
             ],
@@ -542,6 +538,8 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             &[
                 (chat, "chat"),
                 (&[Accept], verb),
+                (&[Compose], "type"),
+                (&[FilterStart], "filter"),
                 (&[CommandBar], "commands"),
                 (&[Help], "help"),
                 (&[NextNetwork], "network"),
@@ -574,7 +572,7 @@ fn hints(app: &App) -> Vec<(String, bool)> {
                             (Some(Target::Reply(_)), _) => "cancel reply",
                             (Some(Target::Edit { .. }), _) => "cancel edit",
                             (None, Some(_)) => "remove file",
-                            (None, None) => "back to list",
+                            (None, None) => "back",
                         },
                     ),
                     (&[SelectMessages], "select"),
@@ -629,6 +627,7 @@ fn select_items(app: &App) -> Vec<(String, bool)> {
         (&[Delete][..], "delete", ns.caps.delete && own),
         (&[Back][..], "back", true),
         (&[CommandBar][..], "commands", true),
+        (&[Compose][..], "type", true),
         (&[Help][..], "help", true),
     ]);
     items
@@ -911,7 +910,7 @@ pub(crate) fn help_rows(app: &App) -> Vec<HelpRow> {
             _ => None,
         };
         rows.push(HelpRow::Entry {
-            keys: format!("/{}", c.name),
+            keys: format!(":{}", c.name),
             name: action
                 .and_then(|a| app.keys().keys_for(Context::Common, a).into_iter().next())
                 .unwrap_or_default(),
@@ -1857,16 +1856,16 @@ fn draw_composer(f: &mut Frame, app: &App, lay: &Layout) {
     }
     let draft = ns.draft();
     if draft.is_empty() && !focused {
-        // Focus is on the list: Enter there opens the selected chat and letters are commands,
-        // so the placeholder must not invite typing. While selecting, the way back is Esc.
-        let note = if ns.focus == Focus::Select {
-            let back = app
-                .keys()
-                .hint(Context::Select, &[Action::Back])
-                .unwrap_or_else(|| "Esc".to_string());
-            format!("{back} to go back and type")
+        // Focus is on the list or a message: letters are commands there, so the placeholder
+        // names the key that comes here.
+        let ctx = if ns.focus == Focus::Select {
+            Context::Select
         } else {
-            "Enter on a chat to type".to_string()
+            Context::List
+        };
+        let note = match app.keys().hint(ctx, &[Action::Compose]) {
+            Some(key) => format!("{key} to type"),
+            None => "Bind compose to type".to_string(),
         };
         f.render_widget(Paragraph::new(Span::styled(note, t.hint)), inner);
         return;
@@ -2424,7 +2423,7 @@ fn draw_palette(f: &mut Frame, app: &App, body: Rect) {
                 // A dimmed command says why, instead of its doc.
                 let doc = reason.unwrap_or_else(|| doc.to_string());
                 vec![
-                    Span::styled(fit(&format!("/{name}"), PALETTE_NAME_W), name_style),
+                    Span::styled(fit(&format!(":{name}"), PALETTE_NAME_W), name_style),
                     Span::raw(" "),
                     Span::styled(doc, doc_style),
                 ]

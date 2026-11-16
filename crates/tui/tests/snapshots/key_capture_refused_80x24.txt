@@ -7,18 +7,18 @@
 │Teams           │║Prev network        Shift+Tab                               ║
 │WhatsApp        │║Jump to tab 1       Alt+1                                   ║
 │Keys            │║Jump to tab 2       Alt+2                                   ║
-│About           │║Help                F1                                      ║
+│About           │║Help                ?, F1                                   ║
 │                │║Settings            F2                                      ║
 │                │║Search              Ctrl+F                                  ║
-│                │║Cursor left         Left                                    ║
-│                │║Cursor right        Right                                   ║
-│                │║Word left           Ctrl+Left                               ║
-│                │║Word right          Ctrl+Right                              ║
-│                │║Line start          Home                                    ║
-│                │║Line end            End                                     ║
-│                │║Delete back         Backspace                               ║
-│                │║Delete forward      Delete                                  ║
-│                │║Delete word back    Ctrl+W, Ctrl+Backspace                  ║
+│                │║Command bar         :                                       ║
+│                │║Filter start        /                                       ║
+│                │║Up                  Up, k                                   ║
+│                │║Down                Down, j                                 ║
+│                │║Bottom              G                                       ║
+│                │║Page up             PgUp                                    ║
+│                │║Page down           PgDn                                    ║
+│                │║Screen top          H                                       ║
+│                │║Screen bottom       L                                       ║
 │                │║This key cannot be saved: pick another                      ║
 └────────────────┘╚════════════════════════════════════════════════════════════╝
 Press the new key for Next network (any key is taken, Esc too)

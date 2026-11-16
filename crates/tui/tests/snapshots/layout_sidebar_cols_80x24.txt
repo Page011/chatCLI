@@ -21,7 +21,7 @@
 │                  │╔ Message ═════════════════════════════════════════════════╗
 │                  │║> typing a draft                                          ║
 └──────────────────┘╚══════════════════════════════════════════════════════════╝
-Enter send  F1 help  Esc back to list  Ctrl+Up select  Ctrl+J newline
+Enter send  F1 help  Esc back  Shift+Up select  Ctrl+J newline  Ctrl+E emoji
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -70,4 +70,4 @@ row 17 cols 41-74: fg=Red bg=Reset BOLD
 row 18 cols 41-48: fg=Red bg=Reset BOLD
 row 20 cols 21-29: fg=Reset bg=Reset BOLD
 row 21 cols 21-22: fg=Reset bg=Reset BOLD
-row 23 cols 0-68: fg=Reset bg=Reset DIM
+row 23 cols 0-75: fg=Reset bg=Reset DIM

@@ -24,10 +24,10 @@
 │                            │║                                                                    ║
 │                            │╚════════════════════════════════════════════════════════════════════╝
 │                            │┌ Message ───────────────────────────────────────────────────────────┐
-│                            ││Esc to go back and type                                             │
+│                            ││i to type                                                           │
 └────────────────────────────┘└────────────────────────────────────────────────────────────────────┘
 MEDIA EXPIRED
-Up/Down move  r reply  e react  u link  o open  v view  E edit  d delete  Esc back  / commands
+Up/Down move  r reply  e react  u link  o open  v view  c edit  x delete  Esc back  : commands
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -76,7 +76,7 @@ row 12 cols 1-4: fg=Reset bg=Reset BOLD
 row 12 cols 20-28: fg=DarkGray bg=Reset NONE
 row 12 cols 51-70: fg=Reset bg=Reset BOLD
 row 13 cols 1-16: fg=DarkGray bg=Reset NONE
-row 26 cols 31-53: fg=Reset bg=Reset DIM
+row 26 cols 31-39: fg=Reset bg=Reset DIM
 row 28 cols 0-12: fg=Red bg=Reset NONE
 row 29 cols 0-11: fg=Reset bg=Reset BOLD
 row 29 cols 12-13: fg=Reset bg=Reset DIM

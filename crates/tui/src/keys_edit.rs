@@ -38,7 +38,8 @@ pub(crate) fn capture(keys: &Keymap, ctx: Context, action: Action, k: KeyChord) 
             k.display()
         ));
     }
-    match keys.find(ctx, k) {
+    // A `common` key that works here counts too: the swap gives it the old key in this table.
+    match keys.lookup(ctx, k) {
         Some(a) if a == action => Captured::Same,
         Some(b) => Captured::Conflict(b),
         None => Captured::Bind,
@@ -100,6 +101,7 @@ fn exit_lost(user: &KeySettings, new: &KeySettings) -> Option<String> {
     let place = match more {
         0 => ctx.title().to_string(),
         n if n + 2 == Context::ALL.len() => "any context".to_string(),
+        1 => format!("{} and 1 more place", ctx.title()),
         n => format!("{} and {n} more places", ctx.title()),
     };
     Some(format!(
@@ -409,7 +411,10 @@ mod tests {
             c("backspace", Context::Composer, Action::Send),
             Captured::Refused("Backspace types text here: use a Ctrl or Alt key".to_string())
         );
-        assert_eq!(c("ctrl+c", Context::Select, Action::Reply), Captured::Bind);
+        assert_eq!(
+            c("ctrl+c", Context::Select, Action::Reply),
+            Captured::Conflict(Action::Quit)
+        );
         assert_eq!(c("f5", Context::List, Action::Refresh), Captured::Bind);
         assert_eq!(c("r", Context::List, Action::Refresh), Captured::Same);
         assert_eq!(
@@ -423,7 +428,7 @@ mod tests {
         // Ctrl keys type nothing, so a text context takes them.
         assert_eq!(c("ctrl+n", Context::Composer, Action::Send), Captured::Bind);
         // A text key is fine where nothing is typed.
-        assert_eq!(c("x", Context::Select, Action::Reply), Captured::Bind);
+        assert_eq!(c("w", Context::Select, Action::Reply), Captured::Bind);
         assert_eq!(
             capture(
                 &map,
@@ -543,12 +548,12 @@ mod tests {
         assert_eq!(after.lookup(Context::Help, k("ctrl+q")), Some(Action::Quit));
         assert_eq!(after.lookup(Context::Help, k("ctrl+c")), None);
         // The same for Esc on back.
-        let (new, edits) = bind(&map, &u, Context::Popup, Action::Back, k("f9")).unwrap();
+        let (new, edits) = bind(&map, &u, Context::Common, Action::Back, k("f9")).unwrap();
         assert_eq!(
             edits,
             vec![
-                set("keys.popup", "esc", "unbound"),
-                set("keys.popup", "f9", "back")
+                set("keys.common", "esc", "unbound"),
+                set("keys.common", "f9", "back")
             ]
         );
         let after = keymap(&new);
@@ -597,10 +602,13 @@ mod tests {
             Adding::Refused("p is already Pin (Chat list): delete it there first".to_string())
         );
         assert_eq!(c(Context::List, Action::Refresh, "r"), Adding::Same);
-        // Esc is a key like any other: it does not cancel.
+        // Esc is a key like any other: it does not cancel. It backs out everywhere, so adding it
+        // here warns first.
         assert_eq!(
             c(Context::List, Action::Refresh, "esc"),
-            Adding::Refused("Esc is already Back (Chat list): delete it there first".to_string())
+            Adding::Overlaps(
+                "Esc is Back everywhere: in Chat list it will be Refresh instead".to_string()
+            )
         );
         assert_eq!(c(Context::Panel, Action::Accept, "esc"), Adding::Free);
         assert_eq!(
@@ -673,18 +681,18 @@ mod tests {
     #[test]
     fn the_last_way_out_cannot_be_removed() {
         let u = KeySettings::default();
-        // Only the panel and the chat list have another quit key (q).
+        // Ctrl+C is the only quit key, and Esc the only back key, both in common.
         assert_eq!(
             remove_key(&u, Context::Common, k("ctrl+c")).unwrap_err(),
-            "KEY NOT SAVED - Quit would have no key in Filter box and 5 more places"
+            "KEY NOT SAVED - Quit would have no key in any context"
         );
         assert_eq!(
-            remove_key(&u, Context::Popup, k("esc")).unwrap_err(),
-            "KEY NOT SAVED - Back would have no key in Suggestions, pickers and search"
+            remove_key(&u, Context::Common, k("esc")).unwrap_err(),
+            "KEY NOT SAVED - Back would have no key in Suggestions, pickers and search and 1 more place"
         );
-        // Help has other keys that close it, and n answers a y/n question.
-        assert!(remove_key(&u, Context::Help, k("esc")).is_ok());
-        assert!(remove_key(&u, Context::Confirm, k("esc")).is_ok());
+        // n answers a y/n question, so a y/n question may give Esc to something else.
+        let map = keymap(&u);
+        assert!(bind(&map, &u, Context::Confirm, Action::ConfirmYes, k("esc")).is_ok());
         // With another quit key everywhere, Ctrl+C can go.
         let u = user(&[("common", "ctrl+q", "quit")]);
         let (new, _) = remove_key(&u, Context::Common, k("ctrl+c")).unwrap();

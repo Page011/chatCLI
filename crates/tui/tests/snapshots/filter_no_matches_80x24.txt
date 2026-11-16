@@ -6,7 +6,7 @@
 ║                          ║│                                                  │
 ║                          ║│                                                  │
 ║                          ║│     Select a chat and press Enter to open it.    │
-║                          ║│    Type / for commands: /help /settings /keys    │
+║                          ║│    Press : for commands: help, settings, keys    │
 ║   No chats match "zzz"   ║│                                                  │
 ║                          ║│                                                  │
 ║                          ║│                                                  │

@@ -956,9 +956,16 @@ mod tests {
         }
     }
 
-    /// Teams online, chat "a" open (message box focused) holding `messages`.
+    /// Teams online, chat "a" open (message box focused) holding `messages`. `view_image` has no
+    /// default key: these tests bind it to v in message selection.
     fn app_with(messages: Vec<ChatMessage>) -> App {
         let mut app = App::new(clock());
+        let mut keys = chatcli_core::settings::KeySettings::default();
+        keys.bindings.insert(
+            "select".to_string(),
+            [("v".to_string(), "view_image".to_string())].into(),
+        );
+        app.keys = crate::keymap::Keymap::build(&keys).0;
         app.set_color_depth(Depth::True);
         app.handle_event(Event::Status(
             Network::Teams,
@@ -990,9 +997,9 @@ mod tests {
         app
     }
 
-    /// Select the newest message (Ctrl+Up).
+    /// Select the newest message (Shift+Up).
     fn select(app: &mut App) {
-        app.handle_key(key(KeyCode::Up, KeyModifiers::CONTROL));
+        app.handle_key(key(KeyCode::Up, KeyModifiers::SHIFT));
         assert_eq!(app.active().focus, Focus::Select);
     }
 
@@ -1639,13 +1646,13 @@ mod tests {
         press(&mut app, KeyCode::Backspace);
         assert!(pending(&app).is_none());
         assert_eq!(app.active().draft(), "a");
-        // Esc removes it before it leaves the box.
+        // Esc removes it before it leaves the box for message selection.
         app.attach_or_notice(Network::Teams, "a", f, false);
         press(&mut app, KeyCode::Esc);
         assert!(pending(&app).is_none());
         assert_eq!(app.active().focus, Focus::Composer);
         press(&mut app, KeyCode::Esc);
-        assert_eq!(app.active().focus, Focus::List);
+        assert_eq!(app.active().focus, Focus::Select);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

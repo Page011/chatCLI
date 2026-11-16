@@ -11,6 +11,7 @@ pub(crate) enum CmdId {
     Notifications,
     Search,
     Refresh,
+    ReadAll,
     SignIn,
     SignOut,
     About,
@@ -71,6 +72,12 @@ pub(crate) const COMMANDS: &[Cmd] = &[
     ),
     cmd(CmdId::Refresh, "refresh", &[], "reload the chat list"),
     cmd(
+        CmdId::ReadAll,
+        "readall",
+        &["markallread"],
+        "mark every chat read, after y/n",
+    ),
+    cmd(
         CmdId::SignIn,
         "signin",
         &["login"],
@@ -96,7 +103,7 @@ pub(crate) const COMMANDS: &[Cmd] = &[
 pub(crate) const COMMANDS_TITLE: &str = "Commands";
 
 /// The one-line pointer in the empty message pane and the sign-in panel.
-pub(crate) const COMMANDS_HINT: &str = "Type / for commands: /help /settings /keys";
+pub(crate) const COMMANDS_HINT: &str = "Press : for commands: help, settings, keys";
 
 fn bare(word: &str) -> &str {
     word.trim_start_matches('/')
@@ -243,10 +250,8 @@ mod tests {
 
     #[test]
     fn the_hint_names_real_commands() {
-        for word in COMMANDS_HINT
-            .split_whitespace()
-            .filter(|w| w.len() > 1 && w.starts_with('/'))
-        {
+        let (_, names) = COMMANDS_HINT.split_once("commands: ").expect("the list");
+        for word in names.split(", ") {
             assert!(find(word).is_some(), "{word}");
         }
     }

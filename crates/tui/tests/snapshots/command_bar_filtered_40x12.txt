@@ -2,8 +2,8 @@
 ╔ Commands ════════════════════════════╗
 ║/se                                   ║
 ║Commands                              ║
-║/settings        theme, layout, keys …║
-║/search          search every stored …║
+║:settings        theme, layout, keys …║
+║:search          search every stored …║
 ║Chats                                 ║
 ║Release Planning for the Autumn Quart…║
 ║                                      ║

@@ -1,23 +1,23 @@
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ┌ Settings ──────┐╔ Keys - Message selection ══════════════════════════════════╗
-│Appearance      │║Command bar         /                                       ║
-│Layout          │║Suggestions, pickers and search                             ║
-│Notifications   │║Up                  Up                                      ║
-│Media           │║Down                Down                                    ║
-│Teams           │║Accept              Enter, Tab                              ║
-│WhatsApp        │║Back                Esc                                     ║
-│Keys            │║Page up             PgUp                                    ║
-│About           │║Page down           PgDn                                    ║
+│Appearance      │║Back                h, Left                                 ║
+│Layout          │║Compose             i                                       ║
+│Notifications   │║Top                 Home                                    ║
+│Media           │║Bottom              End                                     ║
+│Teams           │║Screen middle       M                                       ║
+│WhatsApp        │║Reply               r                                       ║
+│Keys            │║React               e                                       ║
+│About           │║Edit                c                                       ║
+│                │║Delete              x, d                                    ║
+│                │║Open link           u                                       ║
+│                │║Open media          o                                       ║
+│                │║View image          -                                       ║
 │                │║Confirm (link, delete, mark read)                           ║
 │                │║Confirm yes         y                                       ║
 │                │║Confirm no          n                                       ║
-│                │║Back                Esc                                     ║
 │                │║This help                                                   ║
-│                │║Back                Esc, F1, q, ?                           ║
-│                │║Up                  Up                                      ║
-│                │║Down                Down                                    ║
-│                │║Page up             PgUp                                    ║
-│                │║Page down           PgDn                                    ║
+│                │║Top                 Home                                    ║
+│                │║Bottom              End                                     ║
 │                │║Reset all keys                                              ║
 │                │║Enter removes every key you set, after y/n                  ║
 └────────────────┘╚════════════════════════════════════════════════════════════╝
@@ -29,10 +29,9 @@ row 0 cols 27-34: fg=Reset bg=Reset BOLD
 row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
 row 0 cols 69-79: fg=Reset bg=Reset DIM
 row 1 cols 19-44: fg=Reset bg=Reset BOLD
-row 3 cols 19-49: fg=Reset bg=Reset BOLD
 row 8 cols 1-16: fg=Reset bg=Reset BOLD
-row 10 cols 19-51: fg=Reset bg=Reset BOLD
-row 14 cols 19-27: fg=Reset bg=Reset BOLD
+row 14 cols 19-51: fg=Reset bg=Reset BOLD
+row 17 cols 19-27: fg=Reset bg=Reset BOLD
 row 20 cols 19-78: fg=Reset bg=Reset BOLD | REVERSED
 row 21 cols 19-60: fg=Reset bg=Reset DIM
 row 23 cols 0-34: fg=Reset bg=Reset BOLD

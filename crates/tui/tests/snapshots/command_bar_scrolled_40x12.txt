@@ -1,13 +1,13 @@
  Teams 103 LIVE   WhatsApp CONN…
 ╔ Commands ════════════════════════════╗
 ║/type a command or chat name          ║
-║/search          search every stored …║
-║/refresh         reload the chat list ║
-║/signin          Already signed in to…║
-║/signout         sign out, after y/n  ║
-║/about           version, data folder…║
-║/tour            TOUR - run chatcli -…║
-║/quit            quit chatcli         ║
+║:refresh         reload the chat list ║
+║:readall         mark every chat read…║
+║:signin          Already signed in to…║
+║:signout         sign out, after y/n  ║
+║:about           version, data folder…║
+║:tour            TOUR - run chatcli -…║
+║:quit            quit chatcli         ║
 ╚══════════════════════════════════════╝
 Up/Down choose  Esc close  Enter run
 --- styled runs (everything else is default style) ---
@@ -18,9 +18,9 @@ row 1 cols 1-10: fg=Reset bg=Reset BOLD
 row 2 cols 1-1: fg=Reset bg=Reset BOLD
 row 2 cols 2-28: fg=DarkGray bg=Reset NONE
 row 3 cols 1-16: fg=Reset bg=Reset BOLD
-row 3 cols 18-38: fg=Reset bg=Reset DIM
+row 3 cols 18-37: fg=Reset bg=Reset DIM
 row 4 cols 1-16: fg=Reset bg=Reset BOLD
-row 4 cols 18-37: fg=Reset bg=Reset DIM
+row 4 cols 18-38: fg=Reset bg=Reset DIM
 row 5 cols 1-16: fg=DarkGray bg=Reset NONE
 row 5 cols 18-38: fg=DarkGray bg=Reset NONE
 row 6 cols 1-16: fg=Reset bg=Reset BOLD

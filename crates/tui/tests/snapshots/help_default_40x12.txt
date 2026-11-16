@@ -2,12 +2,12 @@
 ╔ Help ════════════════════════════════╗
 ║No user bindings                      ║
 ║Commands                              ║
-║/help        F1                       ║
-║/settings    F2                       ║
-║/keys                                 ║
-║/theme                                ║
-║/layout                               ║
-║lines 1-6 of 117                      ║
+║:help        ?                        ║
+║:settings    F2                       ║
+║:keys                                 ║
+║:theme                                ║
+║:layout                               ║
+║lines 1-6 of 90                       ║
 ╚══════════════════════════════════════╝
 Esc close  Up/Down scroll
 --- styled runs (everything else is default style) ---
@@ -22,5 +22,5 @@ row 5 cols 1-12: fg=Reset bg=Reset BOLD
 row 6 cols 1-12: fg=Reset bg=Reset BOLD
 row 7 cols 1-12: fg=Reset bg=Reset BOLD
 row 8 cols 1-12: fg=Reset bg=Reset BOLD
-row 9 cols 1-16: fg=Reset bg=Reset DIM
+row 9 cols 1-15: fg=Reset bg=Reset DIM
 row 11 cols 0-24: fg=Reset bg=Reset DIM

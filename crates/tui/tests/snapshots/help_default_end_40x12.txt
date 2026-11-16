@@ -1,13 +1,13 @@
  Teams 103 LIVE   WhatsApp CONN…
 ╔ Help ════════════════════════════════╗
 ║No user bindings                      ║
+║y         Confirm yes                 ║
+║n         Confirm no                  ║
+║                                      ║
 ║This help                             ║
-║Esc, F1, q,… Back                     ║
-║Up           Up                       ║
-║Down         Down                     ║
-║PgUp         Page up                  ║
-║PgDn         Page down                ║
-║lines 112-117 of 117                  ║
+║Home      Top                         ║
+║End       Bottom                      ║
+║lines 85-90 of 90                     ║
 ╚══════════════════════════════════════╝
 Esc close  Up/Down scroll
 --- styled runs (everything else is default style) ---
@@ -17,10 +17,9 @@ row 0 cols 27-31: fg=Reset bg=Reset BOLD | DIM
 row 1 cols 1-6: fg=Reset bg=Reset BOLD
 row 2 cols 1-16: fg=Reset bg=Reset DIM
 row 3 cols 1-9: fg=Reset bg=Reset BOLD
-row 4 cols 1-12: fg=Reset bg=Reset BOLD
-row 5 cols 1-12: fg=Reset bg=Reset BOLD
-row 6 cols 1-12: fg=Reset bg=Reset BOLD
-row 7 cols 1-12: fg=Reset bg=Reset BOLD
-row 8 cols 1-12: fg=Reset bg=Reset BOLD
-row 9 cols 1-20: fg=Reset bg=Reset DIM
+row 4 cols 1-9: fg=Reset bg=Reset BOLD
+row 6 cols 1-9: fg=Reset bg=Reset BOLD
+row 7 cols 1-9: fg=Reset bg=Reset BOLD
+row 8 cols 1-9: fg=Reset bg=Reset BOLD
+row 9 cols 1-17: fg=Reset bg=Reset DIM
 row 11 cols 0-24: fg=Reset bg=Reset DIM

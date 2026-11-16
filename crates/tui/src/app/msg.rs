@@ -185,7 +185,26 @@ impl App {
         out
     }
 
-    /// Back to the message box.
+    /// Highlights the newest message of the open chat. False, and nothing changes, when it has no
+    /// message to select.
+    pub(crate) fn try_select(&mut self, n: Network) -> bool {
+        let Some(newest) = self.selectable_ids(n).last().cloned() else {
+            return false;
+        };
+        let ns = self.ns_mut(n);
+        ns.focus = Focus::Select;
+        ns.sel_msg = Some(newest);
+        self.ensure_sel_visible(n);
+        true
+    }
+
+    /// Back from selection: the chat list, with the chat still shown.
+    pub(crate) fn select_to_list(&mut self, n: Network) {
+        self.leave_select(n);
+        self.back_to_list(n);
+    }
+
+    /// To the message box.
     pub(super) fn leave_select(&mut self, n: Network) {
         let ns = self.ns_mut(n);
         ns.focus = Focus::Composer;
@@ -213,6 +232,32 @@ impl App {
             Action::Down => (cur + 1).min(ids.len() - 1),
             Action::Top => 0,
             Action::Bottom => ids.len() - 1,
+            Action::ScreenTop | Action::ScreenMiddle | Action::ScreenBottom => {
+                // The messages whose first line is on screen.
+                let (w, h) = self.convo_size(n);
+                let (lines, spans) = ui::message_layout(self.ns(n), &self.look(), w);
+                let total = lines.len();
+                let bottom = total - self.ns(n).scroll.min(total.saturating_sub(h));
+                let top = bottom.saturating_sub(h);
+                let shown: Vec<usize> = ids
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, id)| {
+                        spans
+                            .iter()
+                            .any(|s| &s.id == *id && s.start >= top && s.start < bottom)
+                    })
+                    .map(|(i, _)| i)
+                    .collect();
+                match (shown.first(), shown.last()) {
+                    (Some(&first), Some(&last)) => match action {
+                        Action::ScreenTop => first,
+                        Action::ScreenBottom => last,
+                        _ => shown[(shown.len() - 1) / 2],
+                    },
+                    _ => cur,
+                }
+            }
             _ => {
                 let (w, h) = self.convo_size(n);
                 let (_, spans) = ui::message_layout(self.ns(n), &self.look(), w);
@@ -551,7 +596,7 @@ mod tests {
     }
 
     fn ctrl_up(app: &mut App) -> Out {
-        app.handle_key(key_with(KeyCode::Up, KeyModifiers::CONTROL))
+        app.handle_key(key_with(KeyCode::Up, KeyModifiers::SHIFT))
     }
 
     fn ctrl_u(app: &mut App) {
@@ -922,15 +967,57 @@ mod tests {
     }
 
     #[test]
-    fn escape_leaves_selection() {
+    fn i_goes_to_the_message_box_and_escape_h_and_left_to_the_chat_list() {
         let mut app = app_with(ChatKind::Direct, three());
         ctrl_up(&mut app);
-        press(&mut app, KeyCode::Esc);
+        ch(&mut app, 'i');
         assert_eq!(app.active().focus, Focus::Composer);
         assert_eq!(sel(&app), None);
         // Typing goes to the message box again.
         typed(&mut app, "hi");
         assert_eq!(app.active().draft(), "hi");
+        for back in [KeyCode::Esc, KeyCode::Char('h'), KeyCode::Left] {
+            ctrl_up(&mut app);
+            press(&mut app, back);
+            assert_eq!(app.active().focus, Focus::List, "{back:?}");
+            assert_eq!(sel(&app), None);
+            assert_eq!(app.active().open.as_deref(), Some("a"), "still shown");
+            press(&mut app, KeyCode::Char('i'));
+        }
+    }
+
+    #[test]
+    fn escape_from_an_empty_box_goes_to_selection() {
+        let mut app = app_with(ChatKind::Direct, three());
+        press(&mut app, KeyCode::Esc);
+        assert_eq!(app.active().focus, Focus::Select);
+        assert_eq!(sel(&app), Some("m3"));
+        // With nothing to select, it goes to the chat list.
+        let mut app = app_with(ChatKind::Direct, Vec::new());
+        press(&mut app, KeyCode::Esc);
+        assert_eq!(app.active().focus, Focus::List);
+    }
+
+    #[test]
+    fn screen_keys_pick_the_first_middle_and_last_message_on_screen() {
+        let many: Vec<ChatMessage> = (0..40)
+            .map(|i| msg(&format!("m{i:02}"), 1000 + i, false, "x"))
+            .collect();
+        let mut app = app_with(ChatKind::Direct, many);
+        ctrl_up(&mut app);
+        assert_eq!(sel(&app), Some("m39"));
+        ch(&mut app, 'H');
+        let top = sel(&app).unwrap().to_string();
+        assert!(top.as_str() < "m39" && in_view(&app), "{top}");
+        ch(&mut app, 'L');
+        assert_eq!(sel(&app), Some("m39"));
+        ch(&mut app, 'M');
+        let mid = sel(&app).unwrap().to_string();
+        assert!(top < mid && mid.as_str() < "m39", "{mid}");
+        // g g is the very first message held.
+        ch(&mut app, 'g');
+        ch(&mut app, 'g');
+        assert_eq!(sel(&app), Some("m00"));
     }
 
     #[test]
@@ -1018,7 +1105,7 @@ mod tests {
         assert!(app.active().target().is_none());
         assert_eq!(app.active().focus, Focus::Composer);
         press(&mut app, KeyCode::Esc);
-        assert_eq!(app.active().focus, Focus::List);
+        assert_eq!(app.active().focus, Focus::Select);
     }
 
     #[test]
@@ -1125,7 +1212,7 @@ mod tests {
         ctrl_up(&mut app);
         ch(&mut app, 'k');
         assert_eq!(sel(&app), Some("m2"));
-        ch(&mut app, 'E');
+        ch(&mut app, 'c');
         assert_eq!(app.active().focus, Focus::Composer);
         assert_eq!(app.active().draft(), "second, mine");
         assert!(matches!(app.active().target(), Some(Target::Edit { .. })));
@@ -1154,7 +1241,7 @@ mod tests {
         typed(&mut app, "unsent draft");
         ctrl_up(&mut app);
         ch(&mut app, 'k');
-        ch(&mut app, 'E');
+        ch(&mut app, 'c');
         press(&mut app, KeyCode::Esc);
         assert!(app.active().target().is_none());
         assert_eq!(app.active().draft(), "unsent draft");
@@ -1166,13 +1253,13 @@ mod tests {
         let mut app = app_with(ChatKind::Direct, three());
         ctrl_up(&mut app);
         ch(&mut app, 'k');
-        ch(&mut app, 'E');
+        ch(&mut app, 'c');
         assert!(press(&mut app, KeyCode::Enter).is_empty());
         assert!(app.active().target().is_none(), "unchanged ends the edit");
         // An empty edit is refused with the box kept.
         ctrl_up(&mut app);
         ch(&mut app, 'k');
-        ch(&mut app, 'E');
+        ch(&mut app, 'c');
         ctrl_u(&mut app);
         assert_eq!(app.active().draft(), "");
         assert!(press(&mut app, KeyCode::Enter).is_empty());
@@ -1185,7 +1272,7 @@ mod tests {
         let mut app = app_with(ChatKind::Direct, three());
         ctrl_up(&mut app);
         assert_eq!(sel(&app), Some("m3"));
-        ch(&mut app, 'E');
+        ch(&mut app, 'c');
         assert_eq!(app.active().focus, Focus::Select, "no edit of theirs");
         assert!(app.active().target().is_none());
         assert_eq!(

@@ -19,9 +19,9 @@
 │                          │║                    Which one did you mean?       ║
 │                          │╚══════════════════════════════════════════════════╝
 │                          │┌ Message ─────────────────────────────────────────┐
-│                          ││Esc to go back and type                           │
+│                          ││i to type                                         │
 └──────────────────────────┘└──────────────────────────────────────────────────┘
-Up/Down move  r reply  e react  u link  E edit  d delete  Esc back  / commands
+Up/Down move  r reply  e react  u link  c edit  x delete  Esc back  : commands
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -72,7 +72,7 @@ row 17 cols 29-33: fg=DarkGray bg=Reset BOLD | REVERSED
 row 17 cols 34-48: fg=Reset bg=Reset BOLD | REVERSED
 row 17 cols 49-78: fg=DarkGray bg=Reset BOLD | REVERSED
 row 18 cols 29-71: fg=Reset bg=Reset BOLD | REVERSED
-row 21 cols 29-51: fg=Reset bg=Reset DIM
+row 21 cols 29-37: fg=Reset bg=Reset DIM
 row 23 cols 0-11: fg=Reset bg=Reset BOLD
 row 23 cols 12-13: fg=Reset bg=Reset DIM
 row 23 cols 14-20: fg=Reset bg=Reset BOLD

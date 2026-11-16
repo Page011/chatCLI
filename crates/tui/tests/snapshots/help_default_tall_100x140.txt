@@ -2,19 +2,20 @@
 ╔ Help ════════════════════════════════════════════════════════════════════════════════════════════╗
 ║No user bindings                                                                                  ║
 ║Commands                                                                                          ║
-║/help          F1                keys and commands                                                ║
-║/settings      F2                theme, layout, keys and more                                     ║
-║/keys                            change key bindings                                              ║
-║/theme                           colours                                                          ║
-║/layout                          sidebar, density, time format                                    ║
-║/notifications                   desktop notifications                                            ║
-║/search                          search every stored message                                      ║
-║/refresh                         reload the chat list                                             ║
-║/signin                          sign in to this network                                          ║
-║/signout                         sign out, after y/n                                              ║
-║/about                           version, data folder, log                                        ║
-║/tour                            watch chatcli show itself                                        ║
-║/quit                            quit chatcli                                                     ║
+║:help          ?                 keys and commands                                                ║
+║:settings      F2                theme, layout, keys and more                                     ║
+║:keys                            change key bindings                                              ║
+║:theme                           colours                                                          ║
+║:layout                          sidebar, density, time format                                    ║
+║:notifications                   desktop notifications                                            ║
+║:search                          search every stored message                                      ║
+║:refresh                         reload the chat list                                             ║
+║:readall                         mark every chat read, after y/n                                  ║
+║:signin                          sign in to this network                                          ║
+║:signout                         sign out, after y/n                                              ║
+║:about                           version, data folder, log                                        ║
+║:tour                            watch chatcli show itself                                        ║
+║:quit                            quit chatcli                                                     ║
 ║                                                                                                  ║
 ║Everywhere                                                                                        ║
 ║Ctrl+C                 Quit              quit chatcli                                             ║
@@ -22,9 +23,20 @@
 ║Shift+Tab              Prev network      switch to the previous network tab                       ║
 ║Alt+1                  Jump to tab 1     jump to the first network tab                            ║
 ║Alt+2                  Jump to tab 2     jump to the second network tab                           ║
-║F1                     Help              show this help                                           ║
+║?, F1                  Help              show this help                                           ║
 ║F2                     Settings          open the settings screen                                 ║
 ║Ctrl+F                 Search            search every message stored on this PC, both networks    ║
+║:                      Command bar       open the command bar: commands and chats                 ║
+║/                      Filter start      filter the chat list                                     ║
+║Up, k                  Up                up one: the chat, the selected message, a list or the em…║
+║Down, j                Down              down one: the chat, the selected message, a list or the …║
+║G                      Bottom            to the last chat, the newest message, or the end of help ║
+║PgUp                   Page up           a page up: the chat list, the messages (from the message…║
+║PgDn                   Page down         a page down: the chat list, the messages (from the messa…║
+║H                      Screen top        to the first chat or message on screen; a page up in help║
+║L                      Screen bottom     to the last chat or message on screen; a page down in he…║
+║Enter                  Accept            open the chosen chat and select its newest message, sign…║
+║Esc                    Back              back out: from the message box to selection, from select…║
 ║Left                   Cursor left       move the cursor one character left (emoji picker: one ce…║
 ║Right                  Cursor right      move the cursor one character right (emoji picker: one c…║
 ║Ctrl+Left              Word left         move the cursor to the start of the word before it       ║
@@ -35,89 +47,50 @@
 ║Delete                 Delete forward    delete the character under the cursor                    ║
 ║Ctrl+W, Ctrl+Backspace Delete word back  delete the word before the cursor                        ║
 ║Ctrl+U                 Clear line        clear the line the cursor is on                          ║
-║                                                                                                  ║
-║Sign-in panel                                                                                     ║
-║Enter     Accept            open the chosen chat, sign in, keep the filter, or take the chosen su…║
-║/         Command bar       open the / command bar: commands and chats                            ║
-║q         Quit              quit chatcli                                                          ║
-║?         Help              show this help                                                        ║
+║g g                    Top               to the first chat, the oldest message held, or the top o…║
 ║                                                                                                  ║
 ║Chat list                                                                                         ║
-║Up, k     Up                up one: the chat, the selected message, a list or the emoji grid; scr…║
-║Down, j   Down              down one: the chat, the selected message, a list or the emoji grid; s…║
+║l, Right  Accept            open the chosen chat and select its newest message, sign in, keep the…║
+║i         Compose           go to the message box (from the chat list: of the chosen chat)        ║
 ║Home      Top               to the first chat, the oldest message held, or the top of help        ║
 ║End       Bottom            to the last chat, the newest message, or the end of help              ║
-║Enter     Accept            open the chosen chat, sign in, keep the filter, or take the chosen su…║
-║/         Command bar       open the / command bar: commands and chats                            ║
 ║r         Refresh           ask the network for a fresh chat list                                 ║
-║q         Quit              quit chatcli                                                          ║
-║Esc       Back              back out: leave the message box or selection, close help or a list, c…║
-║PgUp      Page up           a page up: the chat list, the messages (from the message box), the se…║
-║PgDn      Page down         a page down: the chat list, the messages (from the message box), the …║
-║?         Help              show this help                                                        ║
-║u         Open link         open a link from the newest message that has one                      ║
 ║n         Next unread       select the next chat with unread messages (wraps round)               ║
 ║N         Prev unread       select the previous chat with unread messages (wraps round)           ║
-║M         Mark all read     mark every chat of this network read, after a y/n                     ║
+║R         Mark read         mark the selected chat read                                           ║
 ║p         Pin               pin the selected chat to the top, or unpin it                         ║
 ║m         Mute              mute the selected chat (no toasts, not counted), or unmute it         ║
-║x         Hide              hide the selected chat from the list, or show it again                ║
-║H         Show hidden       show or hide the chats you hid                                        ║
-║                                                                                                  ║
-║Filter box                                                                                        ║
-║Up        Up                up one: the chat, the selected message, a list or the emoji grid; scr…║
-║Down      Down              down one: the chat, the selected message, a list or the emoji grid; s…║
-║Enter     Accept            open the chosen chat, sign in, keep the filter, or take the chosen su…║
-║Esc       Back              back out: leave the message box or selection, close help or a list, c…║
+║z         Hide              hide the selected chat from the list, or show it again                ║
+║Z         Show hidden       show or hide the chats you hid                                        ║
 ║                                                                                                  ║
 ║Message box                                                                                       ║
 ║Enter                          Send              send the message                                 ║
-║Esc                            Back              back out: leave the message box or selection, cl…║
-║PgUp                           Page up           a page up: the chat list, the messages (from the…║
-║PgDn                           Page down         a page down: the chat list, the messages (from t…║
 ║Shift+Enter, Ctrl+J, Alt+Enter Insert newline    add a line break instead of sending              ║
 ║Ctrl+E                         Emoji picker      open the emoji picker                            ║
 ║Ctrl+O                         Attach            choose a file to send: type or complete its path ║
 ║Ctrl+Shift+V, Alt+v            Paste image       attach the image on the clipboard                ║
-║Ctrl+Up                        Select messages   select a message in the open chat                ║
+║Shift+Up                       Select messages   select a message in the open chat                ║
 ║                                                                                                  ║
 ║Message selection                                                                                 ║
-║Up, k     Up                up one: the chat, the selected message, a list or the emoji grid; scr…║
-║Down, j   Down              down one: the chat, the selected message, a list or the emoji grid; s…║
-║PgUp      Page up           a page up: the chat list, the messages (from the message box), the se…║
-║PgDn      Page down         a page down: the chat list, the messages (from the message box), the …║
+║h, Left   Back              back out: from the message box to selection, from selection to the ch…║
+║i         Compose           go to the message box (from the chat list: of the chosen chat)        ║
 ║Home      Top               to the first chat, the oldest message held, or the top of help        ║
-║End, G    Bottom            to the last chat, the newest message, or the end of help              ║
-║Esc       Back              back out: leave the message box or selection, close help or a list, c…║
+║End       Bottom            to the last chat, the newest message, or the end of help              ║
+║M         Screen middle     to the chat or message in the middle of the screen                    ║
 ║r         Reply             reply to the selected message (quote it)                              ║
 ║e         React             react to the selected message with an emoji                           ║
-║E         Edit              edit the selected message of yours                                    ║
-║d         Delete            delete the selected message of yours for everyone                     ║
-║u         Open link         open a link from the newest message that has one                      ║
+║c         Edit              edit the selected message of yours                                    ║
+║x, d      Delete            delete the selected message of yours for everyone                     ║
+║u         Open link         open a link from the selected message (chat list: from the newest mes…║
 ║o         Open media        open the selected message's attachment in the default app             ║
-║v         View image        show or hide a thumbnail of the selected image                        ║
-║?         Help              show this help                                                        ║
-║/         Command bar       open the / command bar: commands and chats                            ║
-║                                                                                                  ║
-║Suggestions, pickers and search                                                                   ║
-║Up         Up                up one: the chat, the selected message, a list or the emoji grid; sc…║
-║Down       Down              down one: the chat, the selected message, a list or the emoji grid; …║
-║Enter, Tab Accept            open the chosen chat, sign in, keep the filter, or take the chosen s…║
-║Esc        Back              back out: leave the message box or selection, close help or a list, …║
-║PgUp       Page up           a page up: the chat list, the messages (from the message box), the s…║
-║PgDn       Page down         a page down: the chat list, the messages (from the message box), the…║
 ║                                                                                                  ║
 ║Confirm (link, delete, mark read)                                                                 ║
 ║y         Confirm yes       yes: open the link, delete the message, send the file or mark all read║
 ║n         Confirm no        no, do not open it, delete it or send it                              ║
-║Esc       Back              back out: leave the message box or selection, close help or a list, c…║
 ║                                                                                                  ║
 ║This help                                                                                         ║
-║Esc, F1, q, ? Back              back out: leave the message box or selection, close help or a lis…║
-║Up            Up                up one: the chat, the selected message, a list or the emoji grid;…║
-║Down          Down              down one: the chat, the selected message, a list or the emoji gri…║
-║PgUp          Page up           a page up: the chat list, the messages (from the message box), th…║
-║PgDn          Page down         a page down: the chat list, the messages (from the message box), …║
+║Home      Top               to the first chat, the oldest message held, or the top of help        ║
+║End       Bottom            to the last chat, the newest message, or the end of help              ║
 ║                                                                                                  ║
 ║                                                                                                  ║
 ║                                                                                                  ║
@@ -135,7 +108,34 @@
 ║                                                                                                  ║
 ║                                                                                                  ║
 ║                                                                                                  ║
-║lines 1-117 of 117                                                                                ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║lines 1-90 of 90                                                                                  ║
 ╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
 Esc close  Up/Down scroll  PgUp/PgDn page
 --- styled runs (everything else is default style) ---
@@ -164,193 +164,148 @@ row 10 cols 32-60: fg=DarkGray bg=Reset NONE
 row 11 cols 1-14: fg=Reset bg=Reset BOLD
 row 11 cols 32-53: fg=DarkGray bg=Reset NONE
 row 12 cols 1-14: fg=Reset bg=Reset BOLD
-row 12 cols 32-56: fg=DarkGray bg=Reset NONE
+row 12 cols 32-64: fg=DarkGray bg=Reset NONE
 row 13 cols 1-14: fg=Reset bg=Reset BOLD
-row 13 cols 32-52: fg=DarkGray bg=Reset NONE
+row 13 cols 32-56: fg=DarkGray bg=Reset NONE
 row 14 cols 1-14: fg=Reset bg=Reset BOLD
-row 14 cols 32-58: fg=DarkGray bg=Reset NONE
+row 14 cols 32-52: fg=DarkGray bg=Reset NONE
 row 15 cols 1-14: fg=Reset bg=Reset BOLD
 row 15 cols 32-58: fg=DarkGray bg=Reset NONE
 row 16 cols 1-14: fg=Reset bg=Reset BOLD
-row 16 cols 32-45: fg=DarkGray bg=Reset NONE
-row 18 cols 1-10: fg=Reset bg=Reset BOLD
-row 19 cols 1-22: fg=Reset bg=Reset BOLD
-row 19 cols 40-53: fg=DarkGray bg=Reset NONE
+row 16 cols 32-58: fg=DarkGray bg=Reset NONE
+row 17 cols 1-14: fg=Reset bg=Reset BOLD
+row 17 cols 32-45: fg=DarkGray bg=Reset NONE
+row 19 cols 1-10: fg=Reset bg=Reset BOLD
 row 20 cols 1-22: fg=Reset bg=Reset BOLD
-row 20 cols 40-71: fg=DarkGray bg=Reset NONE
+row 20 cols 40-53: fg=DarkGray bg=Reset NONE
 row 21 cols 1-22: fg=Reset bg=Reset BOLD
-row 21 cols 40-75: fg=DarkGray bg=Reset NONE
+row 21 cols 40-71: fg=DarkGray bg=Reset NONE
 row 22 cols 1-22: fg=Reset bg=Reset BOLD
-row 22 cols 40-70: fg=DarkGray bg=Reset NONE
+row 22 cols 40-75: fg=DarkGray bg=Reset NONE
 row 23 cols 1-22: fg=Reset bg=Reset BOLD
-row 23 cols 40-71: fg=DarkGray bg=Reset NONE
+row 23 cols 40-70: fg=DarkGray bg=Reset NONE
 row 24 cols 1-22: fg=Reset bg=Reset BOLD
-row 24 cols 40-55: fg=DarkGray bg=Reset NONE
+row 24 cols 40-71: fg=DarkGray bg=Reset NONE
 row 25 cols 1-22: fg=Reset bg=Reset BOLD
-row 25 cols 40-65: fg=DarkGray bg=Reset NONE
+row 25 cols 40-55: fg=DarkGray bg=Reset NONE
 row 26 cols 1-22: fg=Reset bg=Reset BOLD
-row 26 cols 40-94: fg=DarkGray bg=Reset NONE
+row 26 cols 40-65: fg=DarkGray bg=Reset NONE
 row 27 cols 1-22: fg=Reset bg=Reset BOLD
-row 27 cols 40-98: fg=DarkGray bg=Reset NONE
+row 27 cols 40-94: fg=DarkGray bg=Reset NONE
 row 28 cols 1-22: fg=Reset bg=Reset BOLD
-row 28 cols 40-98: fg=DarkGray bg=Reset NONE
+row 28 cols 40-81: fg=DarkGray bg=Reset NONE
 row 29 cols 1-22: fg=Reset bg=Reset BOLD
-row 29 cols 40-91: fg=DarkGray bg=Reset NONE
+row 29 cols 40-61: fg=DarkGray bg=Reset NONE
 row 30 cols 1-22: fg=Reset bg=Reset BOLD
-row 30 cols 40-86: fg=DarkGray bg=Reset NONE
+row 30 cols 40-98: fg=DarkGray bg=Reset NONE
 row 31 cols 1-22: fg=Reset bg=Reset BOLD
-row 31 cols 40-81: fg=DarkGray bg=Reset NONE
+row 31 cols 40-98: fg=DarkGray bg=Reset NONE
 row 32 cols 1-22: fg=Reset bg=Reset BOLD
-row 32 cols 40-79: fg=DarkGray bg=Reset NONE
+row 32 cols 40-97: fg=DarkGray bg=Reset NONE
 row 33 cols 1-22: fg=Reset bg=Reset BOLD
 row 33 cols 40-98: fg=DarkGray bg=Reset NONE
 row 34 cols 1-22: fg=Reset bg=Reset BOLD
-row 34 cols 40-78: fg=DarkGray bg=Reset NONE
+row 34 cols 40-98: fg=DarkGray bg=Reset NONE
 row 35 cols 1-22: fg=Reset bg=Reset BOLD
-row 35 cols 40-74: fg=DarkGray bg=Reset NONE
+row 35 cols 40-98: fg=DarkGray bg=Reset NONE
 row 36 cols 1-22: fg=Reset bg=Reset BOLD
-row 36 cols 40-72: fg=DarkGray bg=Reset NONE
-row 38 cols 1-13: fg=Reset bg=Reset BOLD
-row 39 cols 1-9: fg=Reset bg=Reset BOLD
-row 39 cols 27-98: fg=DarkGray bg=Reset NONE
-row 40 cols 1-9: fg=Reset bg=Reset BOLD
-row 40 cols 27-70: fg=DarkGray bg=Reset NONE
-row 41 cols 1-9: fg=Reset bg=Reset BOLD
-row 41 cols 27-40: fg=DarkGray bg=Reset NONE
-row 42 cols 1-9: fg=Reset bg=Reset BOLD
-row 42 cols 27-42: fg=DarkGray bg=Reset NONE
-row 44 cols 1-9: fg=Reset bg=Reset BOLD
-row 45 cols 1-9: fg=Reset bg=Reset BOLD
-row 45 cols 27-98: fg=DarkGray bg=Reset NONE
-row 46 cols 1-9: fg=Reset bg=Reset BOLD
-row 46 cols 27-98: fg=DarkGray bg=Reset NONE
-row 47 cols 1-9: fg=Reset bg=Reset BOLD
-row 47 cols 27-90: fg=DarkGray bg=Reset NONE
-row 48 cols 1-9: fg=Reset bg=Reset BOLD
-row 48 cols 27-84: fg=DarkGray bg=Reset NONE
-row 49 cols 1-9: fg=Reset bg=Reset BOLD
-row 49 cols 27-98: fg=DarkGray bg=Reset NONE
-row 50 cols 1-9: fg=Reset bg=Reset BOLD
-row 50 cols 27-70: fg=DarkGray bg=Reset NONE
+row 36 cols 40-98: fg=DarkGray bg=Reset NONE
+row 37 cols 1-22: fg=Reset bg=Reset BOLD
+row 37 cols 40-98: fg=DarkGray bg=Reset NONE
+row 38 cols 1-22: fg=Reset bg=Reset BOLD
+row 38 cols 40-98: fg=DarkGray bg=Reset NONE
+row 39 cols 1-22: fg=Reset bg=Reset BOLD
+row 39 cols 40-98: fg=DarkGray bg=Reset NONE
+row 40 cols 1-22: fg=Reset bg=Reset BOLD
+row 40 cols 40-98: fg=DarkGray bg=Reset NONE
+row 41 cols 1-22: fg=Reset bg=Reset BOLD
+row 41 cols 40-91: fg=DarkGray bg=Reset NONE
+row 42 cols 1-22: fg=Reset bg=Reset BOLD
+row 42 cols 40-86: fg=DarkGray bg=Reset NONE
+row 43 cols 1-22: fg=Reset bg=Reset BOLD
+row 43 cols 40-81: fg=DarkGray bg=Reset NONE
+row 44 cols 1-22: fg=Reset bg=Reset BOLD
+row 44 cols 40-79: fg=DarkGray bg=Reset NONE
+row 45 cols 1-22: fg=Reset bg=Reset BOLD
+row 45 cols 40-98: fg=DarkGray bg=Reset NONE
+row 46 cols 1-22: fg=Reset bg=Reset BOLD
+row 46 cols 40-78: fg=DarkGray bg=Reset NONE
+row 47 cols 1-22: fg=Reset bg=Reset BOLD
+row 47 cols 40-74: fg=DarkGray bg=Reset NONE
+row 48 cols 1-22: fg=Reset bg=Reset BOLD
+row 48 cols 40-72: fg=DarkGray bg=Reset NONE
+row 49 cols 1-22: fg=Reset bg=Reset BOLD
+row 49 cols 40-98: fg=DarkGray bg=Reset NONE
 row 51 cols 1-9: fg=Reset bg=Reset BOLD
-row 51 cols 27-65: fg=DarkGray bg=Reset NONE
 row 52 cols 1-9: fg=Reset bg=Reset BOLD
-row 52 cols 27-40: fg=DarkGray bg=Reset NONE
+row 52 cols 27-98: fg=DarkGray bg=Reset NONE
 row 53 cols 1-9: fg=Reset bg=Reset BOLD
-row 53 cols 27-98: fg=DarkGray bg=Reset NONE
+row 53 cols 27-90: fg=DarkGray bg=Reset NONE
 row 54 cols 1-9: fg=Reset bg=Reset BOLD
-row 54 cols 27-98: fg=DarkGray bg=Reset NONE
+row 54 cols 27-90: fg=DarkGray bg=Reset NONE
 row 55 cols 1-9: fg=Reset bg=Reset BOLD
-row 55 cols 27-98: fg=DarkGray bg=Reset NONE
+row 55 cols 27-84: fg=DarkGray bg=Reset NONE
 row 56 cols 1-9: fg=Reset bg=Reset BOLD
-row 56 cols 27-42: fg=DarkGray bg=Reset NONE
+row 56 cols 27-65: fg=DarkGray bg=Reset NONE
 row 57 cols 1-9: fg=Reset bg=Reset BOLD
-row 57 cols 27-76: fg=DarkGray bg=Reset NONE
+row 57 cols 27-83: fg=DarkGray bg=Reset NONE
 row 58 cols 1-9: fg=Reset bg=Reset BOLD
-row 58 cols 27-83: fg=DarkGray bg=Reset NONE
+row 58 cols 27-87: fg=DarkGray bg=Reset NONE
 row 59 cols 1-9: fg=Reset bg=Reset BOLD
-row 59 cols 27-87: fg=DarkGray bg=Reset NONE
+row 59 cols 27-55: fg=DarkGray bg=Reset NONE
 row 60 cols 1-9: fg=Reset bg=Reset BOLD
-row 60 cols 27-77: fg=DarkGray bg=Reset NONE
+row 60 cols 27-73: fg=DarkGray bg=Reset NONE
 row 61 cols 1-9: fg=Reset bg=Reset BOLD
-row 61 cols 27-73: fg=DarkGray bg=Reset NONE
+row 61 cols 27-89: fg=DarkGray bg=Reset NONE
 row 62 cols 1-9: fg=Reset bg=Reset BOLD
-row 62 cols 27-89: fg=DarkGray bg=Reset NONE
+row 62 cols 27-82: fg=DarkGray bg=Reset NONE
 row 63 cols 1-9: fg=Reset bg=Reset BOLD
-row 63 cols 27-82: fg=DarkGray bg=Reset NONE
-row 64 cols 1-9: fg=Reset bg=Reset BOLD
-row 64 cols 27-58: fg=DarkGray bg=Reset NONE
-row 66 cols 1-10: fg=Reset bg=Reset BOLD
-row 67 cols 1-9: fg=Reset bg=Reset BOLD
-row 67 cols 27-98: fg=DarkGray bg=Reset NONE
-row 68 cols 1-9: fg=Reset bg=Reset BOLD
-row 68 cols 27-98: fg=DarkGray bg=Reset NONE
-row 69 cols 1-9: fg=Reset bg=Reset BOLD
-row 69 cols 27-98: fg=DarkGray bg=Reset NONE
-row 70 cols 1-9: fg=Reset bg=Reset BOLD
-row 70 cols 27-98: fg=DarkGray bg=Reset NONE
-row 72 cols 1-11: fg=Reset bg=Reset BOLD
-row 73 cols 1-30: fg=Reset bg=Reset BOLD
-row 73 cols 48-65: fg=DarkGray bg=Reset NONE
-row 74 cols 1-30: fg=Reset bg=Reset BOLD
-row 74 cols 48-98: fg=DarkGray bg=Reset NONE
-row 75 cols 1-30: fg=Reset bg=Reset BOLD
-row 75 cols 48-98: fg=DarkGray bg=Reset NONE
-row 76 cols 1-30: fg=Reset bg=Reset BOLD
-row 76 cols 48-98: fg=DarkGray bg=Reset NONE
-row 77 cols 1-30: fg=Reset bg=Reset BOLD
-row 77 cols 48-84: fg=DarkGray bg=Reset NONE
-row 78 cols 1-30: fg=Reset bg=Reset BOLD
-row 78 cols 48-70: fg=DarkGray bg=Reset NONE
-row 79 cols 1-30: fg=Reset bg=Reset BOLD
-row 79 cols 48-97: fg=DarkGray bg=Reset NONE
-row 80 cols 1-30: fg=Reset bg=Reset BOLD
-row 80 cols 48-82: fg=DarkGray bg=Reset NONE
-row 81 cols 1-30: fg=Reset bg=Reset BOLD
-row 81 cols 48-82: fg=DarkGray bg=Reset NONE
-row 83 cols 1-17: fg=Reset bg=Reset BOLD
+row 63 cols 27-58: fg=DarkGray bg=Reset NONE
+row 65 cols 1-11: fg=Reset bg=Reset BOLD
+row 66 cols 1-30: fg=Reset bg=Reset BOLD
+row 66 cols 48-65: fg=DarkGray bg=Reset NONE
+row 67 cols 1-30: fg=Reset bg=Reset BOLD
+row 67 cols 48-84: fg=DarkGray bg=Reset NONE
+row 68 cols 1-30: fg=Reset bg=Reset BOLD
+row 68 cols 48-70: fg=DarkGray bg=Reset NONE
+row 69 cols 1-30: fg=Reset bg=Reset BOLD
+row 69 cols 48-97: fg=DarkGray bg=Reset NONE
+row 70 cols 1-30: fg=Reset bg=Reset BOLD
+row 70 cols 48-82: fg=DarkGray bg=Reset NONE
+row 71 cols 1-30: fg=Reset bg=Reset BOLD
+row 71 cols 48-82: fg=DarkGray bg=Reset NONE
+row 73 cols 1-17: fg=Reset bg=Reset BOLD
+row 74 cols 1-9: fg=Reset bg=Reset BOLD
+row 74 cols 27-98: fg=DarkGray bg=Reset NONE
+row 75 cols 1-9: fg=Reset bg=Reset BOLD
+row 75 cols 27-90: fg=DarkGray bg=Reset NONE
+row 76 cols 1-9: fg=Reset bg=Reset BOLD
+row 76 cols 27-90: fg=DarkGray bg=Reset NONE
+row 77 cols 1-9: fg=Reset bg=Reset BOLD
+row 77 cols 27-84: fg=DarkGray bg=Reset NONE
+row 78 cols 1-9: fg=Reset bg=Reset BOLD
+row 78 cols 27-78: fg=DarkGray bg=Reset NONE
+row 79 cols 1-9: fg=Reset bg=Reset BOLD
+row 79 cols 27-68: fg=DarkGray bg=Reset NONE
+row 80 cols 1-9: fg=Reset bg=Reset BOLD
+row 80 cols 27-71: fg=DarkGray bg=Reset NONE
+row 81 cols 1-9: fg=Reset bg=Reset BOLD
+row 81 cols 27-62: fg=DarkGray bg=Reset NONE
+row 82 cols 1-9: fg=Reset bg=Reset BOLD
+row 82 cols 27-77: fg=DarkGray bg=Reset NONE
+row 83 cols 1-9: fg=Reset bg=Reset BOLD
+row 83 cols 27-98: fg=DarkGray bg=Reset NONE
 row 84 cols 1-9: fg=Reset bg=Reset BOLD
-row 84 cols 27-98: fg=DarkGray bg=Reset NONE
-row 85 cols 1-9: fg=Reset bg=Reset BOLD
-row 85 cols 27-98: fg=DarkGray bg=Reset NONE
-row 86 cols 1-9: fg=Reset bg=Reset BOLD
-row 86 cols 27-98: fg=DarkGray bg=Reset NONE
+row 84 cols 27-85: fg=DarkGray bg=Reset NONE
+row 86 cols 1-33: fg=Reset bg=Reset BOLD
 row 87 cols 1-9: fg=Reset bg=Reset BOLD
 row 87 cols 27-98: fg=DarkGray bg=Reset NONE
 row 88 cols 1-9: fg=Reset bg=Reset BOLD
-row 88 cols 27-90: fg=DarkGray bg=Reset NONE
-row 89 cols 1-9: fg=Reset bg=Reset BOLD
-row 89 cols 27-84: fg=DarkGray bg=Reset NONE
+row 88 cols 27-68: fg=DarkGray bg=Reset NONE
 row 90 cols 1-9: fg=Reset bg=Reset BOLD
-row 90 cols 27-98: fg=DarkGray bg=Reset NONE
 row 91 cols 1-9: fg=Reset bg=Reset BOLD
-row 91 cols 27-68: fg=DarkGray bg=Reset NONE
+row 91 cols 27-90: fg=DarkGray bg=Reset NONE
 row 92 cols 1-9: fg=Reset bg=Reset BOLD
-row 92 cols 27-71: fg=DarkGray bg=Reset NONE
-row 93 cols 1-9: fg=Reset bg=Reset BOLD
-row 93 cols 27-62: fg=DarkGray bg=Reset NONE
-row 94 cols 1-9: fg=Reset bg=Reset BOLD
-row 94 cols 27-77: fg=DarkGray bg=Reset NONE
-row 95 cols 1-9: fg=Reset bg=Reset BOLD
-row 95 cols 27-76: fg=DarkGray bg=Reset NONE
-row 96 cols 1-9: fg=Reset bg=Reset BOLD
-row 96 cols 27-85: fg=DarkGray bg=Reset NONE
-row 97 cols 1-9: fg=Reset bg=Reset BOLD
-row 97 cols 27-74: fg=DarkGray bg=Reset NONE
-row 98 cols 1-9: fg=Reset bg=Reset BOLD
-row 98 cols 27-42: fg=DarkGray bg=Reset NONE
-row 99 cols 1-9: fg=Reset bg=Reset BOLD
-row 99 cols 27-70: fg=DarkGray bg=Reset NONE
-row 101 cols 1-31: fg=Reset bg=Reset BOLD
-row 102 cols 1-10: fg=Reset bg=Reset BOLD
-row 102 cols 28-98: fg=DarkGray bg=Reset NONE
-row 103 cols 1-10: fg=Reset bg=Reset BOLD
-row 103 cols 28-98: fg=DarkGray bg=Reset NONE
-row 104 cols 1-10: fg=Reset bg=Reset BOLD
-row 104 cols 28-98: fg=DarkGray bg=Reset NONE
-row 105 cols 1-10: fg=Reset bg=Reset BOLD
-row 105 cols 28-98: fg=DarkGray bg=Reset NONE
-row 106 cols 1-10: fg=Reset bg=Reset BOLD
-row 106 cols 28-98: fg=DarkGray bg=Reset NONE
-row 107 cols 1-10: fg=Reset bg=Reset BOLD
-row 107 cols 28-98: fg=DarkGray bg=Reset NONE
-row 109 cols 1-33: fg=Reset bg=Reset BOLD
-row 110 cols 1-9: fg=Reset bg=Reset BOLD
-row 110 cols 27-98: fg=DarkGray bg=Reset NONE
-row 111 cols 1-9: fg=Reset bg=Reset BOLD
-row 111 cols 27-68: fg=DarkGray bg=Reset NONE
-row 112 cols 1-9: fg=Reset bg=Reset BOLD
-row 112 cols 27-98: fg=DarkGray bg=Reset NONE
-row 114 cols 1-9: fg=Reset bg=Reset BOLD
-row 115 cols 1-13: fg=Reset bg=Reset BOLD
-row 115 cols 31-98: fg=DarkGray bg=Reset NONE
-row 116 cols 1-13: fg=Reset bg=Reset BOLD
-row 116 cols 31-98: fg=DarkGray bg=Reset NONE
-row 117 cols 1-13: fg=Reset bg=Reset BOLD
-row 117 cols 31-98: fg=DarkGray bg=Reset NONE
-row 118 cols 1-13: fg=Reset bg=Reset BOLD
-row 118 cols 31-98: fg=DarkGray bg=Reset NONE
-row 119 cols 1-13: fg=Reset bg=Reset BOLD
-row 119 cols 31-98: fg=DarkGray bg=Reset NONE
-row 137 cols 1-18: fg=Reset bg=Reset DIM
+row 92 cols 27-84: fg=DarkGray bg=Reset NONE
+row 137 cols 1-16: fg=Reset bg=Reset DIM
 row 139 cols 0-40: fg=Reset bg=Reset DIM
