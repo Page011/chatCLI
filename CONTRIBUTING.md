@@ -22,7 +22,7 @@ cargo run -p chatcli -- --demo
 
 ## Build and check
 
-You need Rust stable (see `rust-toolchain.toml`) and, on Windows, the Visual Studio C++ Build Tools. chatcli targets Windows 10 and 11.
+You need Rust stable (see `rust-toolchain.toml`) and a C compiler: on Windows the Visual Studio C++ Build Tools, on macOS the Xcode command line tools, on Linux `gcc` or `clang`. chatcli targets Windows 10 and 11; Linux and macOS are experimental. With Nix, `nix develop` gives a shell with the toolchain, clippy, rustfmt and Bun.
 
 ```
 cargo build --workspace
@@ -31,7 +31,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 ```
 
-Run `cargo fmt --all` to fix formatting. CI runs the same commands and must be green before merge. If you change dependencies, run `cargo build` once without `--locked` so `Cargo.lock` updates, then run the commands above. Versions used by more than one crate go in the root `[workspace.dependencies]`. Linux and macOS jobs run too but are best effort.
+Run `cargo fmt --all` to fix formatting. CI runs the same commands and must be green before merge. If you change dependencies, run `cargo build` once without `--locked` so `Cargo.lock` updates, then run the commands above. Versions used by more than one crate go in the root `[workspace.dependencies]`. CI runs them on Windows, Linux and macOS.
 
 Tests never touch your real data: set `CHATCLI_DATA_DIR` to a temp folder, and use test-only credential names. Never run `chatcli` itself from a test.
 
@@ -57,7 +57,7 @@ Screens are checked against stored snapshots in `crates/tui`. If you change the 
 UPDATE_SNAPSHOTS=1 cargo test -p chatcli-tui
 ```
 
-On Windows `cmd`, run `set UPDATE_SNAPSHOTS=1`, then the test, then `set UPDATE_SNAPSHOTS=`.
+That line is for Linux and macOS shells. On Windows `cmd`, run `set UPDATE_SNAPSHOTS=1`, then the test, then `set UPDATE_SNAPSHOTS=`. In PowerShell, run `$env:UPDATE_SNAPSHOTS = '1'`, then the test, then `Remove-Item Env:UPDATE_SNAPSHOTS`.
 
 ## Pull requests
 

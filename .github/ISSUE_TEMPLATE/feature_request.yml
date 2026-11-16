@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         This repository is public. Do not post tokens, secrets, real names or message text.
-        Scope today: Windows, text only, Teams 1:1 and group chats, WhatsApp direct and group chats.
+        Scope today: Windows (Linux and macOS experimental), text only, Teams 1:1 and group chats, WhatsApp direct and group chats.
   - type: textarea
     id: problem
     attributes:

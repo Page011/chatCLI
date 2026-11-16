@@ -34,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `chatcli --help`.
 - `--demo` shows every feature above on fake data, with its media in a temporary folder.
 - Portability groundwork for Linux and macOS: data folder, file lock, browser launch, keychains, best-effort CI jobs.
+- Linux: `CHATCLI_SECRET_STORE=file` keeps secrets in `secrets.json` in the data folder (mode 0600, not encrypted) for systems with no Secret Service.
 - Winget and Scoop manifests (not yet submitted), a code-signing write-up, a memory benchmark script, a relay end-to-end test, WhatsApp fake-transport tests, and release notes built from this file.
 - Sidebar preview: moving through the chat list (arrow keys, j/k, page keys, a click) shows each chat in the message pane at once. Enter replies, Esc goes back. A previewed chat counts as read after 2 s on screen, never while its pane is hidden.
 - `/` command bar (chat list, sign-in panel, message selection): lists every command and your chats. Commands also work as `/command` in the message box (`//` sends a message that starts with a slash) and as `:command` in the vim box: `/help` `/settings` `/keys` `/theme` `/layout` `/notifications` `/search` `/refresh` `/signin` `/signout` `/about` `/tour` `/quit`.

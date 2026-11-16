@@ -5,9 +5,14 @@
 //! Entra refresh tokens for work accounts are routinely longer, so a secret is stored in
 //! pieces, and a single pointer entry says which set of pieces is the live one (see
 //! `POINTER_PREFIX`). The same layout is used on every OS so one code path is tested.
+//!
+//! On Linux, `CHATCLI_SECRET_STORE=file` keeps the same entries in `secrets.json` in the data
+//! folder instead (mode 0600, not encrypted), for systems with no Secret Service.
 
 use std::fs::File;
 use std::path::Path;
+#[cfg(target_os = "linux")]
+use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::{lock as file_lock, paths, Result};
@@ -39,7 +44,8 @@ fn lock_in(dir: &Path) -> Result<File> {
     Err("credential store is busy: close other chatcli windows and try again.".into())
 }
 
-/// Where the pieces live. The Windows Credential Manager in the app, a map in tests.
+/// Where the pieces live. The OS credential store in the app (or `secrets.json` on Linux when
+/// asked for), a map in tests.
 trait Vault {
     fn get(&self, service: &str, user: &str) -> Result<Option<String>>;
     fn set(&self, service: &str, user: &str, value: &str) -> Result<()>;
@@ -49,8 +55,22 @@ trait Vault {
 
 struct OsVault;
 
+fn os_error(e: keyring::Error) -> String {
+    #[cfg(target_os = "linux")]
+    if matches!(
+        e,
+        keyring::Error::PlatformFailure(_) | keyring::Error::NoStorageAccess(_)
+    ) {
+        return format!(
+            "credential store: {e}. If no Secret Service runs here, set \
+             {FILE_STORE_ENV}=file to keep secrets in a private file in the data folder."
+        );
+    }
+    format!("credential store: {e}")
+}
+
 fn entry(service: &str, user: &str) -> Result<keyring::Entry> {
-    keyring::Entry::new(service, user).map_err(|e| format!("credential store: {e}"))
+    keyring::Entry::new(service, user).map_err(os_error)
 }
 
 impl Vault for OsVault {
@@ -58,22 +78,113 @@ impl Vault for OsVault {
         match entry(service, user)?.get_password() {
             Ok(v) => Ok(Some(v)),
             Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(format!("credential store: {e}")),
+            Err(e) => Err(os_error(e)),
         }
     }
 
     fn set(&self, service: &str, user: &str, value: &str) -> Result<()> {
-        entry(service, user)?
-            .set_password(value)
-            .map_err(|e| format!("credential store: {e}"))
+        entry(service, user)?.set_password(value).map_err(os_error)
     }
 
     fn delete(&self, service: &str, user: &str) -> Result<()> {
         match entry(service, user)?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(format!("credential store: {e}")),
+            Err(e) => Err(os_error(e)),
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+const FILE_STORE_ENV: &str = "CHATCLI_SECRET_STORE";
+#[cfg(target_os = "linux")]
+const FILE_STORE_NAME: &str = "secrets.json";
+
+/// True when the user chose `CHATCLI_SECRET_STORE=file`. Any other value is an error rather
+/// than a silent fall back to the keyring.
+#[cfg(target_os = "linux")]
+fn file_store_chosen() -> Result<bool> {
+    match std::env::var(FILE_STORE_ENV) {
+        Ok(v) if v == "file" => Ok(true),
+        Ok(v) if v.is_empty() => Ok(false),
+        Err(std::env::VarError::NotPresent) => Ok(false),
+        Ok(v) => Err(format!(
+            "{FILE_STORE_ENV}={v} is not understood: set it to 'file' or unset it"
+        )),
+        Err(e) => Err(format!("{FILE_STORE_ENV}: {e}")),
+    }
+}
+
+/// The Linux fallback for systems with no Secret Service: a JSON object of service to an
+/// object of user to value, nested so no service or user name can collide with another.
+/// Every change rewrites the whole file through `config::write_private` (an exclusive temp
+/// file of mode 0600, then a rename), so a crash leaves the old file or the new one. Not
+/// encrypted: it relies on the file mode.
+#[cfg(target_os = "linux")]
+struct FileVault {
+    path: PathBuf,
+}
+
+#[cfg(target_os = "linux")]
+type FileEntries = std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>;
+
+#[cfg(target_os = "linux")]
+impl FileVault {
+    fn load(&self) -> Result<FileEntries> {
+        match std::fs::read_to_string(&self.path) {
+            Ok(text) => serde_json::from_str(&text)
+                .map_err(|e| format!("secrets file {} is damaged: {e}", self.path.display())),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Default::default()),
+            Err(e) => Err(format!("secrets file {}: {e}", self.path.display())),
+        }
+    }
+
+    fn save(&self, all: &FileEntries) -> Result<()> {
+        let text = serde_json::to_string_pretty(all).map_err(|e| format!("secrets file: {e}"))?;
+        crate::config::write_private(&self.path, &text)
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Vault for FileVault {
+    fn get(&self, service: &str, user: &str) -> Result<Option<String>> {
+        Ok(self
+            .load()?
+            .get_mut(service)
+            .and_then(|users| users.remove(user)))
+    }
+
+    fn set(&self, service: &str, user: &str, value: &str) -> Result<()> {
+        let mut all = self.load()?;
+        all.entry(service.to_string())
+            .or_default()
+            .insert(user.to_string(), value.to_string());
+        self.save(&all)
+    }
+
+    fn delete(&self, service: &str, user: &str) -> Result<()> {
+        let mut all = self.load()?;
+        let Some(users) = all.get_mut(service) else {
+            return Ok(());
+        };
+        if users.remove(user).is_none() {
+            return Ok(());
+        }
+        if users.is_empty() {
+            all.remove(service);
+        }
+        self.save(&all)
+    }
+}
+
+/// Runs `f` against the store the user chose.
+fn with_vault<T>(f: impl FnOnce(&dyn Vault) -> Result<T>) -> Result<T> {
+    #[cfg(target_os = "linux")]
+    if file_store_chosen()? {
+        return f(&FileVault {
+            path: paths::data_dir()?.join(FILE_STORE_NAME),
+        });
+    }
+    f(&OsVault)
 }
 
 fn split_chunks(secret: &str, size: usize) -> Vec<String> {
@@ -206,6 +317,10 @@ fn clear_in(vault: &dyn Vault, service: &str, name: &str) -> Result<()> {
 
 /// What this OS calls the place secrets live, for user-facing text.
 pub fn store_name() -> &'static str {
+    #[cfg(target_os = "linux")]
+    if matches!(file_store_chosen(), Ok(true)) {
+        return "secrets.json in the data folder, owner-only and unencrypted";
+    }
     match std::env::consts::OS {
         "windows" => "Windows Credential Manager",
         "macos" => "the macOS Keychain",
@@ -216,19 +331,19 @@ pub fn store_name() -> &'static str {
 /// Stores a secret in pieces, switching to it only when every piece is written.
 pub fn store(service: &str, name: &str, secret: &str) -> Result<()> {
     let _lock = lock()?;
-    store_in(&OsVault, service, name, secret)
+    with_vault(|v| store_in(v, service, name, secret))
 }
 
 /// The whole secret, or None when nothing is stored.
 pub fn read(service: &str, name: &str) -> Result<Option<String>> {
     let _lock = lock()?;
-    read_from(&OsVault, service, name)
+    with_vault(|v| read_from(v, service, name))
 }
 
 /// Deletes the secret and every piece of it.
 pub fn clear(service: &str, name: &str) -> Result<()> {
     let _lock = lock()?;
-    clear_in(&OsVault, service, name)
+    with_vault(|v| clear_in(v, service, name))
 }
 
 #[cfg(test)]
@@ -408,6 +523,90 @@ mod tests {
         ] {
             assert_eq!(parse_pointer(bad), None, "{bad:?}");
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn file_vault(test: &str) -> (PathBuf, FileVault) {
+        let dir = std::env::temp_dir().join(format!(
+            "chatcli-secrets-file-{test}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(FILE_STORE_NAME);
+        (dir, FileVault { path })
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn file_vault_round_trips_long_secrets_and_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let (dir, v) = file_vault("round-trip");
+        assert_eq!(
+            read_from(&v, "s", "tok").unwrap(),
+            None,
+            "no file is no secret"
+        );
+        let long = token('x', 3300);
+        store_in(&v, "s", "tok", &long).unwrap();
+        store_in(&v, "s", "other", "keep").unwrap();
+        assert_eq!(
+            read_from(&v, "s", "tok").unwrap().as_deref(),
+            Some(long.as_str())
+        );
+        store_in(&v, "s", "tok", "short").unwrap();
+        assert_eq!(read_from(&v, "s", "tok").unwrap().as_deref(), Some("short"));
+        clear_in(&v, "s", "tok").unwrap();
+        assert_eq!(read_from(&v, "s", "tok").unwrap(), None);
+        assert_eq!(
+            read_from(&v, "s", "other").unwrap().as_deref(),
+            Some("keep")
+        );
+
+        let mode = std::fs::metadata(&v.path).unwrap().permissions().mode();
+        assert_eq!(
+            mode & 0o777,
+            0o600,
+            "only the owner may read the secrets file"
+        );
+        let names: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(names, [FILE_STORE_NAME], "no temp files are left behind");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn file_vault_keeps_names_with_slashes_apart() {
+        let (dir, v) = file_vault("slashes");
+        v.set("a/b", "c", "first").unwrap();
+        v.set("a", "b/c", "second").unwrap();
+        assert_eq!(v.get("a/b", "c").unwrap().as_deref(), Some("first"));
+        assert_eq!(v.get("a", "b/c").unwrap().as_deref(), Some("second"));
+        v.delete("a/b", "c").unwrap();
+        assert_eq!(v.get("a/b", "c").unwrap(), None);
+        assert_eq!(v.get("a", "b/c").unwrap().as_deref(), Some("second"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn file_vault_replaces_a_loose_file_and_never_overwrites_a_damaged_one() {
+        use std::os::unix::fs::PermissionsExt;
+        let (dir, v) = file_vault("modes");
+        std::fs::write(&v.path, "{}").unwrap();
+        std::fs::set_permissions(&v.path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        store_in(&v, "s", "tok", "secret").unwrap();
+        let mode = std::fs::metadata(&v.path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600, "a write leaves an owner-only file");
+
+        std::fs::write(&v.path, "not json").unwrap();
+        assert!(read_from(&v, "s", "tok").is_err());
+        assert!(store_in(&v, "s", "tok", "new").is_err());
+        assert_eq!(std::fs::read_to_string(&v.path).unwrap(), "not json");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The real Windows store, under its own service name so it cannot touch a signed-in

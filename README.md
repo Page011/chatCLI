@@ -59,7 +59,7 @@ The exe is not code-signed, so Windows SmartScreen may warn ("Windows protected 
 
 ## Build
 
-You need Rust (stable), installed with [rustup](https://rustup.rs), and the Visual Studio C++ Build Tools that rustup asks for.
+You need Rust (stable), installed with [rustup](https://rustup.rs), and a C compiler: on Windows the Visual Studio C++ Build Tools that rustup asks for, on macOS the Xcode command line tools (`xcode-select --install`), on Linux `gcc` or `clang` (Debian/Ubuntu: `sudo apt install build-essential`).
 
 ```
 git clone https://github.com/Page011/chatCLI.git
@@ -67,7 +67,7 @@ cd chatCLI
 cargo build --release
 ```
 
-The program is `target\release\chatcli.exe`. Copy it anywhere on your `PATH`, or run it from there. The examples below assume `chatcli` is on your `PATH`.
+The program is `target\release\chatcli.exe` on Windows, `target/release/chatcli` on Linux and macOS. With Nix, `nix build` puts it in `result/bin/chatcli` instead. Copy it anywhere on your `PATH`, or run it from there. The examples below assume `chatcli` is on your `PATH`.
 
 Try it with no accounts:
 
@@ -182,7 +182,7 @@ You need a free [Cloudflare account](https://dash.cloudflare.com/sign-up), [Bun]
 
    wrangler prints your Worker URL: `https://chatcli-relay.<your-subdomain>.workers.dev`. Copy it.
 
-3. Tell chatcli the URL. This makes two random secrets, keeps them in Credential Manager, and prints them once. Run it in a terminal you trust. Do not paste the values anywhere except the next step.
+3. Tell chatcli the URL. This makes two random secrets, keeps them in Credential Manager (or the OS credential store on Linux and macOS), and prints them once. Run it in a terminal you trust. Do not paste the values anywhere except the next step.
 
    ```
    chatcli relay setup https://chatcli-relay.<your-subdomain>.workers.dev
@@ -508,7 +508,9 @@ A Windows toast appears for a new incoming message when chatcli's window is not 
 
 ## Linux and macOS (experimental)
 
-Only the Windows build is tested by hand. CI also builds and tests on Linux and macOS, but those jobs are best effort and may fail. Secrets use the macOS Keychain or the Linux Secret Service (GNOME Keyring or KWallet); a Linux session with no Secret Service cannot store the Teams sign-in. Desktop notifications are Windows only. The data folder is `~/Library/Application Support/chatcli` on macOS and `$XDG_DATA_HOME/chatcli` (or `~/.local/share/chatcli`) on Linux.
+Only the Windows build is tested by hand. CI also builds and tests on Linux and macOS. Secrets use the macOS Keychain or the Linux Secret Service (GNOME Keyring or KWallet); on Linux with no Secret Service (a headless box, a minimal window manager), set `CHATCLI_SECRET_STORE=file` to keep them in `secrets.json` in the data folder instead. That file is readable by you only (mode 0600) but is not encrypted, so anyone who can read your files can read your sign-in. Desktop notifications are Windows only. The data folder is `~/Library/Application Support/chatcli` on macOS and `$XDG_DATA_HOME/chatcli` (or `~/.local/share/chatcli`) on Linux.
+
+There is no Linux or macOS release yet: build from source (see [Build](#build)). On Linux with Nix, the repository is a flake: `nix build` builds chatcli, `nix shell github:Page011/chatCLI` puts it on your `PATH`, and `nix develop` opens a shell with the Rust toolchain and Bun.
 
 ## Your data
 
@@ -524,7 +526,8 @@ Everything stays on your machine, under `%LOCALAPPDATA%\chatcli` (on Windows; se
 | `whatsapp.db` (and `whatsapp.db-wal`, `whatsapp.db-shm`) | WhatsApp linked-device keys | Anyone with this file can act as your linked device. Never copy, share or commit it. |
 | `chatcli.log` | Connection, sign-in, relay and send events (older entries in `chatcli.log.1`) | Rolls to `chatcli.log.1` at 5 MB. Never holds tokens, secrets or message text. |
 | `chatcli.lock` | Single-instance lock | Empty. |
-| `secrets.lock` | Stops two chatcli processes writing Credential Manager at once | Empty. |
+| `secrets.lock` | Stops two chatcli processes writing the credential store at once | Empty. |
+| `secrets.json` | Linux only, with `CHATCLI_SECRET_STORE=file`: your secrets | Readable by you only, not encrypted. Absent otherwise. |
 
 `store.db` holds your message text unencrypted, and `whatsapp.db` holds the keys of your linked device. Use full-disk encryption (BitLocker on Windows) so a lost laptop does not expose them. Do not keep the chatcli data folder, or a copy of it, in a cloud-synced folder (OneDrive, Dropbox, Google Drive): the files would be uploaded and copied to every device that syncs.
 
@@ -536,22 +539,24 @@ Secrets are in Windows Credential Manager (Control Panel > Credential Manager > 
 - `relay-token`
 - `relay-client-state`
 
+On macOS they are in the Keychain (Keychain Access, search for `chatcli`). On Linux they are in the Secret Service under the service `chatcli` (Seahorse, KWalletManager, or `secret-tool search service chatcli`), or in `secrets.json` in the data folder with `CHATCLI_SECRET_STORE=file`. Secrets already in the keyring are not moved when you switch: sign in and run `chatcli relay setup` again afterwards.
+
 ### Remove everything
 
 1. Quit chatcli with `q` or `Ctrl+C`. chatcli deletes its Teams subscription as it quits. Closing the window, killing the process or switching the machine off skips that, and the subscription stays alive until it expires (within 24 hours). Nothing breaks while it waits, but the next start may find an orphan; chatcli removes it then.
 2. Sign out of Teams: `chatcli teams logout`
-3. Delete the folder `%LOCALAPPDATA%\chatcli`.
-4. In Credential Manager, delete every Generic Credential whose name ends in `.chatcli`.
+3. Delete the data folder: `%LOCALAPPDATA%\chatcli` on Windows (see [Linux and macOS](#linux-and-macos-experimental) for the other folders).
+4. In Credential Manager, delete every Generic Credential whose name ends in `.chatcli`. On macOS, delete the `chatcli` items in Keychain Access. On Linux, run `secret-tool clear service chatcli` (with `CHATCLI_SECRET_STORE=file` the secrets went with the data folder).
 5. On your phone, open **Linked devices** (as in WhatsApp setup, step 3) and log out chatcli.
 6. Delete the Worker: Cloudflare dashboard > Workers & Pages > `chatcli-relay` > Settings > Delete. Or from the `relay` folder: `bunx wrangler delete`.
 7. Delete the app registration: Entra admin center > App registrations > your app > Delete.
-8. Delete `target\release\chatcli.exe`, or the whole `chatCLI` folder.
+8. Delete `target\release\chatcli.exe` (`target/release/chatcli` on Linux and macOS), or the whole `chatCLI` folder.
 
 ## Troubleshooting
 
 **Something is not working.** Run `chatcli doctor` and follow the fix lines.
 
-**`chatcli is already running`.** Only one chatcli can run at a time, because two would fight over the Teams subscription and the relay connection. Close the other window. If you have none open, check Task Manager for `chatcli.exe`.
+**`chatcli is already running`.** Only one chatcli can run at a time, because two would fight over the Teams subscription and the relay connection. Close the other window. If you have none open, check Task Manager for `chatcli.exe` (on Linux or macOS: `pgrep -a chatcli`).
 
 **`chatcli is running: quit it ...`.** `teams login`, `teams logout`, `relay setup`, `relay url` and `media clear` change what the running client uses, so they refuse to run beside it. Quit chatcli (`q` or `Ctrl+C`), run the command, start chatcli again.
 
@@ -559,16 +564,16 @@ Secrets are in Windows Credential Manager (Control Panel > Credential Manager > 
 
 **Replies say `REPLY NEEDS ChatMessage.Send, sign in again`.** Add `ChatMessage.Send` under API permissions (Teams setup, step 8), log out of Teams in chatcli and sign in again. chatcli never sends a reply as a plain message.
 
-**`chatcli needs an interactive terminal`.** Run it from Windows Terminal or a console window, not from a pipe or a scheduled task.
+**`chatcli needs an interactive terminal`.** Run it from a terminal window (Windows Terminal, a console window, or any Linux or macOS terminal), not from a pipe or a scheduled task.
 
-**TLS or certificate errors on a work network.** chatcli trusts the public root certificates built into it plus the roots in the Windows certificate store, so a network that re-signs HTTPS with a company root installed in Windows normally works. One exception: when the `SSL_CERT_FILE` environment variable is set, chatcli reads extra roots from that file instead of the Windows store. If the file does not hold your company's root, connections fail with `UnknownIssuer` (chatcli adds a hint saying so). Unset it for chatcli:
+**TLS or certificate errors on a work network.** chatcli trusts the public root certificates built into it plus the roots in the system certificate store, so a network that re-signs HTTPS with a company root installed on your system normally works. One exception: when the `SSL_CERT_FILE` environment variable is set, chatcli reads extra roots from that file instead of the system store. If the file does not hold your company's root, connections fail with `UnknownIssuer` (chatcli adds a hint saying so). Unset it for chatcli:
 
 ```
 set SSL_CERT_FILE=
 chatcli
 ```
 
-In PowerShell: `Remove-Item Env:SSL_CERT_FILE; chatcli`. If `bunx wrangler` fails with a certificate error on the same network, set `NODE_EXTRA_CA_CERTS` to a PEM file of your company root before running it.
+In PowerShell: `Remove-Item Env:SSL_CERT_FILE; chatcli`. On Linux or macOS: `env -u SSL_CERT_FILE chatcli`. If `bunx wrangler` fails with a certificate error on the same network, set `NODE_EXTRA_CA_CERTS` to a PEM file of your company root before running it.
 
 **The sign-in page loads but chatcli never finishes signing in.** The browser must run on the same computer as chatcli, because the redirect goes to `http://localhost:<port>` (Teams setup, after the first sign-in). Over SSH or with the browser on another machine it fails.
 
@@ -581,7 +586,7 @@ In PowerShell: `Remove-Item Env:SSL_CERT_FILE; chatcli`. If `bunx wrangler` fail
 - `AADSTS50020` ("user account ... does not exist in tenant"): you signed in with a personal Microsoft account or an account from another tenant. Pick your work or school account in the browser.
 - `AADSTS90002` ("Tenant ... not found"): the tenant id is wrong. Copy **Directory (tenant) ID** again and run `chatcli teams setup` again.
 
-The log is `%LOCALAPPDATA%\chatcli\chatcli.log`.
+The log is `chatcli.log` in the data folder (`%LOCALAPPDATA%\chatcli\chatcli.log` on Windows); `chatcli --help` prints its path.
 
 **Teams shows NOT LIVE.** The reason is on the bottom line:
 
@@ -589,7 +594,7 @@ The log is `%LOCALAPPDATA%\chatcli\chatcli.log`.
 |---|---|
 | `relay not set up` | Run `chatcli relay setup <url>`, or ignore it: Teams works, press `r` to refresh. |
 | `RELAY SECRETS MISSING: quit chatcli, then run chatcli relay setup` | Quit chatcli, run `chatcli relay setup <url>` again, then redo both `wrangler secret put` steps. |
-| `relay settings unreadable` | `config.json` or Credential Manager could not be read. The notice line says which. |
+| `relay settings unreadable` | `config.json` or the credential store could not be read. The notice line says which. |
 | `relay offline: relay answered HTTP 503` | The Worker does not have its secrets yet. Run both `wrangler secret put` steps, then restart chatcli. |
 | `relay offline: relay answered HTTP 404` | The relay URL is wrong or the Worker was deleted. Check `chatcli relay status` and `/health`. |
 | `relay offline: relay rejected the token (HTTP 401) ...` | The Worker's secrets do not match chatcli's. Run `chatcli relay setup <url>` again and put both new values on the Worker. |

@@ -14,16 +14,16 @@ Report privately. Do not open a public issue, discussion or PR.
 
 ## In scope
 
-- Handling of tokens and secrets: the Teams refresh token, the relay token and the relay client state (Windows Credential Manager storage, logging, memory).
+- Handling of tokens and secrets: the Teams refresh token, the relay token and the relay client state (Windows Credential Manager, the macOS Keychain, the Linux Secret Service, and the Linux `CHATCLI_SECRET_STORE=file` fallback; logging, memory).
 - Relay Worker authentication: the `RELAY_TOKEN` check on `/ws`, the `clientState` check on Graph notifications, and anything that makes the relay forward data it should drop.
-- Local data files under `%LOCALAPPDATA%\chatcli`: `store.db`, `whatsapp.db`, `config.json`, logs, and their permissions.
+- Local data files in the data folder (`%LOCALAPPDATA%\chatcli`, `~/.local/share/chatcli`, `~/Library/Application Support/chatcli`): `store.db`, `whatsapp.db`, `config.json`, `secrets.json`, logs, and their permissions.
 - Anything that causes message text or secrets to reach a log, the relay or a third party.
 
 ## Out of scope
 
 - WhatsApp account suspension. The WhatsApp link is unofficial and its terms forbid unofficial clients. That risk is documented in the README.
 - Problems in Microsoft Graph, Cloudflare, WhatsApp or other upstream services, or in a dependency with no impact on chatcli. Report those upstream.
-- Attacks that need local administrator access or an already compromised Windows account.
+- Attacks that need local administrator access or an already compromised user account.
 - Data stored unencrypted by design and documented: `store.db` is plain SQLite.
 
 ## What to expect
