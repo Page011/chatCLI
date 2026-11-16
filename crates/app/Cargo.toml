@@ -1,0 +1,19 @@
+[package]
+name = "chatcli"
+description = "Terminal chat client for WhatsApp and Microsoft Teams"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "chatcli"
+path = "src/main.rs"
+
+[dependencies]
+chatcli-core.workspace = true
+chatcli-teams.workspace = true
+chatcli-tui.workspace = true
+chatcli-whatsapp.workspace = true
+tokio.workspace = true

@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Build and publish (Windows x86_64)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Tag must match the workspace version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(sed -n '/^\[workspace\.package\]/,/^\[/{s/^version *= *"\(.*\)"/\1/p;}' Cargo.toml | head -n 1)
+          if [ -z "$version" ]; then
+            echo "Could not read the workspace version from Cargo.toml" >&2
+            exit 1
+          fi
+          if [ "$TAG" != "v$version" ]; then
+            echo "Tag $TAG does not match workspace version v$version" >&2
+            exit 1
+          fi
+      # dtolnay/rust-toolchain has no version tags: pinned to a master commit (2026-11-15).
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: stable
+      - name: Test
+        run: cargo test --workspace --locked
+      - name: Build
+        run: cargo build --release --locked -p chatcli
+      - name: Package
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          name="chatcli-${TAG}-x86_64-pc-windows-msvc"
+          mkdir "$name"
+          cp target/release/chatcli.exe README.md LICENSE "$name/"
+          7z a -tzip "$name.zip" "$name"
+          sha256sum "$name.zip" > "$name.zip.sha256"
+          cat "$name.zip.sha256"
+          echo "ASSET=$name.zip" >> "$GITHUB_ENV"
+      - name: Publish release
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          files: |
+            ${{ env.ASSET }}
+            ${{ env.ASSET }}.sha256
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          # A tag is not gated on CI, so the release lands as a draft: the owner checks CI is
+          # green on the tagged commit, then publishes it by hand.
+          draft: true

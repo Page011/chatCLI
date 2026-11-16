@@ -1,0 +1,21 @@
+[package]
+name = "chatcli-whatsapp"
+description = "WhatsApp (linked device) backend for chatcli, on whatsapp-rust"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+chatcli-core.workspace = true
+tokio.workspace = true
+whatsapp-rust.workspace = true
+# TLS: the library's transport trusts webpki roots only, so chatcli builds its own connector
+# (webpki + OS roots). Versions match what whatsapp-rust-tokio-transport already links.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
+rustls-native-certs = "0.8"
+webpki-roots = "1"
+# Same ureq major as whatsapp-rust-ureq-http-client, so the Agent type unifies. platform-verifier
+# makes the media/version HTTP client trust the OS store (networks that re-sign HTTPS).
+ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier"] }

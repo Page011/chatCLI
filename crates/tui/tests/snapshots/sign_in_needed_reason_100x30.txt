@@ -1,0 +1,41 @@
+ chatcli  Teams SIGN-IN NEEDED   WhatsApp SIGN-IN NEEDED                                 Ctrl+C quit
+
+
+
+
+
+
+
+
+
+
+                  ╔ WhatsApp ════════════════════════════════════════════════════╗
+                  ║                    WHATSAPP SIGN-IN NEEDED                   ║
+                  ║   WhatsApp unlinked this device. Press Enter to link again.  ║
+                  ║                                                              ║
+                  ║                         Enter to link                        ║
+                  ║                     Tab switches network                     ║
+                  ╚══════════════════════════════════════════════════════════════╝
+
+
+
+
+
+
+
+
+
+
+
+Enter sign in  Tab network  q quit
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 10-14: fg=Reset bg=Reset BOLD
+row 0 cols 16-29: fg=Yellow bg=Reset BOLD
+row 0 cols 32-56: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 89-99: fg=Reset bg=Reset DIM
+row 11 cols 19-28: fg=Reset bg=Reset BOLD
+row 12 cols 39-61: fg=Reset bg=Reset BOLD
+row 13 cols 22-78: fg=Red bg=Reset NONE
+row 16 cols 40-59: fg=Reset bg=Reset DIM
+row 29 cols 0-33: fg=Reset bg=Reset DIM

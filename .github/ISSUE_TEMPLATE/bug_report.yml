@@ -1,0 +1,65 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This repository is public. Do not post tokens, secrets, real names, chat ids, message text or screenshots of your chats.
+        Security problems: do not open an issue. Use the private report link in the issue chooser.
+  - type: input
+    id: version
+    attributes:
+      label: chatcli version
+      description: Output of `chatcli --version`.
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: For example Windows 11 23H2. Say which terminal you use (Windows Terminal, conhost).
+    validations:
+      required: true
+  - type: dropdown
+    id: network
+    attributes:
+      label: Which network
+      options:
+        - Teams
+        - WhatsApp
+        - Both
+        - Neither (start-up, TUI or relay)
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log excerpt
+      description: |
+        WARNING: read every line before pasting. Remove names, ids, URLs of your own Worker and anything else that identifies you or other people.
+        The log is `%LOCALAPPDATA%\chatcli\chatcli.log`. Paste only the few lines around the problem. Never paste message text.
+      render: text
+    validations:
+      required: false
