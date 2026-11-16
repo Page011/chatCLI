@@ -24,6 +24,7 @@ mod composer;
 pub mod demo;
 mod emoji;
 mod gfx;
+mod input;
 mod keymap;
 mod keys_edit;
 mod links;

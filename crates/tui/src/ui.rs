@@ -1130,16 +1130,16 @@ fn draw_sidebar(f: &mut Frame, app: &App, lay: &Layout) {
     };
     f.render_widget(pane(title, focused), lay.sidebar);
     if let Some(r) = lay.filter_row {
+        let (shown, col) = ns.filter.view(r.width.saturating_sub(1) as usize);
         f.render_widget(
             Paragraph::new(Line::from(vec![
                 Span::styled("/", bold()),
-                Span::raw(ns.filter.clone()),
+                Span::raw(shown),
             ])),
             r,
         );
         if ns.focus == Focus::Filter && app.help_open().is_none() && app.command_text().is_none() {
-            let x = r.x + (1 + sw(&ns.filter)).min(r.width.saturating_sub(1) as usize) as u16;
-            f.set_cursor_position((x, r.y));
+            f.set_cursor_position((r.x + 1 + col as u16, r.y));
         }
     }
     let list = lay.list;
@@ -1801,16 +1801,15 @@ fn draw_attach(f: &mut Frame, app: &App, lay: &Layout) {
         return;
     }
     let w = inner.width as usize;
-    let shown = tail(&clean_line(&a.input), w.saturating_sub(2));
+    let (shown, col) = a.input.view(w.saturating_sub(2));
     f.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled("> ", bold()),
-            Span::raw(shown.clone()),
+            Span::raw(shown),
         ])),
         Rect::new(inner.x, inner.y, inner.width, 1),
     );
-    let x = (2 + sw(&shown)).min(w.saturating_sub(1)) as u16;
-    f.set_cursor_position((inner.x + x, inner.y));
+    f.set_cursor_position((inner.x + 2 + col as u16, inner.y));
     if lay.composer.width < 12 {
         return;
     }
@@ -2115,23 +2114,24 @@ fn draw_picker(f: &mut Frame, app: &App, body: Rect) {
     f.render_widget(
         Paragraph::new(Line::from(category_spans(
             p.cat,
-            !p.query.trim().is_empty(),
+            !p.query.text().trim().is_empty(),
             g.cats.width as usize,
             t,
         ))),
         g.cats,
     );
+    let (shown, col) = p.query.view(g.search.width.saturating_sub(1) as usize);
     let query_line = if p.query.is_empty() {
         Line::from(vec![
             Span::styled("/", bold()),
             Span::styled("type to search", t.hint),
         ])
     } else {
-        Line::from(vec![Span::styled("/", bold()), Span::raw(p.query.clone())])
+        Line::from(vec![Span::styled("/", bold()), Span::raw(shown)])
     };
     f.render_widget(Paragraph::new(query_line), g.search);
     if items.is_empty() {
-        let note = if p.query.trim().is_empty() {
+        let note = if p.query.text().trim().is_empty() {
             "No recent emoji yet"
         } else {
             "No emoji match"
@@ -2172,8 +2172,7 @@ fn draw_picker(f: &mut Frame, app: &App, body: Rect) {
         )),
         g.status,
     );
-    let x = g.search.x + (1 + sw(&p.query)).min(g.search.width.saturating_sub(1) as usize) as u16;
-    f.set_cursor_position((x, g.search.y));
+    f.set_cursor_position((g.search.x + 1 + col as u16, g.search.y));
 }
 
 // ---- sign-in panel and QR ----
@@ -2430,21 +2429,17 @@ fn draw_palette(f: &mut Frame, app: &App, body: Rect) {
         return;
     };
     f.render_widget(pane("Commands", true), g.outer);
-    let shown = tail(
-        &clean_line(&p.query),
-        (g.query.width as usize).saturating_sub(2),
-    );
+    let (shown, col) = p.query.view(g.query.width.saturating_sub(1) as usize);
     let query_line = if p.query.is_empty() {
         Line::from(vec![
             Span::styled("/", bold()),
             Span::styled("type a command or chat name", t.dim),
         ])
     } else {
-        Line::from(vec![Span::styled("/", bold()), Span::raw(shown.clone())])
+        Line::from(vec![Span::styled("/", bold()), Span::raw(shown)])
     };
     f.render_widget(Paragraph::new(query_line), g.query);
-    let x = g.query.x + (1 + sw(&shown)).min(g.query.width.saturating_sub(1) as usize) as u16;
-    f.set_cursor_position((x, g.query.y));
+    f.set_cursor_position((g.query.x + 1 + col as u16, g.query.y));
     let items = app.palette_items();
     if items.is_empty() {
         f.render_widget(
@@ -2558,27 +2553,17 @@ fn draw_search(f: &mut Frame, app: &App, body: Rect) {
         return;
     };
     f.render_widget(pane("Search", true), g.outer);
+    let (shown, col) = s.query.view(g.query.width.saturating_sub(1) as usize);
     let query_line = if s.query.is_empty() {
         Line::from(vec![
             Span::styled("/", bold()),
             Span::styled("type to search every chat", t.hint),
         ])
     } else {
-        Line::from(vec![
-            Span::styled("/", bold()),
-            Span::raw(tail(
-                &clean_line(&s.query),
-                (g.query.width as usize).saturating_sub(2),
-            )),
-        ])
+        Line::from(vec![Span::styled("/", bold()), Span::raw(shown)])
     };
     f.render_widget(Paragraph::new(query_line), g.query);
-    let shown = tail(
-        &clean_line(&s.query),
-        (g.query.width as usize).saturating_sub(2),
-    );
-    let x = g.query.x + (1 + sw(&shown)).min(g.query.width.saturating_sub(1) as usize) as u16;
-    f.set_cursor_position((x, g.query.y));
+    f.set_cursor_position((g.query.x + 1 + col as u16, g.query.y));
     let look = app.look();
     let w = g.list.width as usize;
     // Narrow: the network is one letter and the time goes, so the matched text keeps the room.
@@ -2634,7 +2619,7 @@ fn draw_search(f: &mut Frame, app: &App, body: Rect) {
             row,
         );
     }
-    let (status, style) = match (&s.error, s.query.trim().is_empty(), s.hits.len()) {
+    let (status, style) = match (&s.error, s.query.text().trim().is_empty(), s.hits.len()) {
         (Some(e), _, _) => (e.clone(), t.error),
         (None, true, _) => ("Type to search".to_string(), t.hint),
         (None, false, 0) => ("No messages match".to_string(), t.hint),

@@ -9,7 +9,7 @@ use ratatui::Frame;
 use crate::app::{App, NARROW};
 use crate::keymap::{Action, Context};
 use crate::settings_view::{fit_top, Kind, PageEdit, Row, RowId, Section, SettingsPage};
-use crate::text::{fit, sw, tail, truncate, wrap};
+use crate::text::{fit, sw, truncate, wrap};
 use crate::theme::Theme;
 use crate::ui::{bold, centered_note, pane};
 
@@ -214,7 +214,7 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
             continue;
         }
         let editing = match (&page.edit, selected) {
-            (Some(PageEdit::Text(buf)), true) => Some(buf.as_str()),
+            (Some(PageEdit::Text(buf)), true) => Some(buf.view(value_w)),
             _ => None,
         };
         // A key being captured: the row itself says it is listening.
@@ -229,8 +229,8 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
             }
             _ => None,
         };
-        let value = match (editing, &listening) {
-            (Some(buf), _) => fit(&tail(buf, value_w.saturating_sub(1)), value_w),
+        let value = match (&editing, &listening) {
+            (Some((shown, _)), _) => fit(shown, value_w),
             (None, Some(text)) => fit(text, value_w),
             _ => fit(&row.value, value_w),
         };
@@ -257,9 +257,8 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
             spans.push(Span::styled(fit(row.hint, hint_w), t.hint));
         }
         f.render_widget(Paragraph::new(Line::from(spans)).style(base), line_area);
-        if let Some(buf) = editing {
-            let shown = tail(buf, value_w.saturating_sub(1));
-            let x = area.x + (label_w + 1 + sw(&shown)) as u16;
+        if let Some((_, col)) = &editing {
+            let x = area.x + (label_w + 1 + col) as u16;
             f.set_cursor_position((x.min(area.x + area.width - 1), y));
         }
     }

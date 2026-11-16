@@ -411,14 +411,14 @@ impl App {
 
     pub(super) fn search_type(&mut self, text: &str) {
         if let Some(s) = self.search.as_mut() {
-            s.query.push_str(text);
+            s.query.insert_str(text);
             self.search_rerun();
         }
     }
 
     pub(super) fn search_backspace(&mut self) {
         if let Some(s) = self.search.as_mut() {
-            s.query.pop();
+            s.query.delete_back();
             self.search_rerun();
         }
     }

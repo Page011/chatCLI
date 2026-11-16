@@ -4,6 +4,7 @@
 //! only keeps what the overlay shows. A query runs when its text changes, on the UI thread: it
 //! is one indexed read of at most `LIMIT` rows.
 
+use crate::input::TextInput;
 use chatcli_core::store::{SearchHit, Store};
 
 /// Hits shown at most. The store clamps to 200; a screen shows far fewer.
@@ -11,7 +12,7 @@ pub const LIMIT: u32 = 50;
 
 #[derive(Debug, Clone, Default)]
 pub struct Search {
-    pub query: String,
+    pub query: TextInput,
     pub hits: Vec<SearchHit>,
     pub sel: usize,
     /// First hit shown.
@@ -25,7 +26,7 @@ impl Search {
     pub fn run(&mut self, store: &Store) {
         self.sel = 0;
         self.top = 0;
-        match store.search(&self.query, None, LIMIT) {
+        match store.search(self.query.text(), None, LIMIT) {
             Ok(hits) => {
                 self.hits = hits;
                 self.error = None;
@@ -112,7 +113,7 @@ mod tests {
         let store = store_with(&["plain words"]);
         let mut s = Search::default();
         for q in ["", "   ", "\"", "*", "NEAR(", "a\"b", "-x", "()"] {
-            s.query = q.to_string();
+            s.query = q.into();
             s.run(&store);
             assert!(s.error.is_none(), "{q:?}: {:?}", s.error);
             assert!(s.hits.is_empty(), "{q:?}");

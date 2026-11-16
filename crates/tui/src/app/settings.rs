@@ -467,7 +467,7 @@ impl App {
         if row.kind == Kind::Edit {
             let start = settings_view::edit_start(&self.settings, row.id);
             if let Some(p) = self.settings_page.as_mut() {
-                p.edit = Some(PageEdit::Text(start));
+                p.edit = Some(PageEdit::Text(start.into()));
             }
             return Vec::new();
         }
@@ -489,7 +489,7 @@ impl App {
     pub(super) fn settings_type(&mut self, text: &str) -> bool {
         match self.settings_page.as_mut().and_then(|p| p.edit.as_mut()) {
             Some(PageEdit::Text(buf)) => {
-                buf.push_str(text);
+                buf.insert_str(text);
                 if let Some(p) = self.settings_page.as_mut() {
                     p.error = None;
                 }
@@ -526,15 +526,13 @@ impl App {
             .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
         if let Some(PageEdit::Text(buf)) = page.edit.as_mut() {
             if let Some(c) = crate::keymap::typed_char(key) {
-                buf.push(c);
+                buf.insert_char(c);
                 return Vec::new();
             }
             match key.code {
-                KeyCode::Backspace => {
-                    buf.pop();
-                }
+                KeyCode::Backspace => buf.delete_back(),
                 KeyCode::Enter => {
-                    let text = buf.clone();
+                    let text = buf.text().to_string();
                     return self.finish_text(text);
                 }
                 KeyCode::Esc => page.edit = None,
@@ -849,7 +847,7 @@ mod tests {
         a.handle_paste("#12ab3F\n");
         assert_eq!(
             a.settings_page().unwrap().edit,
-            Some(PageEdit::Text("#12ab3F".to_string()))
+            Some(PageEdit::Text("#12ab3F".into()))
         );
         press(&mut a, KeyCode::Enter);
         assert_eq!(a.settings.theme.overrides["dim"], "#12ab3F");

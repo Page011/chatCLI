@@ -2,10 +2,11 @@
 //! of the active network that match. Pure state; `App` fills the items, `ui` draws them.
 
 use crate::commands::CmdId;
+use crate::input::TextInput;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Palette {
-    pub query: String,
+    pub query: TextInput,
     /// Chosen item.
     pub sel: usize,
     /// First display row shown (headings count as rows).

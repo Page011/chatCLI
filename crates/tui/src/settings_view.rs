@@ -8,6 +8,7 @@ use chatcli_core::settings::{
     TIME_FORMATS,
 };
 
+use crate::input::TextInput;
 use crate::keymap::{
     actions_for, parse_key, preset_keys, Action, Context, KeyChord, Keymap, Preset,
 };
@@ -76,7 +77,7 @@ pub(crate) struct SettingsPage {
 /// A value being typed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PageEdit {
-    Text(String),
+    Text(TextInput),
     /// Waiting for the key that will run `action` in `ctx`. The key is read before the keymap.
     Capture {
         ctx: Context,
@@ -1374,7 +1375,10 @@ mod tests {
             capture_line(Some(&c)).as_deref(),
             Some("Ctrl+N is already Pin. Enter: Pin gets Refresh's old key (or none), Esc cancels")
         );
-        assert_eq!(capture_line(Some(&PageEdit::Text(String::new()))), None);
+        assert_eq!(
+            capture_line(Some(&PageEdit::Text(TextInput::default()))),
+            None
+        );
         assert_eq!(capture_line(None), None);
     }
 }

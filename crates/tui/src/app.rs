@@ -32,6 +32,7 @@ use crate::chats;
 use crate::commands::{self, slash_query, CmdId, Typed, COMMANDS_TITLE};
 use crate::composer::Composer;
 use crate::emoji::{self, Picker, PickerFor};
+use crate::input::TextInput;
 use crate::keymap::{typed_char, Action, Context, KeyChord, Keymap, Mode, Preset, Step};
 use crate::links;
 use crate::media_view::MediaState;
@@ -109,7 +110,7 @@ pub(crate) struct NetState {
     /// The chat the backend was last asked to open, so the same one is never asked twice in a row.
     pub requested: Option<String>,
     pub focus: Focus,
-    pub filter: String,
+    pub filter: TextInput,
     /// Unsent text and cursor per chat id, so switching chats never sends it to the wrong place.
     pub drafts: HashMap<String, Composer>,
     /// Message pane lines hidden below the view (0 = newest visible).
@@ -164,7 +165,7 @@ impl NetState {
             read_due: None,
             requested: None,
             focus: Focus::List,
-            filter: String::new(),
+            filter: TextInput::default(),
             drafts: HashMap::new(),
             scroll: 0,
             sel_msg: None,
@@ -229,7 +230,7 @@ impl NetState {
 
     /// Indexes into `chats` that pass the filter. Hidden chats only with `show_hidden`.
     pub fn visible(&self) -> Vec<usize> {
-        let needle = self.filter.to_lowercase();
+        let needle = self.filter.text().to_lowercase();
         (0..self.chats.len())
             .filter(|&i| self.show_hidden || !self.chats[i].flags.hidden)
             .filter(|&i| needle.is_empty() || self.chats[i].title.to_lowercase().contains(&needle))
@@ -1337,11 +1338,11 @@ impl App {
         let typed = typed_char(key);
         match (ctx, key.code, typed) {
             (Context::Filter, KeyCode::Backspace, _) => {
-                self.ns_mut(n).filter.pop();
+                self.ns_mut(n).filter.delete_back();
                 self.fix_selection(n, true);
             }
             (Context::Filter, _, Some(c)) => {
-                self.ns_mut(n).filter.push(c);
+                self.ns_mut(n).filter.insert_char(c);
                 self.fix_selection(n, true);
             }
             (Context::Composer | Context::Insert, _, Some(c)) => {
@@ -1361,7 +1362,7 @@ impl App {
                     let mut buf = [0u8; 4];
                     self.attach_type(c.encode_utf8(&mut buf));
                 } else if let Some(p) = self.picker.as_mut() {
-                    p.query.push(c);
+                    p.query.insert_char(c);
                     p.sel = 0;
                     p.top = 0;
                 }
@@ -1798,7 +1799,7 @@ impl App {
             Action::CursorRight => self.picker_step(1, 0),
             _ => {
                 if let Some(p) = self.picker.as_mut() {
-                    p.query.pop();
+                    p.query.delete_back();
                     p.sel = 0;
                     p.top = 0;
                 }
@@ -2021,7 +2022,7 @@ impl App {
             return;
         }
         if let Some(p) = self.picker.as_mut() {
-            p.query.push_str(flat.trim());
+            p.query.insert_str(flat.trim());
             p.sel = 0;
             p.top = 0;
             return;
@@ -2057,7 +2058,7 @@ impl App {
                 }
             }
             Focus::Filter => {
-                self.ns_mut(n).filter.push_str(&flat);
+                self.ns_mut(n).filter.insert_str(&flat);
                 self.fix_selection(n, true);
             }
             Focus::List | Focus::Select => {}

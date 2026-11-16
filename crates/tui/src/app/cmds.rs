@@ -109,7 +109,7 @@ impl App {
         let Some(p) = &self.palette else {
             return Vec::new();
         };
-        let query = p.query.trim_start_matches('/').trim();
+        let query = p.query.text().trim_start_matches('/').trim();
         let word = query.split_whitespace().next().unwrap_or("");
         let mut items: Vec<PalItem> = commands::matching(word)
             .into_iter()
@@ -146,7 +146,7 @@ impl App {
 
     pub(super) fn palette_type(&mut self, text: &str) {
         if let Some(p) = self.palette.as_mut() {
-            p.query.push_str(text);
+            p.query.insert_str(text);
             p.sel = 0;
             p.top = 0;
         }
@@ -154,7 +154,7 @@ impl App {
 
     pub(super) fn palette_backspace(&mut self) {
         if let Some(p) = self.palette.as_mut() {
-            p.query.pop();
+            p.query.delete_back();
             p.sel = 0;
             p.top = 0;
         }
@@ -188,7 +188,7 @@ impl App {
                     // Nothing matches: the bar stays open.
                     return Vec::new();
                 };
-                let rest = p.query.trim_start_matches('/').trim();
+                let rest = p.query.text().trim_start_matches('/').trim();
                 let arg = rest
                     .split_once(char::is_whitespace)
                     .map(|(_, a)| a.trim().to_string())
