@@ -433,10 +433,10 @@ impl App {
 
     pub(super) fn search_action(&mut self, action: Action) -> Out {
         match action {
-            Action::PopupUp => self.search_move(-1),
-            Action::PopupDown => self.search_move(1),
-            Action::PopupAccept => return self.search_open_hit(),
-            Action::PopupClose => self.search = None,
+            Action::Up => self.search_move(-1),
+            Action::Down => self.search_move(1),
+            Action::Accept => return self.search_open_hit(),
+            Action::Back => self.search = None,
             _ => {}
         }
         Vec::new()

@@ -1252,14 +1252,12 @@ impl App {
         }
         // The `:shortcode` list owns four keys; every other key goes on to the message box.
         if self.popup.is_some() && ctx == Context::Composer {
-            let own = self.keys.lookup_in(Context::Popup, chord).filter(|a| {
-                matches!(
-                    a,
-                    Action::PopupUp | Action::PopupDown | Action::PopupAccept | Action::PopupClose
-                )
-            });
+            let own = self
+                .keys
+                .lookup_in(Context::Popup, chord)
+                .filter(|a| matches!(a, Action::Up | Action::Down | Action::Accept | Action::Back));
             if let Some(a) = own {
-                return self.run_action(a, ctx);
+                return self.popup_action(a, ctx);
             }
         }
         // A held first key only counts in the context it was typed in.
@@ -1324,7 +1322,6 @@ impl App {
         let n = self.active;
         let panel = self.ns(n).panel();
         let focus = self.ns(n).focus;
-        let rows = self.list_rows(n) as isize;
         match action {
             Action::Quit => self.quit = true,
             Action::NextNetwork => return self.switch_by(1),
@@ -1338,38 +1335,14 @@ impl App {
             Action::CommandBar => self.open_palette(),
             Action::Settings => return self.run_cmd(CmdId::Settings, None),
             Action::Help => self.help = Some(0),
-            Action::CloseHelp => self.help = None,
-            Action::ListUp | Action::ListDown if ctx == Context::Help => {
-                self.scroll_help(if action == Action::ListUp { -1 } else { 1 });
-            }
-            Action::ListTop | Action::ListBottom if ctx == Context::Help => {
-                self.scroll_help(if action == Action::ListTop {
-                    isize::MIN
-                } else {
-                    isize::MAX
-                });
-            }
-            Action::ScrollUp | Action::ScrollDown if ctx == Context::Help => {
-                let page = (ui::help_view_rows(self, self.size) as isize - 1).max(1);
-                self.scroll_help(if action == Action::ScrollUp {
-                    -page
-                } else {
-                    page
-                });
-            }
-            Action::PopupUp | Action::PopupDown | Action::PopupAccept | Action::PopupClose => {
-                return self.popup_action(action, ctx);
-            }
-            Action::ScrollUp | Action::ScrollDown
-                if ctx == Context::Popup && self.palette.is_some() =>
-            {
-                self.palette_page(action == Action::ScrollUp);
-            }
-            Action::ScrollUp | Action::ScrollDown
-                if ctx == Context::Popup && self.search.is_some() =>
-            {
-                self.search_page(action == Action::ScrollUp);
-            }
+            Action::Up
+            | Action::Down
+            | Action::Top
+            | Action::Bottom
+            | Action::PageUp
+            | Action::PageDown
+            | Action::Accept
+            | Action::Back => return self.run_verb(action, ctx),
             // Left and Right move through the emoji grid; the other editing keys edit its search.
             Action::CursorLeft | Action::CursorRight
                 if ctx == Context::Popup && self.line_box_is_picker() =>
@@ -1389,12 +1362,6 @@ impl App {
                 if matches!(ctx, Context::Popup | Context::Filter) =>
             {
                 self.line_edit(action);
-            }
-            Action::ScrollUp | Action::ScrollDown if ctx == Context::Popup => {
-                if let Some(p) = self.picker.as_mut() {
-                    p.query.clear();
-                    p.go_category(if action == Action::ScrollUp { -1 } else { 1 });
-                }
             }
             Action::CursorLeft
             | Action::CursorRight
@@ -1423,17 +1390,6 @@ impl App {
             Action::OpenMedia if ctx == Context::Select => return self.open_media(n),
             Action::ViewImage if ctx == Context::Select => return self.view_image(n),
             Action::SelectMessages if !panel => return self.enter_select(n),
-            Action::SelectUp
-            | Action::SelectDown
-            | Action::SelectPageUp
-            | Action::SelectPageDown
-            | Action::SelectFirst
-            | Action::SelectLast
-                if ctx == Context::Select =>
-            {
-                return self.select_move(n, action);
-            }
-            Action::LeaveSelect if ctx == Context::Select => self.leave_select(n),
             Action::Search => self.open_search(),
             Action::NextUnread if !panel => self.jump_unread(n, 1),
             Action::PrevUnread if !panel => self.jump_unread(n, -1),
@@ -1489,69 +1445,112 @@ impl App {
                 return self.reset_all_keys();
             }
             Action::ConfirmNo => self.prompt = None,
-            Action::ListUp if !panel => self.move_sel(n, -1),
-            Action::ListDown if !panel => self.move_sel(n, 1),
-            Action::ListTop if !panel => self.move_sel(n, isize::MIN),
-            Action::ListBottom if !panel => self.move_sel(n, isize::MAX),
-            // In the message box a page key scrolls the messages; in the list it pages chats.
-            Action::ScrollUp | Action::ScrollDown if !panel => {
-                let dir = if action == Action::ScrollUp { 1 } else { -1 };
-                if focus == Focus::Composer {
-                    // A page up from the very top asks for older messages.
-                    let at_top = dir > 0 && self.at_top(n);
-                    self.page(n, dir);
-                    if at_top {
-                        return self.request_older(n);
-                    }
-                } else {
-                    self.move_sel(n, -dir * rows);
-                }
-            }
-            Action::OpenChat if !panel => return self.open_selected(n),
-            Action::SignIn if matches!(self.ns(n).status, Status::NeedsLogin { .. }) => {
-                return vec![(n, Command::Login)];
-            }
             Action::FilterStart if !panel => self.ns_mut(n).focus = Focus::Filter,
-            Action::FilterAccept => {
-                if focus == Focus::Filter {
-                    self.ns_mut(n).focus = Focus::List;
+            Action::Refresh if !panel => return self.refresh(n),
+            Action::Send if focus == Focus::Composer && !panel => return self.send_and_pause(n),
+            // Bound where it does not apply, or the `unbound` pseudo-action (never stored).
+            _ => {}
+        }
+        Vec::new()
+    }
+
+    /// Up, Down, Top, Bottom, the page keys, Accept and Back: one action each, doing what it
+    /// means where it is pressed. Bound where it means nothing, it does nothing.
+    fn run_verb(&mut self, action: Action, ctx: Context) -> Out {
+        use Action::{Accept, Back, Bottom, Down, PageDown, PageUp, Top, Up};
+        let n = self.active;
+        match ctx {
+            Context::Help => {
+                let page = (ui::help_view_rows(self, self.size) as isize - 1).max(1);
+                match action {
+                    Up => self.scroll_help(-1),
+                    Down => self.scroll_help(1),
+                    Top => self.scroll_help(isize::MIN),
+                    Bottom => self.scroll_help(isize::MAX),
+                    PageUp => self.scroll_help(-page),
+                    PageDown => self.scroll_help(page),
+                    Back => self.help = None,
+                    _ => {}
                 }
             }
-            Action::FilterCancel => {
-                if focus == Focus::Filter {
+            Context::Popup => match action {
+                Up | Down | Accept | Back => return self.popup_action(action, ctx),
+                PageUp | PageDown => {
+                    let up = action == PageUp;
+                    if self.palette.is_some() {
+                        self.palette_page(up);
+                    } else if self.search.is_some() {
+                        self.search_page(up);
+                    } else if let Some(p) = self.picker.as_mut() {
+                        p.query.clear();
+                        p.go_category(if up { -1 } else { 1 });
+                    }
+                }
+                _ => {}
+            },
+            Context::Confirm if action == Back => self.prompt = None,
+            Context::Panel if action == Accept => {
+                if matches!(self.ns(n).status, Status::NeedsLogin { .. }) {
+                    return vec![(n, Command::Login)];
+                }
+            }
+            Context::Select => match action {
+                Back => self.leave_select(n),
+                Accept => {}
+                _ => return self.select_move(n, action),
+            },
+            Context::Filter => match action {
+                Up => self.move_sel(n, -1),
+                Down => self.move_sel(n, 1),
+                Accept => self.ns_mut(n).focus = Focus::List,
+                Back => {
                     let ns = self.ns_mut(n);
                     ns.filter.clear();
                     ns.focus = Focus::List;
                     self.fix_selection(n, true);
                 }
-            }
-            Action::ClearFilter if !panel => {
-                if !self.ns(n).filter.is_empty() {
-                    self.ns_mut(n).filter.clear();
-                    self.fix_selection(n, true);
+                _ => {}
+            },
+            Context::List => {
+                let rows = self.list_rows(n) as isize;
+                match action {
+                    Up => self.move_sel(n, -1),
+                    Down => self.move_sel(n, 1),
+                    Top => self.move_sel(n, isize::MIN),
+                    Bottom => self.move_sel(n, isize::MAX),
+                    PageUp => self.move_sel(n, -rows),
+                    PageDown => self.move_sel(n, rows),
+                    Accept => return self.open_selected(n),
+                    Back if !self.ns(n).filter.is_empty() => {
+                        self.ns_mut(n).filter.clear();
+                        self.fix_selection(n, true);
+                    }
+                    _ => {}
                 }
             }
-            Action::Refresh if !panel => return self.refresh(n),
-            Action::Send if focus == Focus::Composer && !panel => return self.send_and_pause(n),
-            // A reply or edit in progress goes first; the next Esc leaves the box.
-            Action::LeaveComposer
-                if focus == Focus::Composer && !panel && self.ns(n).target().is_some() =>
-            {
-                self.cancel_target(n);
-            }
-            // Then a chosen file: Esc takes the chip off before it leaves the box.
-            Action::LeaveComposer
-                if focus == Focus::Composer && !panel && self.ns(n).attachment().is_some() =>
-            {
-                self.drop_attachment(n);
-            }
-            Action::LeaveComposer if focus == Focus::Composer && !panel => {
-                let ns = self.ns_mut(n);
-                ns.focus = Focus::List;
-                // Leaving the chat: the next Enter on it asks the backend again.
-                ns.requested = None;
-            }
-            // Bound where it does not apply, or the `unbound` pseudo-action (never stored).
+            Context::Composer => match action {
+                // The page keys scroll the messages; a page up from the very top asks for older
+                // ones.
+                PageUp | PageDown => {
+                    let dir = if action == PageUp { 1 } else { -1 };
+                    let at_top = dir > 0 && self.at_top(n);
+                    self.page(n, dir);
+                    if at_top {
+                        return self.request_older(n);
+                    }
+                }
+                // A reply or edit in progress goes first, then a chosen file; the next Back
+                // leaves the box.
+                Back if self.ns(n).target().is_some() => self.cancel_target(n),
+                Back if self.ns(n).attachment().is_some() => self.drop_attachment(n),
+                Back => {
+                    let ns = self.ns_mut(n);
+                    ns.focus = Focus::List;
+                    // Leaving the chat: the next Enter on it asks the backend again.
+                    ns.requested = None;
+                }
+                _ => {}
+            },
             _ => {}
         }
         Vec::new()
@@ -1648,9 +1647,9 @@ impl App {
         }
         if ctx == Context::Popup {
             match action {
-                Action::PopupUp => self.picker_step(0, -1),
-                Action::PopupDown => self.picker_step(0, 1),
-                Action::PopupAccept => return self.picker_accept(n),
+                Action::Up => self.picker_step(0, -1),
+                Action::Down => self.picker_step(0, 1),
+                Action::Accept => return self.picker_accept(n),
                 _ => self.picker = None,
             }
             return Vec::new();
@@ -1659,9 +1658,9 @@ impl App {
             return Vec::new();
         };
         match action {
-            Action::PopupUp => p.up(),
-            Action::PopupDown => p.down(),
-            Action::PopupAccept => {
+            Action::Up => p.up(),
+            Action::Down => p.down(),
+            Action::Accept => {
                 let chosen = p.chosen().map(|i| (i.insert.clone(), i.person.clone()));
                 let replace = p.replace;
                 let is_command = p.title == COMMANDS_TITLE;
@@ -3151,8 +3150,8 @@ mod tests {
     #[test]
     fn user_bindings_override_add_and_unbind() {
         let s = settings_with(&[
-            ("list", "ctrl+n", "list_down"),
-            ("list", "ctrl+p", "list_up"),
+            ("list", "ctrl+n", "down"),
+            ("list", "ctrl+p", "up"),
             ("list", "r", "unbound"),
             ("list", "x", "refresh"),
             ("composer", "ctrl+s", "send"),
@@ -3353,22 +3352,23 @@ mod tests {
         for name in [
             "Quit",
             "Next network",
-            "List down",
-            "Open chat",
+            "Down",
+            "Accept",
             "Send",
             "Settings",
             "Help",
-            "Close help",
+            "Back",
             "Command bar",
         ] {
             assert!(t.contains(name), "{name} missing:\n{t}");
         }
-        let s = settings_with(&[("list", "ctrl+n", "list_down"), ("list", "j", "unbound")]);
+        let s = settings_with(&[("list", "ctrl+n", "down"), ("list", "j", "unbound")]);
         let t = text(&online(App::with_settings(clock(), &s)));
-        assert!(t.contains("Ctrl+N, Down List down"), "{t}");
+        let list = &t[t.find("Chat list").unwrap()..t.find("Filter box").unwrap()];
+        assert!(list.contains("Ctrl+N, Down Down"), "{list}");
         assert!(
-            !t.contains("Down, j List down") && !t.contains("j List up"),
-            "{t}"
+            !list.contains("Down, j Down") && !list.contains("j Up"),
+            "{list}"
         );
     }
 

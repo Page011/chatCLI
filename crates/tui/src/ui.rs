@@ -362,9 +362,9 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             keys,
             ctx,
             &[
-                (&[CloseHelp], "close"),
-                (&[ListUp, ListDown], "scroll"),
-                (&[ScrollUp, ScrollDown], "page"),
+                (&[Back], "close"),
+                (&[Up, Down], "scroll"),
+                (&[PageUp, PageDown], "page"),
             ],
         );
     }
@@ -376,9 +376,9 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             keys,
             ctx,
             &[
-                (&[PopupUp, PopupDown], "choose"),
-                (&[PopupClose], "close"),
-                (&[PopupAccept], "run"),
+                (&[Up, Down], "choose"),
+                (&[Back], "close"),
+                (&[Accept], "run"),
                 (&[], "Type to filter"),
             ],
         );
@@ -427,9 +427,9 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             ctx,
             &[
                 (&[], "Type to search"),
-                (&[PopupUp, PopupDown], "choose"),
-                (&[PopupAccept], "open chat"),
-                (&[PopupClose], "close"),
+                (&[Up, Down], "choose"),
+                (&[Accept], "open chat"),
+                (&[Back], "close"),
             ],
         );
     }
@@ -440,9 +440,9 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             &[
                 (&[], "Type a path"),
                 (&[], "Tab complete"),
-                (&[PopupUp, PopupDown], "choose"),
-                (&[PopupAccept], "attach"),
-                (&[PopupClose], "cancel"),
+                (&[Up, Down], "choose"),
+                (&[Accept], "attach"),
+                (&[Back], "cancel"),
             ],
         );
     }
@@ -452,9 +452,9 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             ctx,
             &[
                 (&[], "Type to search"),
-                (&[PopupAccept], "choose"),
-                (&[ScrollUp, ScrollDown], "category"),
-                (&[PopupClose], "close"),
+                (&[Accept], "choose"),
+                (&[PageUp, PageDown], "category"),
+                (&[Back], "close"),
             ],
         );
     }
@@ -469,9 +469,9 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             keys,
             Context::Popup,
             &[
-                (&[PopupAccept], accept),
-                (&[PopupUp, PopupDown], "choose"),
-                (&[PopupClose], "close"),
+                (&[Accept], accept),
+                (&[Up, Down], "choose"),
+                (&[Back], "close"),
             ],
         );
     }
@@ -483,16 +483,16 @@ fn hints(app: &App) -> Vec<(String, bool)> {
     } else {
         "open"
     };
-    let chat: &[Action] = &[ListUp, ListDown];
+    let chat: &[Action] = &[Up, Down];
     if !ns.panel() && ns.focus == Focus::List && !ns.filter.is_empty() {
         return join_hints(
             keys,
             ctx,
             &[
-                (&[ClearFilter], "clear filter"),
+                (&[Back], "clear filter"),
                 (&[NextNetwork], "network"),
                 (chat, "chat"),
-                (&[OpenChat], verb),
+                (&[Accept], verb),
                 (&[FilterStart], "filter"),
                 (&[Quit], "quit"),
             ],
@@ -504,7 +504,7 @@ fn hints(app: &App) -> Vec<(String, bool)> {
                 keys,
                 ctx,
                 &[
-                    (&[SignIn], "sign in"),
+                    (&[Accept], "sign in"),
                     (&[CommandBar], "commands"),
                     (&[Help], "help"),
                     (&[NextNetwork], "network"),
@@ -530,7 +530,7 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             ctx,
             &[
                 (chat, "chat"),
-                (&[OpenChat], verb),
+                (&[Accept], verb),
                 (&[CommandBar], "commands"),
                 (&[Help], "help"),
                 (&[NextNetwork], "network"),
@@ -544,8 +544,8 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             &[
                 (&[], "Type to filter"),
                 (chat, "chat"),
-                (&[FilterAccept], "keep filter"),
-                (&[FilterCancel], "clear"),
+                (&[Accept], "keep filter"),
+                (&[Back], "clear"),
             ],
         ),
         Focus::Select => select_items(app),
@@ -558,7 +558,7 @@ fn hints(app: &App) -> Vec<(String, bool)> {
                     (&[], "/ commands"),
                     (&[Help], "help"),
                     (
-                        &[LeaveComposer],
+                        &[Back],
                         match (ns.target(), ns.attachment()) {
                             (Some(Target::Reply(_)), _) => "cancel reply",
                             (Some(Target::Edit { .. }), _) => "cancel edit",
@@ -570,7 +570,7 @@ fn hints(app: &App) -> Vec<(String, bool)> {
                     (&[InsertNewline], "newline"),
                     (&[EmojiPicker], "emoji"),
                     (&[Attach], "attach"),
-                    (&[ScrollUp, ScrollDown], "scroll"),
+                    (&[PageUp, PageDown], "scroll"),
                     (&[NextNetwork], "network"),
                 ],
             );
@@ -603,7 +603,7 @@ fn select_items(app: &App) -> Vec<(String, bool)> {
             .iter()
             .any(|a| a.kind == chatcli_core::model::MediaKind::Image);
     let head: [(&[Action], &str, bool); 4] = [
-        (&[SelectUp, SelectDown], "move", true),
+        (&[Up, Down], "move", true),
         (&[Reply], "reply", ns.caps.reply),
         (&[React], "react", ns.caps.react),
         (&[OpenLink], "link", has_link),
@@ -616,7 +616,7 @@ fn select_items(app: &App) -> Vec<(String, bool)> {
     items.extend([
         (&[Edit][..], "edit", ns.caps.edit && own),
         (&[Delete][..], "delete", ns.caps.delete && own),
-        (&[LeaveSelect][..], "back", true),
+        (&[Back][..], "back", true),
         (&[CommandBar][..], "commands", true),
         (&[Help][..], "help", true),
     ]);
@@ -1683,7 +1683,7 @@ fn composer_extras(app: &App, ns: &NetState, width: usize) -> Vec<Line<'static>>
     if let Some(target) = ns.target() {
         let esc = app
             .keys()
-            .hint(app.context(), &[Action::LeaveComposer, Action::CancelReply])
+            .hint(app.context(), &[Action::Back, Action::CancelReply])
             .unwrap_or_else(|| "Esc".to_string());
         let tail = format!("  {esc} cancel");
         let room = width.saturating_sub(sw(&tail));
@@ -1714,7 +1714,7 @@ fn composer_extras(app: &App, ns: &NetState, width: usize) -> Vec<Line<'static>>
     if let Some(p) = ns.attachment() {
         let esc = app
             .keys()
-            .hint(app.context(), &[Action::LeaveComposer])
+            .hint(app.context(), &[Action::Back])
             .unwrap_or_else(|| "Esc".to_string());
         let tail = format!("  {esc} remove");
         let room = width.saturating_sub(sw(&tail));
@@ -1851,7 +1851,7 @@ fn draw_composer(f: &mut Frame, app: &App, lay: &Layout) {
         let note = if ns.focus == Focus::Select {
             let back = app
                 .keys()
-                .hint(Context::Select, &[Action::LeaveSelect])
+                .hint(Context::Select, &[Action::Back])
                 .unwrap_or_else(|| "Esc".to_string());
             format!("{back} to go back and type")
         } else {

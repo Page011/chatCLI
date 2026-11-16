@@ -429,8 +429,8 @@ Your own bindings sit in one table per context, `key = "action"`, over the built
 
 ```toml
 [keys.list]
-"ctrl+n" = "list_down"
-"ctrl+p" = "list_up"
+"ctrl+n" = "down"
+"ctrl+p" = "up"
 "x" = "unbound"        # removes the built-in binding of x
 
 [keys.composer]
@@ -445,7 +445,7 @@ Your own bindings sit in one table per context, `key = "action"`, over the built
 - A bad binding (unknown action, unreadable key, the same key twice in one table) is skipped with one notice, and the rest load. The notice suggests the closest name. Some terminals send `Ctrl+I` as `Tab`, `Ctrl+M` and `Ctrl+J` as `Enter`, `Ctrl+[` as `Esc` and `Ctrl+H` as `Backspace`: these are warned about and still applied.
 - User key sequences (like `gg`) are not supported.
 
-Actions (the names are stable): `quit` `next_network` `prev_network` `goto_network_1` `goto_network_2` `command_bar` `settings` `search` `sign_in` `help` `close_help` `list_up` `list_down` `list_top` `list_bottom` `scroll_up` `scroll_down` `open_chat` `filter_start` `filter_accept` `filter_cancel` `clear_filter` `refresh` `send` `leave_composer` `open_link` `next_unread` `prev_unread` `mark_all_read` `pin` `mute` `hide` `show_hidden` `cursor_left` `cursor_right` `word_left` `word_right` `line_start` `line_end` `delete_back` `delete_forward` `delete_word_back` `clear_line` `insert_newline` `emoji_picker` `attach` `paste_image` `select_messages` `select_up` `select_down` `select_page_up` `select_page_down` `select_first` `select_last` `leave_select` `reply` `cancel_reply` `react` `edit` `delete` `open_media` `view_image` `popup_up` `popup_down` `popup_accept` `popup_close` `confirm_yes` `confirm_no`, and `unbound`. The `?` screen lists every action next to its keys. The footer hints follow your bindings too. A binding on an action that makes no sense in that context is accepted and does nothing.
+Actions (the names are stable): `quit` `next_network` `prev_network` `goto_network_1` `goto_network_2` `help` `up` `down` `top` `bottom` `page_up` `page_down` `accept` `back` `filter_start` `refresh` `send` `cursor_left` `cursor_right` `word_left` `word_right` `line_start` `line_end` `delete_back` `delete_forward` `delete_word_back` `clear_line` `insert_newline` `emoji_picker` `open_link` `confirm_yes` `confirm_no` `select_messages` `reply` `cancel_reply` `react` `edit` `delete` `open_media` `view_image` `attach` `paste_image` `next_unread` `prev_unread` `mark_all_read` `pin` `mute` `hide` `show_hidden` `search` `command_bar` `settings`, and `unbound`. `up`, `down`, `top`, `bottom`, `page_up`, `page_down`, `accept` and `back` do what they mean where they are pressed: `down` is the next chat in the list, the next message in selection, the next suggestion in a popup, and scrolls help; `accept` opens a chat, signs in, keeps the filter or takes a suggestion; `back` leaves the message box or selection, closes help or a popup, clears the filter, or answers no. The `?` screen lists every action next to its keys. The footer hints follow your bindings too. A binding on an action that makes no sense in that context is accepted and does nothing.
 
 ### Themes
 

@@ -2,12 +2,12 @@
 ╔ Help ════════════════════════════════╗
 ║No user bindings                      ║
 ║This help                             ║
-║Esc, F1, q,… Close help               ║
-║Up           List up                  ║
-║Down         List down                ║
-║PgUp         Scroll up                ║
-║PgDn         Scroll down              ║
-║lines 111-116 of 116                  ║
+║Esc, F1, q,… Back                     ║
+║Up           Up                       ║
+║Down         Down                     ║
+║PgUp         Page up                  ║
+║PgDn         Page down                ║
+║lines 112-117 of 117                  ║
 ╚══════════════════════════════════════╝
 Esc close  Up/Down scroll
 --- styled runs (everything else is default style) ---

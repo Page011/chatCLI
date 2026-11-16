@@ -138,22 +138,17 @@ actions! {
     GotoNetwork1 "goto_network_1" "jump to the first network tab",
     GotoNetwork2 "goto_network_2" "jump to the second network tab",
     Help "help" "show this help",
-    CloseHelp "close_help" "close this help",
-    ListUp "list_up" "previous chat (scrolls up in help)",
-    ListDown "list_down" "next chat (scrolls down in help)",
-    ListTop "list_top" "first chat",
-    ListBottom "list_bottom" "last chat",
-    ScrollUp "scroll_up" "page up: the chat list, or the messages from the message box",
-    ScrollDown "scroll_down" "page down: the chat list, or the messages from the message box",
-    OpenChat "open_chat" "open the selected chat and move to its message box",
-    SignIn "sign_in" "start sign-in (sign-in panel)",
+    Up "up" "up one: the chat, the selected message, a list or the emoji grid; scrolls help",
+    Down "down" "down one: the chat, the selected message, a list or the emoji grid; scrolls help",
+    Top "top" "to the first chat, the oldest message held, or the top of help",
+    Bottom "bottom" "to the last chat, the newest message, or the end of help",
+    PageUp "page_up" "a page up: the chat list, the messages (from the message box), the selected message, a list, or help",
+    PageDown "page_down" "a page down: the chat list, the messages (from the message box), the selected message, a list, or help",
+    Accept "accept" "open the chosen chat, sign in, keep the filter, or take the chosen suggestion, command or emoji",
+    Back "back" "back out: leave the message box or selection, close help or a list, clear the filter, or answer no",
     FilterStart "filter_start" "filter the chat list (no default key: / opens the command bar)",
-    FilterAccept "filter_accept" "keep the filter, back to the chat list",
-    FilterCancel "filter_cancel" "clear the filter, back to the chat list",
-    ClearFilter "clear_filter" "clear the chat filter",
     Refresh "refresh" "ask the network for a fresh chat list",
     Send "send" "send the message",
-    LeaveComposer "leave_composer" "leave the message box, back to the chat list",
     CursorLeft "cursor_left" "move the cursor one character left (emoji picker: one cell left)",
     CursorRight "cursor_right" "move the cursor one character right (emoji picker: one cell right)",
     WordLeft "word_left" "move the cursor to the start of the word before it",
@@ -166,23 +161,12 @@ actions! {
     ClearLine "clear_line" "clear the line the cursor is on",
     InsertNewline "insert_newline" "add a line break instead of sending",
     EmojiPicker "emoji_picker" "open the emoji picker",
-    PopupUp "popup_up" "previous suggestion (emoji picker: up one row)",
-    PopupDown "popup_down" "next suggestion (emoji picker: down one row)",
-    PopupAccept "popup_accept" "insert the chosen suggestion or emoji",
-    PopupClose "popup_close" "close the suggestions or the emoji picker",
     OpenLink "open_link" "open a link from the newest message that has one",
     ConfirmYes "confirm_yes" "yes: open the link, delete the message, send the file or mark all read",
     ConfirmNo "confirm_no" "no, do not open it, delete it or send it",
     SelectMessages "select_messages" "select a message in the open chat",
-    SelectUp "select_up" "select the previous message",
-    SelectDown "select_down" "select the next message",
-    SelectPageUp "select_page_up" "select the message a page up",
-    SelectPageDown "select_page_down" "select the message a page down",
-    SelectFirst "select_first" "select the oldest message held",
-    SelectLast "select_last" "select the newest message",
-    LeaveSelect "leave_select" "leave message selection, back to the message box",
     Reply "reply" "reply to the selected message (quote it)",
-    CancelReply "cancel_reply" "drop the reply or edit in the message box (Esc does it too)",
+    CancelReply "cancel_reply" "drop the reply or edit in the message box (back does it too)",
     React "react" "react to the selected message with an emoji",
     Edit "edit" "edit the selected message of yours",
     Delete "delete" "delete the selected message of yours for everyone",
@@ -539,46 +523,46 @@ const COMMON: &[Row] = &[
     (Context::Common, "ctrl+w", Action::DeleteWordBack),
     (Context::Common, "ctrl+backspace", Action::DeleteWordBack),
     (Context::Common, "ctrl+u", Action::ClearLine),
-    (Context::Panel, "enter", Action::SignIn),
+    (Context::Panel, "enter", Action::Accept),
     (Context::Panel, "/", Action::CommandBar),
     (Context::Panel, "q", Action::Quit),
     (Context::Panel, "?", Action::Help),
-    (Context::Filter, "up", Action::ListUp),
-    (Context::Filter, "down", Action::ListDown),
-    (Context::Filter, "enter", Action::FilterAccept),
-    (Context::Filter, "esc", Action::FilterCancel),
-    (Context::Help, "esc", Action::CloseHelp),
-    (Context::Help, "f1", Action::CloseHelp),
-    (Context::Help, "q", Action::CloseHelp),
-    (Context::Help, "?", Action::CloseHelp),
-    (Context::Help, "up", Action::ListUp),
-    (Context::Help, "down", Action::ListDown),
-    (Context::Help, "pgup", Action::ScrollUp),
-    (Context::Help, "pgdn", Action::ScrollDown),
+    (Context::Filter, "up", Action::Up),
+    (Context::Filter, "down", Action::Down),
+    (Context::Filter, "enter", Action::Accept),
+    (Context::Filter, "esc", Action::Back),
+    (Context::Help, "esc", Action::Back),
+    (Context::Help, "f1", Action::Back),
+    (Context::Help, "q", Action::Back),
+    (Context::Help, "?", Action::Back),
+    (Context::Help, "up", Action::Up),
+    (Context::Help, "down", Action::Down),
+    (Context::Help, "pgup", Action::PageUp),
+    (Context::Help, "pgdn", Action::PageDown),
     // The overlays and the `:shortcode` list (which reads only the popup_* rows). Left and Right
     // (from `common`) move through the emoji picker's grid.
-    (Context::Popup, "up", Action::PopupUp),
-    (Context::Popup, "down", Action::PopupDown),
-    (Context::Popup, "enter", Action::PopupAccept),
-    (Context::Popup, "tab", Action::PopupAccept),
-    (Context::Popup, "esc", Action::PopupClose),
-    (Context::Popup, "pgup", Action::ScrollUp),
-    (Context::Popup, "pgdn", Action::ScrollDown),
+    (Context::Popup, "up", Action::Up),
+    (Context::Popup, "down", Action::Down),
+    (Context::Popup, "enter", Action::Accept),
+    (Context::Popup, "tab", Action::Accept),
+    (Context::Popup, "esc", Action::Back),
+    (Context::Popup, "pgup", Action::PageUp),
+    (Context::Popup, "pgdn", Action::PageDown),
     (Context::Confirm, "y", Action::ConfirmYes),
     (Context::Confirm, "n", Action::ConfirmNo),
-    (Context::Confirm, "esc", Action::ConfirmNo),
+    (Context::Confirm, "esc", Action::Back),
     // Message selection (Ctrl+Up from the message box). The per-message keys
     // act on the highlighted message; ones that do not apply to it are dimmed in the footer.
-    (Context::Select, "up", Action::SelectUp),
-    (Context::Select, "k", Action::SelectUp),
-    (Context::Select, "down", Action::SelectDown),
-    (Context::Select, "j", Action::SelectDown),
-    (Context::Select, "pgup", Action::SelectPageUp),
-    (Context::Select, "pgdn", Action::SelectPageDown),
-    (Context::Select, "home", Action::SelectFirst),
-    (Context::Select, "end", Action::SelectLast),
-    (Context::Select, "G", Action::SelectLast),
-    (Context::Select, "esc", Action::LeaveSelect),
+    (Context::Select, "up", Action::Up),
+    (Context::Select, "k", Action::Up),
+    (Context::Select, "down", Action::Down),
+    (Context::Select, "j", Action::Down),
+    (Context::Select, "pgup", Action::PageUp),
+    (Context::Select, "pgdn", Action::PageDown),
+    (Context::Select, "home", Action::Top),
+    (Context::Select, "end", Action::Bottom),
+    (Context::Select, "G", Action::Bottom),
+    (Context::Select, "esc", Action::Back),
     (Context::Select, "r", Action::Reply),
     (Context::Select, "e", Action::React),
     (Context::Select, "E", Action::Edit),
@@ -610,19 +594,19 @@ const COMPOSER_KEYS: &[(&str, Action)] = &[
 
 /// The chat list and the message box.
 const CHATS: &[Row] = &[
-    (Context::List, "up", Action::ListUp),
-    (Context::List, "k", Action::ListUp),
-    (Context::List, "down", Action::ListDown),
-    (Context::List, "j", Action::ListDown),
-    (Context::List, "home", Action::ListTop),
-    (Context::List, "end", Action::ListBottom),
-    (Context::List, "enter", Action::OpenChat),
+    (Context::List, "up", Action::Up),
+    (Context::List, "k", Action::Up),
+    (Context::List, "down", Action::Down),
+    (Context::List, "j", Action::Down),
+    (Context::List, "home", Action::Top),
+    (Context::List, "end", Action::Bottom),
+    (Context::List, "enter", Action::Accept),
     (Context::List, "/", Action::CommandBar),
     (Context::List, "r", Action::Refresh),
     (Context::List, "q", Action::Quit),
-    (Context::List, "esc", Action::ClearFilter),
-    (Context::List, "pgup", Action::ScrollUp),
-    (Context::List, "pgdn", Action::ScrollDown),
+    (Context::List, "esc", Action::Back),
+    (Context::List, "pgup", Action::PageUp),
+    (Context::List, "pgdn", Action::PageDown),
     (Context::List, "?", Action::Help),
     (Context::List, "u", Action::OpenLink),
     (Context::List, "n", Action::NextUnread),
@@ -633,9 +617,9 @@ const CHATS: &[Row] = &[
     (Context::List, "x", Action::Hide),
     (Context::List, "H", Action::ShowHidden),
     (Context::Composer, "enter", Action::Send),
-    (Context::Composer, "esc", Action::LeaveComposer),
-    (Context::Composer, "pgup", Action::ScrollUp),
-    (Context::Composer, "pgdn", Action::ScrollDown),
+    (Context::Composer, "esc", Action::Back),
+    (Context::Composer, "pgup", Action::PageUp),
+    (Context::Composer, "pgdn", Action::PageDown),
 ];
 
 /// Two-key sequences (`g g`), held until the second key; no timer. None are bound by default
@@ -678,6 +662,13 @@ pub(crate) fn common_applies(action: Action, ctx: Context) -> bool {
         ),
         CursorLeft | CursorRight | WordLeft | WordRight | LineStart | LineEnd | DeleteBack
         | DeleteForward | DeleteWordBack | ClearLine => ctx.types_text(),
+        Up | Down => matches!(ctx, C::List | C::Filter | C::Select | C::Popup | C::Help),
+        Top | Bottom => matches!(ctx, C::List | C::Select | C::Help),
+        PageUp | PageDown => {
+            matches!(ctx, C::List | C::Composer | C::Select | C::Popup | C::Help)
+        }
+        Accept => matches!(ctx, C::Panel | C::List | C::Filter | C::Popup),
+        Back => !matches!(ctx, C::Common | C::Panel),
         _ => {
             ctx != C::Common
                 && (rows().iter().any(|r| r.0 == ctx && r.2 == action)
@@ -1266,39 +1257,39 @@ mod tests {
             (List, "shift+tab", PrevNetwork),
             (List, "alt+1", GotoNetwork1),
             (List, "alt+2", GotoNetwork2),
-            (List, "up", ListUp),
-            (List, "k", ListUp),
-            (List, "down", ListDown),
-            (List, "j", ListDown),
-            (List, "home", ListTop),
-            (List, "end", ListBottom),
-            (List, "enter", OpenChat),
-            (Panel, "enter", SignIn),
+            (List, "up", Up),
+            (List, "k", Up),
+            (List, "down", Down),
+            (List, "j", Down),
+            (List, "home", Top),
+            (List, "end", Bottom),
+            (List, "enter", Accept),
+            (Panel, "enter", Accept),
             (List, "/", CommandBar),
             (Panel, "/", CommandBar),
             (Select, "/", CommandBar),
             (Composer, "f1", Action::Help),
-            (Context::Help, "f1", CloseHelp),
-            (Filter, "enter", FilterAccept),
-            (Filter, "esc", FilterCancel),
-            (Filter, "up", ListUp),
-            (Filter, "down", ListDown),
-            (List, "esc", ClearFilter),
+            (Context::Help, "f1", Back),
+            (Filter, "enter", Accept),
+            (Filter, "esc", Back),
+            (Filter, "up", Up),
+            (Filter, "down", Down),
+            (List, "esc", Back),
             (List, "r", Refresh),
-            (List, "pgup", ScrollUp),
-            (List, "pgdn", ScrollDown),
-            (Composer, "pgup", ScrollUp),
-            (Composer, "pgdn", ScrollDown),
+            (List, "pgup", PageUp),
+            (List, "pgdn", PageDown),
+            (Composer, "pgup", PageUp),
+            (Composer, "pgdn", PageDown),
             (Composer, "enter", Send),
-            (Composer, "esc", LeaveComposer),
+            (Composer, "esc", Back),
             (List, "q", Quit),
             (Panel, "q", Quit),
             (List, "?", Action::Help),
             (List, "f2", Settings),
             (Composer, "f2", Settings),
-            (Context::Help, "esc", CloseHelp),
-            (Context::Help, "q", CloseHelp),
-            (Context::Help, "?", CloseHelp),
+            (Context::Help, "esc", Back),
+            (Context::Help, "q", Back),
+            (Context::Help, "?", Back),
             // Message box editing (issues 9, 10, 14, 15) and links (25).
             (Composer, "left", CursorLeft),
             (Composer, "right", CursorRight),
@@ -1315,15 +1306,15 @@ mod tests {
             (Composer, "shift+enter", InsertNewline),
             (Composer, "ctrl+j", InsertNewline),
             (Composer, "ctrl+e", EmojiPicker),
-            (Popup, "up", PopupUp),
-            (Popup, "down", PopupDown),
-            (Popup, "enter", PopupAccept),
-            (Popup, "tab", PopupAccept),
-            (Popup, "esc", PopupClose),
+            (Popup, "up", Up),
+            (Popup, "down", Down),
+            (Popup, "enter", Accept),
+            (Popup, "tab", Accept),
+            (Popup, "esc", Back),
             (Popup, "left", CursorLeft),
             (Popup, "right", CursorRight),
-            (Popup, "pgup", ScrollUp),
-            (Popup, "pgdn", ScrollDown),
+            (Popup, "pgup", PageUp),
+            (Popup, "pgdn", PageDown),
             (Popup, "backspace", DeleteBack),
             (List, "u", OpenLink),
             // Attachments (issues 18, 19, 20).
@@ -1334,7 +1325,7 @@ mod tests {
             (Select, "v", ViewImage),
             (Confirm, "y", ConfirmYes),
             (Confirm, "n", ConfirmNo),
-            (Confirm, "esc", ConfirmNo),
+            (Confirm, "esc", Back),
         ];
         for (ctx, key, want) in table {
             assert_eq!(map.lookup(*ctx, k(key)), Some(*want), "{ctx:?} {key}");
@@ -1441,10 +1432,7 @@ mod tests {
     #[test]
     fn popup_and_confirm_are_modal_and_popup_takes_typing() {
         let map = Keymap::default();
-        assert_eq!(
-            map.lookup(Context::Popup, k("tab")),
-            Some(Action::PopupAccept)
-        );
+        assert_eq!(map.lookup(Context::Popup, k("tab")), Some(Action::Accept));
         assert_eq!(map.lookup(Context::Popup, k("f2")), None);
         assert_eq!(map.lookup(Context::Popup, k("alt+1")), None);
         assert_eq!(map.lookup(Context::Confirm, k("tab")), None);
@@ -1463,13 +1451,13 @@ mod tests {
     #[test]
     fn user_binding_overrides_adds_and_unbinds() {
         let (map, problems) = build(&[
-            ("list", "ctrl+n", "list_down"),
+            ("list", "ctrl+n", "down"),
             ("list", "j", "refresh"),
             ("list", "z", "unbound"),
             ("list", "q", "unbound"),
             ("composer", "ctrl+s", "send"),
         ]);
-        assert!(map.lookup(Context::List, k("ctrl+n")) == Some(Action::ListDown));
+        assert!(map.lookup(Context::List, k("ctrl+n")) == Some(Action::Down));
         assert_eq!(
             map.lookup(Context::List, k("j")),
             Some(Action::Refresh),
@@ -1477,7 +1465,7 @@ mod tests {
         );
         assert_eq!(
             map.lookup(Context::List, k("k")),
-            Some(Action::ListUp),
+            Some(Action::Up),
             "rest of the preset stays"
         );
         assert_eq!(
@@ -1507,7 +1495,7 @@ mod tests {
         );
         // The user's key leads the hint.
         assert_eq!(
-            map.hint(Context::List, &[Action::ListDown]).as_deref(),
+            map.hint(Context::List, &[Action::Down]).as_deref(),
             Some("Ctrl+N")
         );
     }
@@ -1518,7 +1506,7 @@ mod tests {
         assert!(problems.is_empty(), "{problems:?}");
         assert_eq!(map.user_bindings(), 0);
         assert_eq!(
-            map.hint(Context::List, &[Action::ListUp, Action::ListDown])
+            map.hint(Context::List, &[Action::Up, Action::Down])
                 .as_deref(),
             Some("Up/Down")
         );
@@ -1527,7 +1515,7 @@ mod tests {
             Some("Tab")
         );
         assert_eq!(
-            map.hint(Context::Composer, &[Action::ScrollUp, Action::ScrollDown])
+            map.hint(Context::Composer, &[Action::PageUp, Action::PageDown])
                 .as_deref(),
             Some("PgUp/PgDn")
         );
@@ -1535,11 +1523,11 @@ mod tests {
 
     #[test]
     fn unknown_action_suggests_the_closest() {
-        let (map, problems) = build(&[("list", "ctrl+n", "lst_down")]);
+        let (map, problems) = build(&[("list", "ctrl+n", "pgae_down")]);
         assert_eq!(map.lookup(Context::List, k("ctrl+n")), None, "skipped");
         assert_eq!(
             texts(&problems),
-            vec!["settings.toml line 1: [keys.list] ctrl+n: unknown action \"lst_down\": did you mean \"list_down\"? Skipping this binding."]
+            vec!["settings.toml line 1: [keys.list] ctrl+n: unknown action \"pgae_down\": did you mean \"page_down\"? Skipping this binding."]
         );
         let (_, p) = build(&[("list", "ctrl+n", "xyzzy-nothing-like-it")]);
         assert!(p[0].message.contains("docs/guide.md"), "{p:?}");
@@ -1557,10 +1545,7 @@ mod tests {
     #[test]
     fn same_key_twice_in_one_table_blames_the_later_line() {
         // Both spell Ctrl+N; TOML sees two different keys.
-        let (map, problems) = build(&[
-            ("list", "ctrl+n", "list_down"),
-            ("list", "Ctrl+N", "list_up"),
-        ]);
+        let (map, problems) = build(&[("list", "ctrl+n", "down"), ("list", "Ctrl+N", "up")]);
         assert_eq!(problems.len(), 1, "{problems:?}");
         assert_eq!(problems[0].severity, Severity::Error);
         assert!(
@@ -1568,10 +1553,7 @@ mod tests {
             "{problems:?}"
         );
         assert_eq!(problems[0].line, Some(2));
-        assert_eq!(
-            map.lookup(Context::List, k("ctrl+n")),
-            Some(Action::ListDown)
-        );
+        assert_eq!(map.lookup(Context::List, k("ctrl+n")), Some(Action::Down));
     }
 
     #[test]
@@ -1627,7 +1609,7 @@ mod tests {
         for ctx in [Context::Help, Context::Popup, Context::Confirm] {
             assert_eq!(
                 map.lookup(ctx, k("tab")),
-                (ctx == Context::Popup).then_some(Action::PopupAccept),
+                (ctx == Context::Popup).then_some(Action::Accept),
                 "{ctx:?}"
             );
             assert_eq!(map.lookup(ctx, k("ctrl+f")), None, "{ctx:?}");
@@ -1657,11 +1639,8 @@ mod tests {
             assert_eq!(map.lookup(ctx, k("ctrl+w")), None, "{ctx:?}");
         }
         // The chat list and selection keep their own Home and End.
-        assert_eq!(map.lookup(Context::List, k("home")), Some(Action::ListTop));
-        assert_eq!(
-            map.lookup(Context::Select, k("end")),
-            Some(Action::SelectLast)
-        );
+        assert_eq!(map.lookup(Context::List, k("home")), Some(Action::Top));
+        assert_eq!(map.lookup(Context::Select, k("end")), Some(Action::Bottom));
         assert_eq!(
             map.hint(Context::Filter, &[Action::DeleteWordBack])
                 .as_deref(),
@@ -1758,7 +1737,7 @@ mod tests {
         let map = Keymap::default();
         // Tab would switch network under the overlay if Global leaked through.
         assert_eq!(map.lookup(Context::Help, k("tab")), None);
-        assert_eq!(map.lookup(Context::Help, k("?")), Some(Action::CloseHelp));
+        assert_eq!(map.lookup(Context::Help, k("?")), Some(Action::Back));
         let sections = map.help_sections();
         let ctxs: Vec<_> = sections.iter().map(|s| s.0).collect();
         assert_eq!(
@@ -1800,11 +1779,8 @@ mod tests {
     #[test]
     fn closest_and_levenshtein() {
         assert_eq!(levenshtein("kitten", "sitting"), 3);
-        assert_eq!(
-            closest("lst_down", ["list_down", "quit"].into_iter()),
-            Some("list_down")
-        );
-        assert_eq!(closest("zzzzzz", ["list_down", "quit"].into_iter()), None);
+        assert_eq!(closest("dowm", ["down", "quit"].into_iter()), Some("down"));
+        assert_eq!(closest("zzzzzz", ["down", "quit"].into_iter()), None);
         assert_eq!(
             closest("q", ["quit"].into_iter()),
             None,
@@ -1824,16 +1800,16 @@ mod tests {
         );
         assert_eq!(def.lookup(Context::List, k("v")), None);
         for (key, want) in [
-            ("up", SelectUp),
-            ("k", SelectUp),
-            ("down", SelectDown),
-            ("j", SelectDown),
-            ("pgup", SelectPageUp),
-            ("pgdn", SelectPageDown),
-            ("home", SelectFirst),
-            ("end", SelectLast),
-            ("G", SelectLast),
-            ("esc", LeaveSelect),
+            ("up", Up),
+            ("k", Up),
+            ("down", Down),
+            ("j", Down),
+            ("pgup", PageUp),
+            ("pgdn", PageDown),
+            ("home", Top),
+            ("end", Bottom),
+            ("G", Bottom),
+            ("esc", Back),
             ("r", Reply),
             ("e", React),
             ("E", Edit),

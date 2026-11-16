@@ -154,14 +154,14 @@ impl App {
     pub(super) fn palette_action(&mut self, action: Action) -> Out {
         let items = self.palette_items();
         match action {
-            Action::PopupUp | Action::PopupDown => {
-                let delta = if action == Action::PopupUp { -1 } else { 1 };
+            Action::Up | Action::Down => {
+                let delta = if action == Action::Up { -1 } else { 1 };
                 if let Some(p) = self.palette.as_mut() {
                     p.step(items.len(), delta);
                 }
                 self.palette_fit();
             }
-            Action::PopupAccept => {
+            Action::Accept => {
                 let Some(p) = self.palette.as_ref() else {
                     return Vec::new();
                 };
@@ -180,7 +180,7 @@ impl App {
                     PalItem::Chat(id) => self.open_chat_by_id(&id),
                 };
             }
-            Action::PopupClose => self.palette = None,
+            Action::Back => self.palette = None,
             _ => {}
         }
         Vec::new()

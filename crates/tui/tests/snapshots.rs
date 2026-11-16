@@ -627,7 +627,7 @@ fn help_overlay_scrolls() {
     }
     let end = render(&mut app, 40, 12);
     assert_ne!(top, end);
-    assert!(end.contains("Close help"), "{end}");
+    assert!(end.contains("Back"), "{end}");
     check("help_default_end", 40, 12, &end);
 }
 
@@ -652,8 +652,8 @@ fn help_too_small_says_so() {
 fn rebinding_changes_help_and_footer() {
     let mut s = Settings::default();
     s.keys.bindings.entry("list".into()).or_default().extend([
-        ("ctrl+n".to_string(), "list_down".to_string()),
-        ("ctrl+p".to_string(), "list_up".to_string()),
+        ("ctrl+n".to_string(), "down".to_string()),
+        ("ctrl+p".to_string(), "up".to_string()),
         ("q".to_string(), "unbound".to_string()),
         ("ctrl+q".to_string(), "quit".to_string()),
     ]);
@@ -1131,7 +1131,7 @@ fn help_lists_the_editing_popup_and_link_keys() {
         "Clear line",
         "Insert newline",
         "Emoji picker",
-        "Popup accept",
+        "Accept",
         "Open link",
         "Confirm yes",
     ] {

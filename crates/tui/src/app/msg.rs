@@ -209,10 +209,10 @@ impl App {
             .and_then(|s| ids.iter().position(|i| i == s))
             .unwrap_or(ids.len() - 1);
         let to = match action {
-            Action::SelectUp => cur.saturating_sub(1),
-            Action::SelectDown => (cur + 1).min(ids.len() - 1),
-            Action::SelectFirst => 0,
-            Action::SelectLast => ids.len() - 1,
+            Action::Up => cur.saturating_sub(1),
+            Action::Down => (cur + 1).min(ids.len() - 1),
+            Action::Top => 0,
+            Action::Bottom => ids.len() - 1,
             _ => {
                 let (w, h) = self.convo_size(n);
                 let (_, spans) = ui::message_layout(self.ns(n), &self.look(), w);
@@ -224,7 +224,7 @@ impl App {
                 };
                 let budget = h.saturating_sub(1).max(1);
                 let (mut i, mut used) = (cur, 0);
-                if action == Action::SelectPageUp {
+                if action == Action::PageUp {
                     while i > 0 && used < budget {
                         i -= 1;
                         used += height(&ids[i]);
@@ -241,11 +241,7 @@ impl App {
         self.ns_mut(n).sel_msg = Some(ids[to].clone());
         self.ensure_sel_visible(n);
         // Up, page up or first at the oldest message held: the user wants more history.
-        let wants_older = to == 0
-            && matches!(
-                action,
-                Action::SelectUp | Action::SelectPageUp | Action::SelectFirst
-            );
+        let wants_older = to == 0 && matches!(action, Action::Up | Action::PageUp | Action::Top);
         if wants_older {
             self.request_older(n)
         } else {

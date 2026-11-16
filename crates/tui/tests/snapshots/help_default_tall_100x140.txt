@@ -37,23 +37,23 @@
 ║Ctrl+U                 Clear line        clear the line the cursor is on                          ║
 ║                                                                                                  ║
 ║Sign-in panel                                                                                     ║
-║Enter     Sign in           start sign-in (sign-in panel)                                         ║
+║Enter     Accept            open the chosen chat, sign in, keep the filter, or take the chosen su…║
 ║/         Command bar       open the / command bar: commands and chats                            ║
 ║q         Quit              quit chatcli                                                          ║
 ║?         Help              show this help                                                        ║
 ║                                                                                                  ║
 ║Chat list                                                                                         ║
-║Up, k     List up           previous chat (scrolls up in help)                                    ║
-║Down, j   List down         next chat (scrolls down in help)                                      ║
-║Home      List top          first chat                                                            ║
-║End       List bottom       last chat                                                             ║
-║Enter     Open chat         open the selected chat and move to its message box                    ║
+║Up, k     Up                up one: the chat, the selected message, a list or the emoji grid; scr…║
+║Down, j   Down              down one: the chat, the selected message, a list or the emoji grid; s…║
+║Home      Top               to the first chat, the oldest message held, or the top of help        ║
+║End       Bottom            to the last chat, the newest message, or the end of help              ║
+║Enter     Accept            open the chosen chat, sign in, keep the filter, or take the chosen su…║
 ║/         Command bar       open the / command bar: commands and chats                            ║
 ║r         Refresh           ask the network for a fresh chat list                                 ║
 ║q         Quit              quit chatcli                                                          ║
-║Esc       Clear filter      clear the chat filter                                                 ║
-║PgUp      Scroll up         page up: the chat list, or the messages from the message box          ║
-║PgDn      Scroll down       page down: the chat list, or the messages from the message box        ║
+║Esc       Back              back out: leave the message box or selection, close help or a list, c…║
+║PgUp      Page up           a page up: the chat list, the messages (from the message box), the se…║
+║PgDn      Page down         a page down: the chat list, the messages (from the message box), the …║
 ║?         Help              show this help                                                        ║
 ║u         Open link         open a link from the newest message that has one                      ║
 ║n         Next unread       select the next chat with unread messages (wraps round)               ║
@@ -65,16 +65,16 @@
 ║H         Show hidden       show or hide the chats you hid                                        ║
 ║                                                                                                  ║
 ║Filter box                                                                                        ║
-║Up        List up           previous chat (scrolls up in help)                                    ║
-║Down      List down         next chat (scrolls down in help)                                      ║
-║Enter     Filter accept     keep the filter, back to the chat list                                ║
-║Esc       Filter cancel     clear the filter, back to the chat list                               ║
+║Up        Up                up one: the chat, the selected message, a list or the emoji grid; scr…║
+║Down      Down              down one: the chat, the selected message, a list or the emoji grid; s…║
+║Enter     Accept            open the chosen chat, sign in, keep the filter, or take the chosen su…║
+║Esc       Back              back out: leave the message box or selection, close help or a list, c…║
 ║                                                                                                  ║
 ║Message box                                                                                       ║
 ║Enter                          Send              send the message                                 ║
-║Esc                            Leave composer    leave the message box, back to the chat list     ║
-║PgUp                           Scroll up         page up: the chat list, or the messages from the…║
-║PgDn                           Scroll down       page down: the chat list, or the messages from t…║
+║Esc                            Back              back out: leave the message box or selection, cl…║
+║PgUp                           Page up           a page up: the chat list, the messages (from the…║
+║PgDn                           Page down         a page down: the chat list, the messages (from t…║
 ║Shift+Enter, Ctrl+J, Alt+Enter Insert newline    add a line break instead of sending              ║
 ║Ctrl+E                         Emoji picker      open the emoji picker                            ║
 ║Ctrl+O                         Attach            choose a file to send: type or complete its path ║
@@ -82,13 +82,13 @@
 ║Ctrl+Up                        Select messages   select a message in the open chat                ║
 ║                                                                                                  ║
 ║Message selection                                                                                 ║
-║Up, k     Select up         select the previous message                                           ║
-║Down, j   Select down       select the next message                                               ║
-║PgUp      Select page up    select the message a page up                                          ║
-║PgDn      Select page down  select the message a page down                                        ║
-║Home      Select first      select the oldest message held                                        ║
-║End, G    Select last       select the newest message                                             ║
-║Esc       Leave select      leave message selection, back to the message box                      ║
+║Up, k     Up                up one: the chat, the selected message, a list or the emoji grid; scr…║
+║Down, j   Down              down one: the chat, the selected message, a list or the emoji grid; s…║
+║PgUp      Page up           a page up: the chat list, the messages (from the message box), the se…║
+║PgDn      Page down         a page down: the chat list, the messages (from the message box), the …║
+║Home      Top               to the first chat, the oldest message held, or the top of help        ║
+║End, G    Bottom            to the last chat, the newest message, or the end of help              ║
+║Esc       Back              back out: leave the message box or selection, close help or a list, c…║
 ║r         Reply             reply to the selected message (quote it)                              ║
 ║e         React             react to the selected message with an emoji                           ║
 ║E         Edit              edit the selected message of yours                                    ║
@@ -100,23 +100,24 @@
 ║/         Command bar       open the / command bar: commands and chats                            ║
 ║                                                                                                  ║
 ║Suggestions, pickers and search                                                                   ║
-║Up         Popup up          previous suggestion (emoji picker: up one row)                       ║
-║Down       Popup down        next suggestion (emoji picker: down one row)                         ║
-║Enter, Tab Popup accept      insert the chosen suggestion or emoji                                ║
-║Esc        Popup close       close the suggestions or the emoji picker                            ║
-║PgUp       Scroll up         page up: the chat list, or the messages from the message box         ║
-║PgDn       Scroll down       page down: the chat list, or the messages from the message box       ║
+║Up         Up                up one: the chat, the selected message, a list or the emoji grid; sc…║
+║Down       Down              down one: the chat, the selected message, a list or the emoji grid; …║
+║Enter, Tab Accept            open the chosen chat, sign in, keep the filter, or take the chosen s…║
+║Esc        Back              back out: leave the message box or selection, close help or a list, …║
+║PgUp       Page up           a page up: the chat list, the messages (from the message box), the s…║
+║PgDn       Page down         a page down: the chat list, the messages (from the message box), the…║
 ║                                                                                                  ║
 ║Confirm (link, delete, mark read)                                                                 ║
 ║y         Confirm yes       yes: open the link, delete the message, send the file or mark all read║
-║n, Esc    Confirm no        no, do not open it, delete it or send it                              ║
+║n         Confirm no        no, do not open it, delete it or send it                              ║
+║Esc       Back              back out: leave the message box or selection, close help or a list, c…║
 ║                                                                                                  ║
 ║This help                                                                                         ║
-║Esc, F1, q, ? Close help        close this help                                                   ║
-║Up            List up           previous chat (scrolls up in help)                                ║
-║Down          List down         next chat (scrolls down in help)                                  ║
-║PgUp          Scroll up         page up: the chat list, or the messages from the message box      ║
-║PgDn          Scroll down       page down: the chat list, or the messages from the message box    ║
+║Esc, F1, q, ? Back              back out: leave the message box or selection, close help or a lis…║
+║Up            Up                up one: the chat, the selected message, a list or the emoji grid;…║
+║Down          Down              down one: the chat, the selected message, a list or the emoji gri…║
+║PgUp          Page up           a page up: the chat list, the messages (from the message box), th…║
+║PgDn          Page down         a page down: the chat list, the messages (from the message box), …║
 ║                                                                                                  ║
 ║                                                                                                  ║
 ║                                                                                                  ║
@@ -134,8 +135,7 @@
 ║                                                                                                  ║
 ║                                                                                                  ║
 ║                                                                                                  ║
-║                                                                                                  ║
-║lines 1-116 of 116                                                                                ║
+║lines 1-117 of 117                                                                                ║
 ╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
 Esc close  Up/Down scroll  PgUp/PgDn page
 --- styled runs (everything else is default style) ---
@@ -212,7 +212,7 @@ row 36 cols 1-22: fg=Reset bg=Reset BOLD
 row 36 cols 40-72: fg=DarkGray bg=Reset NONE
 row 38 cols 1-13: fg=Reset bg=Reset BOLD
 row 39 cols 1-9: fg=Reset bg=Reset BOLD
-row 39 cols 27-57: fg=DarkGray bg=Reset NONE
+row 39 cols 27-98: fg=DarkGray bg=Reset NONE
 row 40 cols 1-9: fg=Reset bg=Reset BOLD
 row 40 cols 27-70: fg=DarkGray bg=Reset NONE
 row 41 cols 1-9: fg=Reset bg=Reset BOLD
@@ -221,15 +221,15 @@ row 42 cols 1-9: fg=Reset bg=Reset BOLD
 row 42 cols 27-42: fg=DarkGray bg=Reset NONE
 row 44 cols 1-9: fg=Reset bg=Reset BOLD
 row 45 cols 1-9: fg=Reset bg=Reset BOLD
-row 45 cols 27-62: fg=DarkGray bg=Reset NONE
+row 45 cols 27-98: fg=DarkGray bg=Reset NONE
 row 46 cols 1-9: fg=Reset bg=Reset BOLD
-row 46 cols 27-60: fg=DarkGray bg=Reset NONE
+row 46 cols 27-98: fg=DarkGray bg=Reset NONE
 row 47 cols 1-9: fg=Reset bg=Reset BOLD
-row 47 cols 27-38: fg=DarkGray bg=Reset NONE
+row 47 cols 27-90: fg=DarkGray bg=Reset NONE
 row 48 cols 1-9: fg=Reset bg=Reset BOLD
-row 48 cols 27-37: fg=DarkGray bg=Reset NONE
+row 48 cols 27-84: fg=DarkGray bg=Reset NONE
 row 49 cols 1-9: fg=Reset bg=Reset BOLD
-row 49 cols 27-78: fg=DarkGray bg=Reset NONE
+row 49 cols 27-98: fg=DarkGray bg=Reset NONE
 row 50 cols 1-9: fg=Reset bg=Reset BOLD
 row 50 cols 27-70: fg=DarkGray bg=Reset NONE
 row 51 cols 1-9: fg=Reset bg=Reset BOLD
@@ -237,11 +237,11 @@ row 51 cols 27-65: fg=DarkGray bg=Reset NONE
 row 52 cols 1-9: fg=Reset bg=Reset BOLD
 row 52 cols 27-40: fg=DarkGray bg=Reset NONE
 row 53 cols 1-9: fg=Reset bg=Reset BOLD
-row 53 cols 27-49: fg=DarkGray bg=Reset NONE
+row 53 cols 27-98: fg=DarkGray bg=Reset NONE
 row 54 cols 1-9: fg=Reset bg=Reset BOLD
-row 54 cols 27-88: fg=DarkGray bg=Reset NONE
+row 54 cols 27-98: fg=DarkGray bg=Reset NONE
 row 55 cols 1-9: fg=Reset bg=Reset BOLD
-row 55 cols 27-90: fg=DarkGray bg=Reset NONE
+row 55 cols 27-98: fg=DarkGray bg=Reset NONE
 row 56 cols 1-9: fg=Reset bg=Reset BOLD
 row 56 cols 27-42: fg=DarkGray bg=Reset NONE
 row 57 cols 1-9: fg=Reset bg=Reset BOLD
@@ -262,18 +262,18 @@ row 64 cols 1-9: fg=Reset bg=Reset BOLD
 row 64 cols 27-58: fg=DarkGray bg=Reset NONE
 row 66 cols 1-10: fg=Reset bg=Reset BOLD
 row 67 cols 1-9: fg=Reset bg=Reset BOLD
-row 67 cols 27-62: fg=DarkGray bg=Reset NONE
+row 67 cols 27-98: fg=DarkGray bg=Reset NONE
 row 68 cols 1-9: fg=Reset bg=Reset BOLD
-row 68 cols 27-60: fg=DarkGray bg=Reset NONE
+row 68 cols 27-98: fg=DarkGray bg=Reset NONE
 row 69 cols 1-9: fg=Reset bg=Reset BOLD
-row 69 cols 27-66: fg=DarkGray bg=Reset NONE
+row 69 cols 27-98: fg=DarkGray bg=Reset NONE
 row 70 cols 1-9: fg=Reset bg=Reset BOLD
-row 70 cols 27-67: fg=DarkGray bg=Reset NONE
+row 70 cols 27-98: fg=DarkGray bg=Reset NONE
 row 72 cols 1-11: fg=Reset bg=Reset BOLD
 row 73 cols 1-30: fg=Reset bg=Reset BOLD
 row 73 cols 48-65: fg=DarkGray bg=Reset NONE
 row 74 cols 1-30: fg=Reset bg=Reset BOLD
-row 74 cols 48-93: fg=DarkGray bg=Reset NONE
+row 74 cols 48-98: fg=DarkGray bg=Reset NONE
 row 75 cols 1-30: fg=Reset bg=Reset BOLD
 row 75 cols 48-98: fg=DarkGray bg=Reset NONE
 row 76 cols 1-30: fg=Reset bg=Reset BOLD
@@ -290,19 +290,19 @@ row 81 cols 1-30: fg=Reset bg=Reset BOLD
 row 81 cols 48-82: fg=DarkGray bg=Reset NONE
 row 83 cols 1-17: fg=Reset bg=Reset BOLD
 row 84 cols 1-9: fg=Reset bg=Reset BOLD
-row 84 cols 27-55: fg=DarkGray bg=Reset NONE
+row 84 cols 27-98: fg=DarkGray bg=Reset NONE
 row 85 cols 1-9: fg=Reset bg=Reset BOLD
-row 85 cols 27-51: fg=DarkGray bg=Reset NONE
+row 85 cols 27-98: fg=DarkGray bg=Reset NONE
 row 86 cols 1-9: fg=Reset bg=Reset BOLD
-row 86 cols 27-56: fg=DarkGray bg=Reset NONE
+row 86 cols 27-98: fg=DarkGray bg=Reset NONE
 row 87 cols 1-9: fg=Reset bg=Reset BOLD
-row 87 cols 27-58: fg=DarkGray bg=Reset NONE
+row 87 cols 27-98: fg=DarkGray bg=Reset NONE
 row 88 cols 1-9: fg=Reset bg=Reset BOLD
-row 88 cols 27-58: fg=DarkGray bg=Reset NONE
+row 88 cols 27-90: fg=DarkGray bg=Reset NONE
 row 89 cols 1-9: fg=Reset bg=Reset BOLD
-row 89 cols 27-53: fg=DarkGray bg=Reset NONE
+row 89 cols 27-84: fg=DarkGray bg=Reset NONE
 row 90 cols 1-9: fg=Reset bg=Reset BOLD
-row 90 cols 27-76: fg=DarkGray bg=Reset NONE
+row 90 cols 27-98: fg=DarkGray bg=Reset NONE
 row 91 cols 1-9: fg=Reset bg=Reset BOLD
 row 91 cols 27-68: fg=DarkGray bg=Reset NONE
 row 92 cols 1-9: fg=Reset bg=Reset BOLD
@@ -323,32 +323,34 @@ row 99 cols 1-9: fg=Reset bg=Reset BOLD
 row 99 cols 27-70: fg=DarkGray bg=Reset NONE
 row 101 cols 1-31: fg=Reset bg=Reset BOLD
 row 102 cols 1-10: fg=Reset bg=Reset BOLD
-row 102 cols 28-75: fg=DarkGray bg=Reset NONE
+row 102 cols 28-98: fg=DarkGray bg=Reset NONE
 row 103 cols 1-10: fg=Reset bg=Reset BOLD
-row 103 cols 28-73: fg=DarkGray bg=Reset NONE
+row 103 cols 28-98: fg=DarkGray bg=Reset NONE
 row 104 cols 1-10: fg=Reset bg=Reset BOLD
-row 104 cols 28-66: fg=DarkGray bg=Reset NONE
+row 104 cols 28-98: fg=DarkGray bg=Reset NONE
 row 105 cols 1-10: fg=Reset bg=Reset BOLD
-row 105 cols 28-70: fg=DarkGray bg=Reset NONE
+row 105 cols 28-98: fg=DarkGray bg=Reset NONE
 row 106 cols 1-10: fg=Reset bg=Reset BOLD
-row 106 cols 28-89: fg=DarkGray bg=Reset NONE
+row 106 cols 28-98: fg=DarkGray bg=Reset NONE
 row 107 cols 1-10: fg=Reset bg=Reset BOLD
-row 107 cols 28-91: fg=DarkGray bg=Reset NONE
+row 107 cols 28-98: fg=DarkGray bg=Reset NONE
 row 109 cols 1-33: fg=Reset bg=Reset BOLD
 row 110 cols 1-9: fg=Reset bg=Reset BOLD
 row 110 cols 27-98: fg=DarkGray bg=Reset NONE
 row 111 cols 1-9: fg=Reset bg=Reset BOLD
 row 111 cols 27-68: fg=DarkGray bg=Reset NONE
-row 113 cols 1-9: fg=Reset bg=Reset BOLD
-row 114 cols 1-13: fg=Reset bg=Reset BOLD
-row 114 cols 31-47: fg=DarkGray bg=Reset NONE
+row 112 cols 1-9: fg=Reset bg=Reset BOLD
+row 112 cols 27-98: fg=DarkGray bg=Reset NONE
+row 114 cols 1-9: fg=Reset bg=Reset BOLD
 row 115 cols 1-13: fg=Reset bg=Reset BOLD
-row 115 cols 31-66: fg=DarkGray bg=Reset NONE
+row 115 cols 31-98: fg=DarkGray bg=Reset NONE
 row 116 cols 1-13: fg=Reset bg=Reset BOLD
-row 116 cols 31-64: fg=DarkGray bg=Reset NONE
+row 116 cols 31-98: fg=DarkGray bg=Reset NONE
 row 117 cols 1-13: fg=Reset bg=Reset BOLD
-row 117 cols 31-92: fg=DarkGray bg=Reset NONE
+row 117 cols 31-98: fg=DarkGray bg=Reset NONE
 row 118 cols 1-13: fg=Reset bg=Reset BOLD
-row 118 cols 31-94: fg=DarkGray bg=Reset NONE
+row 118 cols 31-98: fg=DarkGray bg=Reset NONE
+row 119 cols 1-13: fg=Reset bg=Reset BOLD
+row 119 cols 31-98: fg=DarkGray bg=Reset NONE
 row 137 cols 1-18: fg=Reset bg=Reset DIM
 row 139 cols 0-40: fg=Reset bg=Reset DIM

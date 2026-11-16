@@ -14,18 +14,6 @@ use crate::keymap::{
     common_applies, default_keys, parse_key, Action, Context, KeyChord, Keymap, CTRL_C,
 };
 
-/// Esc on these actions backs out of something: it can never be moved or removed, so the user
-/// always has a way out.
-const CANCEL: [Action; 7] = [
-    Action::CloseHelp,
-    Action::PopupClose,
-    Action::ConfirmNo,
-    Action::FilterCancel,
-    Action::ClearFilter,
-    Action::LeaveSelect,
-    Action::LeaveComposer,
-];
-
 const ESC: KeyChord = KeyChord {
     code: KeyCode::Esc,
     mods: KeyModifiers::NONE,
@@ -33,11 +21,12 @@ const ESC: KeyChord = KeyChord {
 
 pub(crate) type Done = Result<(KeySettings, Vec<SettingEdit>), String>;
 
-/// Why `chord` may not be taken away from `action`.
+/// Why `chord` may not be taken away from `action`: Ctrl+C always quits, and Esc on `back` always
+/// backs out, so there is always a way out.
 pub(crate) fn locked(chord: KeyChord, action: Action) -> Option<&'static str> {
     if chord == CTRL_C {
         Some("Ctrl+C always quits")
-    } else if chord == ESC && CANCEL.contains(&action) {
+    } else if chord == ESC && action == Action::Back {
         Some("Esc always backs out here")
     } else {
         None
@@ -571,11 +560,11 @@ mod tests {
             Some(Action::Quit)
         );
         // The same for Esc on a cancel action.
-        let (new, edits) = bind(&map, &u, Context::Help, Action::CloseHelp, k("x")).unwrap();
-        assert_eq!(edits, vec![set("keys.help", "x", "close_help")]);
+        let (new, edits) = bind(&map, &u, Context::Help, Action::Back, k("x")).unwrap();
+        assert_eq!(edits, vec![set("keys.help", "x", "back")]);
         assert_eq!(
             keymap(&new).lookup(Context::Help, k("esc")),
-            Some(Action::CloseHelp)
+            Some(Action::Back)
         );
     }
 
@@ -587,7 +576,7 @@ mod tests {
         assert_eq!(edits, vec![set("keys.list", "r", "unbound")]);
         assert_eq!(keymap(&new).lookup(Context::List, k("r")), None);
         assert_eq!(
-            remove_first(&map, &u, Context::Help, Action::CloseHelp).unwrap_err(),
+            remove_first(&map, &u, Context::Help, Action::Back).unwrap_err(),
             "Esc always backs out here"
         );
         assert_eq!(
@@ -669,7 +658,7 @@ mod tests {
         );
         // A modal context never reads Global: no warning there.
         assert_eq!(
-            capture_add(&map, Context::Help, Action::CloseHelp, k("ctrl+f")),
+            capture_add(&map, Context::Help, Action::Back, k("ctrl+f")),
             Adding::Free
         );
         // Global the other way round: the chat list's own key wins there.
@@ -718,7 +707,7 @@ mod tests {
             "Ctrl+C always quits"
         );
         assert_eq!(
-            remove_key(&u, Context::Help, Action::CloseHelp, k("esc")).unwrap_err(),
+            remove_key(&u, Context::Help, Action::Back, k("esc")).unwrap_err(),
             "Esc always backs out here"
         );
     }

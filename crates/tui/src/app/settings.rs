@@ -1214,7 +1214,7 @@ mod tests {
         assert!(a.take_setting_edits().is_empty());
         assert_eq!(
             a.keys.lookup(Context::Composer, plain(KeyCode::Esc)),
-            Some(Action::LeaveComposer)
+            Some(Action::Back)
         );
     }
 
@@ -1232,7 +1232,7 @@ mod tests {
             value_of(&a, keys_row(Context::List, Action::Refresh)),
             "- *"
         );
-        let mut b = on_key_row(Context::Help, Action::CloseHelp);
+        let mut b = on_key_row(Context::Help, Action::Back);
         press(&mut b, KeyCode::Enter);
         press(&mut b, KeyCode::Backspace);
         let p = b.settings_page().unwrap();

@@ -7,22 +7,22 @@
 │Teams           │║Delete word back    Ctrl+W, Ctrl+Backspace                                      ║
 │WhatsApp        │║Clear line          Ctrl+U                                                      ║
 │Keys            │║Sign-in panel                                                                   ║
-│About           │║Sign in             Enter                                                       ║
+│About           │║Accept              Enter                                                       ║
 │                │║Command bar         /                                                           ║
 │                │║Quit                q                                                           ║
 │                │║Help                ?                                                           ║
 │                │║Chat list                                                                       ║
-│                │║List up             Up, k                                                       ║
-│                │║List down           Down, j                                                     ║
-│                │║List top            Home                                                        ║
-│                │║List bottom         End                                                         ║
-│                │║Open chat           Enter                                                       ║
+│                │║Up                  Up, k                                                       ║
+│                │║Down                Down, j                                                     ║
+│                │║Top                 Home                                                        ║
+│                │║Bottom              End                                                         ║
+│                │║Accept              Enter                                                       ║
 │                │║Command bar         /                                                           ║
 │                │║Refresh             press a key                                                 ║
 │                │║Quit                q                                                           ║
-│                │║Clear filter        Esc                                                         ║
-│                │║Scroll up           PgUp                                                        ║
-│                │║Scroll down         PgDn                                                        ║
+│                │║Back                Esc                                                         ║
+│                │║Page up             PgUp                                                        ║
+│                │║Page down           PgDn                                                        ║
 │                │║Help                ?                                                           ║
 │                │║Open link           u                                                           ║
 │                │║ask the network for a fresh chat list                                           ║

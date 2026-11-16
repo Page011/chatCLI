@@ -593,17 +593,17 @@ impl App {
     /// The popup keys inside the path prompt: Up and Down choose, Enter attaches, Esc cancels.
     pub(super) fn attach_action(&mut self, n: Network, action: Action) {
         match action {
-            Action::PopupUp | Action::PopupDown => {
+            Action::Up | Action::Down => {
                 if let Some(a) = self.media.attach.as_mut() {
                     let last = a.cands.len().saturating_sub(1);
-                    a.sel = if action == Action::PopupUp {
+                    a.sel = if action == Action::Up {
                         a.sel.saturating_sub(1)
                     } else {
                         (a.sel + 1).min(last)
                     };
                 }
             }
-            Action::PopupAccept => self.attach_accept(n),
+            Action::Accept => self.attach_accept(n),
             _ => self.media.attach = None,
         }
     }

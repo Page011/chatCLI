@@ -1,10 +1,10 @@
  Teams 103 LIVE   WhatsApp CONN…
 ╔ Keys - Chat list ════════════════════╗
-║List up             Up, k             ║
-║List down           Down, j           ║
-║List top            Home              ║
-║List bottom         End               ║
-║Open chat           Enter             ║
+║Up                  Up, k             ║
+║Down                Down, j           ║
+║Top                 Home              ║
+║Bottom              End               ║
+║Accept              Enter             ║
 ║Command bar         /                 ║
 ║Refresh             F5, F6, r *       ║
 ║ask the network for a fresh chat list ║

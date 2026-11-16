@@ -538,10 +538,7 @@ files_read = 3
             Path::new("settings.toml"),
         ));
         assert!(
-            report
-                .problems
-                .iter()
-                .any(|p| p.message.contains("list_down")),
+            report.problems.iter().any(|p| p.message.contains("down")),
             "{:?}",
             report.problems
         );
