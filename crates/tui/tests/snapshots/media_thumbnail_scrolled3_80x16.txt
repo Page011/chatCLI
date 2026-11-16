@@ -1,14 +1,14 @@
  chatcli  Teams 101 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ┌ Chats ───────────────────┐┌ Alex Example - scrolled, PgDn for newer ─────────┐
-│     Alex Example    09:15││09:00 Alex Example  Photos and files from the site│
-│     Alex Example: is the…││                    visit:                        │
-│99+  Project Team    08:02││09:02 Alex Example  sunset from the lab window    │
-│     Sam Sample: thanks   ││                    [image sunset.png 51 KB]      │
-│  1  Sam Sample        Sun││                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀│
-│     You: see you tomorrow││                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀│
-│     Release Planning… Fri││                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀│
-│     Jordan Placeholder: …││                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀│
-│     田中太郎 (T… 05/11/26││                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀│
+│     Alex Example    09:15││Photos and files from the site visit:             │
+│     Alex Example: is the…││sunset from the lab window                        │
+│99+  Project Team    08:02││[image sunset.png 51 KB]                          │
+│     Sam Sample: thanks   ││▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀          │
+│  1  Sam Sample        Sun││▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀          │
+│     You: see you tomorrow││▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀          │
+│     Release Planning… Fri││▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀          │
+│     Jordan Placeholder: …││▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀          │
+│     田中太郎 (T… 05/11/26││▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀          │
 │     了解しました         │└──────────────────────────────────────────────────┘
 │     Jordan Plac… 09/10/26│╔ Message ═════════════════════════════════════════╗
 │     You: thanks          │║>                                                 ║
@@ -21,37 +21,36 @@ row 0 cols 27-34: fg=Reset bg=Reset BOLD
 row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
 row 0 cols 69-79: fg=Reset bg=Reset DIM
 row 2 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
-row 2 cols 29-33: fg=DarkGray bg=Reset NONE
-row 2 cols 35-46: fg=Reset bg=Reset BOLD
 row 3 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
 row 4 cols 1-4: fg=Reset bg=Reset BOLD
 row 4 cols 6-20: fg=Reset bg=Reset BOLD
 row 4 cols 21-26: fg=DarkGray bg=Reset NONE
-row 4 cols 29-33: fg=DarkGray bg=Reset NONE
-row 4 cols 35-46: fg=Reset bg=Reset BOLD
+row 4 cols 29-52: fg=Reset bg=Reset BOLD
 row 5 cols 1-23: fg=DarkGray bg=Reset NONE
-row 5 cols 49-72: fg=Reset bg=Reset BOLD
+row 5 cols 29-33: fg=Rgb(255, 255, 255) bg=Rgb(255, 255, 255) NONE
+row 5 cols 34-48: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 5 cols 49-68: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
 row 6 cols 1-4: fg=Reset bg=Reset BOLD
 row 6 cols 6-22: fg=Reset bg=Reset BOLD
 row 6 cols 23-26: fg=DarkGray bg=Reset NONE
-row 6 cols 49-52: fg=Rgb(255, 255, 255) bg=Rgb(255, 255, 255) NONE
-row 6 cols 53-63: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
-row 6 cols 64-78: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
+row 6 cols 29-33: fg=Rgb(255, 255, 255) bg=Rgb(255, 255, 255) NONE
+row 6 cols 34-48: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 6 cols 49-68: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
 row 7 cols 1-26: fg=DarkGray bg=Reset NONE
-row 7 cols 49-52: fg=Rgb(255, 255, 255) bg=Rgb(255, 255, 255) NONE
-row 7 cols 53-63: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
-row 7 cols 64-78: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
+row 7 cols 29-33: fg=Rgb(255, 255, 255) bg=Rgb(220, 40, 40) NONE
+row 7 cols 34-48: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 7 cols 49-68: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
 row 8 cols 1-4: fg=Reset bg=Reset BOLD
 row 8 cols 23-26: fg=DarkGray bg=Reset NONE
-row 8 cols 49-63: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
-row 8 cols 64-78: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
+row 8 cols 29-48: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 8 cols 49-68: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
 row 9 cols 1-26: fg=DarkGray bg=Reset NONE
-row 9 cols 49-63: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
-row 9 cols 64-78: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
+row 9 cols 29-48: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 9 cols 49-68: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
 row 10 cols 1-4: fg=Reset bg=Reset BOLD
 row 10 cols 18-26: fg=DarkGray bg=Reset NONE
-row 10 cols 49-63: fg=Rgb(50, 80, 220) bg=Rgb(50, 80, 220) NONE
-row 10 cols 64-78: fg=Rgb(240, 200, 40) bg=Rgb(240, 200, 40) NONE
+row 10 cols 29-48: fg=Rgb(50, 80, 220) bg=Rgb(50, 80, 220) NONE
+row 10 cols 49-68: fg=Rgb(240, 200, 40) bg=Rgb(240, 200, 40) NONE
 row 11 cols 1-17: fg=DarkGray bg=Reset NONE
 row 12 cols 1-4: fg=Reset bg=Reset BOLD
 row 12 cols 18-26: fg=DarkGray bg=Reset NONE

@@ -2,21 +2,21 @@
 ┌ Chats ───────────────────┐┌ Alex Example - scrolled, PgDn for newer ─────────┐
 │     Alex Example    09:15││                 loading older...                 │
 │     Alex Example: is the…││                ---- 05/11/26 ----                │
-│99+  Project Team    08:02││14:20 Alex Example  Can you review the draft      │
-│     Sam Sample: thanks   ││                    before Friday?                │
-│  1  Sam Sample        Sun││14:31 You           Will do.                      │
-│     You: see you tomorrow││                ---- Yesterday ----               │
-│     Release Planning… Fri││16:05 Alex Example  Notes from the review: the    │
-│     Jordan Placeholder: …││                    summary page needs a shorter  │
-│     田中太郎 (T… 05/11/26││                    introduction, the figures need│
-│     了解しました         ││                    captions, and the appendix can│
-│     Jordan Plac… 09/10/26││                    move to the end of the        │
-│     You: thanks          ││                    document.                     │
+│99+  Project Team    08:02││Alex Example 14:20                                │
+│     Sam Sample: thanks   ││Can you review the draft before Friday?           │
+│  1  Sam Sample        Sun││                                                  │
+│     You: see you tomorrow││You 14:31                                         │
+│     Release Planning… Fri││Will do.                                          │
+│     Jordan Placeholder: …││                                                  │
+│     田中太郎 (T… 05/11/26││                ---- Yesterday ----               │
+│     了解しました         ││Alex Example 16:05                                │
+│     Jordan Plac… 09/10/26││Notes from the review: the summary page needs a   │
+│     You: thanks          ││shorter introduction, the figures need captions,  │
+│                          ││and the appendix can move to the end of the       │
+│                          ││document.                                         │
+│                          ││                                                  │
 │                          ││                  ---- Today ----                 │
-│                          ││08:00 You           message number 0              │
-│                          ││08:01 Alex Example  message number 1              │
-│                          ││08:02 Alex Example  message number 2              │
-│                          ││08:03 You           message number 3              │
+│                          ││You 08:00                                         │
 │                          │└──────────────────────────────────────────────────┘
 │                          │╔ Message ═════════════════════════════════════════╗
 │                          │║>                                                 ║
@@ -35,36 +35,30 @@ row 3 cols 45-62: fg=DarkGray bg=Reset NONE
 row 4 cols 1-4: fg=Reset bg=Reset BOLD
 row 4 cols 6-20: fg=Reset bg=Reset BOLD
 row 4 cols 21-26: fg=DarkGray bg=Reset NONE
-row 4 cols 29-33: fg=DarkGray bg=Reset NONE
-row 4 cols 35-46: fg=Reset bg=Reset BOLD
+row 4 cols 29-40: fg=Yellow bg=Reset BOLD
+row 4 cols 42-46: fg=DarkGray bg=Reset NONE
 row 5 cols 1-23: fg=DarkGray bg=Reset NONE
 row 6 cols 1-4: fg=Reset bg=Reset BOLD
 row 6 cols 6-22: fg=Reset bg=Reset BOLD
 row 6 cols 23-26: fg=DarkGray bg=Reset NONE
-row 6 cols 29-33: fg=DarkGray bg=Reset NONE
-row 6 cols 35-46: fg=Cyan bg=Reset BOLD
 row 7 cols 1-26: fg=DarkGray bg=Reset NONE
-row 7 cols 45-63: fg=DarkGray bg=Reset NONE
+row 7 cols 29-31: fg=Cyan bg=Reset BOLD
+row 7 cols 33-37: fg=DarkGray bg=Reset NONE
 row 8 cols 1-4: fg=Reset bg=Reset BOLD
 row 8 cols 23-26: fg=DarkGray bg=Reset NONE
-row 8 cols 29-33: fg=DarkGray bg=Reset NONE
-row 8 cols 35-46: fg=Reset bg=Reset BOLD
 row 9 cols 1-26: fg=DarkGray bg=Reset NONE
 row 10 cols 1-4: fg=Reset bg=Reset BOLD
 row 10 cols 18-26: fg=DarkGray bg=Reset NONE
+row 10 cols 45-63: fg=DarkGray bg=Reset NONE
 row 11 cols 1-17: fg=DarkGray bg=Reset NONE
+row 11 cols 29-40: fg=Yellow bg=Reset BOLD
+row 11 cols 42-46: fg=DarkGray bg=Reset NONE
 row 12 cols 1-4: fg=Reset bg=Reset BOLD
 row 12 cols 18-26: fg=DarkGray bg=Reset NONE
 row 13 cols 1-16: fg=DarkGray bg=Reset NONE
-row 14 cols 47-61: fg=DarkGray bg=Reset NONE
-row 15 cols 29-33: fg=DarkGray bg=Reset NONE
-row 15 cols 35-46: fg=Cyan bg=Reset BOLD
-row 16 cols 29-33: fg=DarkGray bg=Reset NONE
-row 16 cols 35-46: fg=Reset bg=Reset BOLD
-row 17 cols 29-33: fg=DarkGray bg=Reset NONE
-row 17 cols 35-46: fg=Reset bg=Reset BOLD
-row 18 cols 29-33: fg=DarkGray bg=Reset NONE
-row 18 cols 35-46: fg=Cyan bg=Reset BOLD
+row 17 cols 47-61: fg=DarkGray bg=Reset NONE
+row 18 cols 29-31: fg=Cyan bg=Reset BOLD
+row 18 cols 33-37: fg=DarkGray bg=Reset NONE
 row 20 cols 29-37: fg=Reset bg=Reset BOLD
 row 21 cols 29-30: fg=Reset bg=Reset BOLD
 row 23 cols 0-64: fg=Reset bg=Reset DIM

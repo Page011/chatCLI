@@ -24,12 +24,13 @@ const SECTIONS: [&str; 7] = [
     "teams",
     "whatsapp",
 ];
-const LAYOUT_KEYS: [&str; 5] = [
+const LAYOUT_KEYS: [&str; 6] = [
     "sidebar_width",
     "time_format",
     "date_order",
     "density",
     "show_previews",
+    "avatars",
 ];
 const NOTIFICATION_KEYS: [&str; 3] = ["enabled", "preview", "sound"];
 const MEDIA_KEYS: [&str; 5] = [
@@ -53,6 +54,11 @@ pub const DATE_ORDERS: [(&str, DateOrder); 3] = [
 ];
 pub const DENSITIES: [(&str, Density); 2] =
     [("cozy", Density::Cozy), ("compact", Density::Compact)];
+pub const AVATARS: [(&str, Avatars); 3] = [
+    ("groups", Avatars::Groups),
+    ("all", Avatars::All),
+    ("off", Avatars::Off),
+];
 pub const NOTIFY_PREVIEWS: [(&str, NotifyPreview); 3] = [
     ("off", NotifyPreview::Off),
     ("sender", NotifyPreview::Sender),
@@ -147,6 +153,16 @@ pub enum Density {
     Compact,
 }
 
+/// Where messages show an avatar with the sender's name above the text, Discord style.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Avatars {
+    /// Group chats only: a 1:1 chat keeps the one-line time-and-name layout.
+    #[default]
+    Groups,
+    All,
+    Off,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct LayoutSettings {
     /// None = today's width.
@@ -155,6 +171,7 @@ pub struct LayoutSettings {
     pub date_order: DateOrder,
     pub density: Density,
     pub show_previews: bool,
+    pub avatars: Avatars,
 }
 
 impl Default for LayoutSettings {
@@ -165,6 +182,7 @@ impl Default for LayoutSettings {
             date_order: DateOrder::default(),
             density: Density::default(),
             show_previews: true,
+            avatars: Avatars::default(),
         }
     }
 }
@@ -625,6 +643,7 @@ fn layout_section(t: &Table, _text: &str) -> Result<LayoutSettings, Bad> {
         date_order: choice(t, "date_order", d.date_order, &DATE_ORDERS)?,
         density: choice(t, "density", d.density, &DENSITIES)?,
         show_previews: flag(t, "show_previews", d.show_previews)?,
+        avatars: choice(t, "avatars", d.avatars, &AVATARS)?,
     })
 }
 
@@ -881,6 +900,12 @@ impl DateOrder {
 impl Density {
     pub fn to_setting(self) -> SettingValue {
         SettingValue::str(spelling(&DENSITIES, self))
+    }
+}
+
+impl Avatars {
+    pub fn to_setting(self) -> SettingValue {
+        SettingValue::str(spelling(&AVATARS, self))
     }
 }
 

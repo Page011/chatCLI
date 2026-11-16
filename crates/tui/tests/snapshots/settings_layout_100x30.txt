@@ -5,7 +5,7 @@
 │Notifications   │║Date order          dmy            dmy, mdy or ymd                              ║
 │Media           │║Density             cozy           cozy or compact                              ║
 │Teams           │║Show previews       on             last message under each chat                 ║
-│WhatsApp        │║                                                                                ║
+│WhatsApp        │║Avatars             groups         groups, all or off                           ║
 │Keys            │║                                                                                ║
 │About           │║                                                                                ║
 │                │║                                                                                ║
@@ -42,5 +42,6 @@ row 3 cols 54-98: fg=Reset bg=Reset DIM
 row 4 cols 54-98: fg=Reset bg=Reset DIM
 row 5 cols 54-98: fg=Reset bg=Reset DIM
 row 6 cols 54-98: fg=Reset bg=Reset DIM
+row 7 cols 54-98: fg=Reset bg=Reset DIM
 row 27 cols 19-49: fg=Reset bg=Reset DIM
 row 29 cols 0-76: fg=Reset bg=Reset DIM

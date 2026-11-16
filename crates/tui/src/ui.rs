@@ -3,7 +3,7 @@
 //! text or shape signal (status words, reverse video, double border on the focused pane).
 
 use chatcli_core::model::{ChatMessage, MessageState, Network, Status};
-use chatcli_core::settings::SidebarWidth;
+use chatcli_core::settings::{Avatars, SidebarWidth};
 use qrcode::{Color as QrColor, EcLevel, QrCode};
 use ratatui::layout::{Alignment, Margin, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -31,6 +31,15 @@ const MIN_W: u16 = 30;
 const MIN_H: u16 = 8;
 const BRAND: &str = " chatcli ";
 const SENDER_MAX: usize = 14;
+
+/// Avatar size in cells: 4 by 2 is about square in a terminal font.
+const AVATAR_W: usize = 4;
+/// Columns between the avatar and the name and text.
+const AVATAR_GAP: usize = 2;
+/// Messages from the same person this close together share one name row and avatar.
+const GROUP_MS: i64 = 5 * 60 * 1000;
+/// Narrower than this, the avatar layout leaves too little room for text.
+const AVATAR_MIN_WIDTH: usize = 24;
 const QR_HELP: &str = "Linked devices (Android: menu, iPhone: Settings) > Link a device";
 /// Modules of white border around the QR code (the QR standard asks for 4).
 const QUIET: usize = 4;
@@ -48,6 +57,8 @@ pub(crate) struct Look<'a> {
     pub theme: &'a Theme,
     pub clock: &'a Clock,
     pub fmt: Fmt,
+    /// Where messages get an avatar and a name row (`[layout] avatars`).
+    pub avatars: Avatars,
 }
 
 /// Smallest terminal height whose body is `body` rows tall: header, the key-hint row and one
@@ -1389,6 +1400,16 @@ pub(crate) fn message_layout(
             m.sender.clone()
         }
     };
+    // Name rows: the name and time on a row of their own with the text underneath (every chat
+    // unless `avatars = "off"`, which keeps the one-line layout). Avatars beside them: group
+    // chats, or every chat with `all`, when there is room.
+    let name_rows = look.avatars != Avatars::Off;
+    let avatars = width >= AVATAR_MIN_WIDTH
+        && match look.avatars {
+            Avatars::All => true,
+            Avatars::Groups => ns.open_is_group(),
+            Avatars::Off => false,
+        };
     let sender_w = msgs
         .iter()
         .map(|m| sw(&label(m)))
@@ -1396,7 +1417,13 @@ pub(crate) fn message_layout(
         .unwrap_or(0)
         .min(SENDER_MAX)
         .min(width.saturating_sub(fmt.time_width() + 10));
-    let indent_w = fmt.time_width() + 1 + sender_w + 2;
+    let indent_w = if avatars {
+        AVATAR_W + AVATAR_GAP
+    } else if name_rows {
+        0
+    } else {
+        fmt.time_width() + 1 + sender_w + 2
+    };
     let text_w = width.saturating_sub(indent_w).max(1);
     let chat_id = ns.open.as_deref();
     let selected = if ns.focus == Focus::Select {
@@ -1420,13 +1447,29 @@ pub(crate) fn message_layout(
     }
     let mut spans: Vec<MsgSpan> = Vec::new();
     let mut last_day = None;
+    let mut prev: Option<&ChatMessage> = None;
     for m in msgs {
         let day = clock.day(m.ts);
-        if day != last_day || spans.is_empty() {
+        let new_day = day != last_day || spans.is_empty();
+        if new_day {
             last_day = day;
+            // Room above the day line, as between people.
+            if name_rows && !spans.is_empty() {
+                lines.push(Line::default());
+            }
             let sep = format!("---- {} ----", clock.day_label_f(m.ts, fmt));
             lines.push(Line::from(Span::styled(sep, t.dim)).alignment(Alignment::Center));
         }
+        // Avatar layout: a run of messages from one person shares one name row and avatar, and
+        // a blank row sets each run apart. A reply starts a run, so its quote sits under a name.
+        let starts_run = name_rows
+            && (new_day
+                || m.reply_to.is_some()
+                || prev.is_none_or(|p| person_key(p) != person_key(m) || m.ts - p.ts > GROUP_MS));
+        if starts_run && !new_day {
+            lines.push(Line::default());
+        }
+        prev = Some(m);
         let first_line = lines.len();
         let deleted = matches!(m.state, MessageState::Deleted);
         // Attachments are drawn as chips, so the backends' `[image]` markers leave the text.
@@ -1443,10 +1486,37 @@ pub(crate) fn message_layout(
             _ => (shown, t.text),
         };
         let who_style = if m.from_me { t.own_name } else { bold() };
+        let mut rows: Vec<Vec<Span<'static>>> = Vec::new();
+        // Avatar layout: name (in the person's colour) and time on a row of their own, the
+        // avatar's top half beside them and its bottom half beside the first row of text.
+        let name_style = if m.from_me {
+            t.own_name
+        } else {
+            t.person(&person_key(m))
+        };
+        let (av_top, av_bottom) = avatar_cells(&label(m), name_style);
+        let mut av_pending = starts_run && avatars;
+        if starts_run {
+            let time = clock.hm_f(m.ts, fmt);
+            let name_w = text_w.saturating_sub(sw(&time) + 1).max(1);
+            let mut row = if avatars {
+                vec![av_top, Span::raw(" ".repeat(AVATAR_GAP))]
+            } else {
+                Vec::new()
+            };
+            row.extend([
+                Span::styled(truncate(&label(m), name_w), name_style),
+                Span::raw(" "),
+                Span::styled(time, t.dim),
+            ]);
+            rows.push(row);
+        }
         // Time and sender go on the first row of the message, whatever that row is.
-        let mut need_lead = true;
-        let lead = |need: &mut bool| -> Vec<Span<'static>> {
-            if std::mem::take(need) {
+        let mut need_lead = !name_rows;
+        let lead = |need: &mut bool, av: &mut bool| -> Vec<Span<'static>> {
+            if std::mem::take(av) {
+                vec![av_bottom.clone(), Span::raw(" ".repeat(AVATAR_GAP))]
+            } else if std::mem::take(need) {
                 vec![
                     Span::styled(clock.hm_f(m.ts, fmt), t.dim),
                     Span::raw(" "),
@@ -1457,7 +1527,6 @@ pub(crate) fn message_layout(
                 vec![Span::raw(" ".repeat(indent_w))]
             }
         };
-        let mut rows: Vec<Vec<Span<'static>>> = Vec::new();
         // A reply shows what it quotes, dimmed, on one line above the body.
         if let Some(q) = &m.reply_to {
             let who = if q.sender.is_empty() {
@@ -1470,7 +1539,7 @@ pub(crate) fn message_layout(
             } else {
                 &q.preview
             };
-            let mut row = lead(&mut need_lead);
+            let mut row = lead(&mut need_lead, &mut av_pending);
             row.push(Span::styled(
                 truncate(&format!("> {who}: {what}"), text_w),
                 t.dim,
@@ -1499,7 +1568,7 @@ pub(crate) fn message_layout(
         // A message that is only attachments has no body line: the chips carry the time and name.
         if !(body.trim().is_empty() && !m.attachments.is_empty()) {
             for pieces in wrap_pieces(&body, text_w) {
-                let mut row = lead(&mut need_lead);
+                let mut row = lead(&mut need_lead, &mut av_pending);
                 row.extend(piece_spans(&pieces, &marks, body_style));
                 rows.push(row);
             }
@@ -1510,7 +1579,7 @@ pub(crate) fn message_layout(
         for (idx, a) in m.attachments.iter().enumerate() {
             let item = chat_id.and_then(|c| ns.media.get(c, &m.id, idx as u32));
             let label = chip_label(a);
-            let mut row = lead(&mut need_lead);
+            let mut row = lead(&mut need_lead, &mut av_pending);
             match item.and_then(MediaState::status_text) {
                 // The state shares the chip's row when it fits, else it gets rows of its own: a
                 // reason cut off ("FAILED: MEDIA EXP...") is no reason.
@@ -1626,6 +1695,61 @@ pub(crate) fn message_layout(
     (lines, spans)
 }
 
+/// Who sent a message, for grouping and name colours: their network id when known. `:me` can
+/// not clash with a real id (Teams ids are GUIDs, WhatsApp ids have an `@`).
+fn person_key(m: &ChatMessage) -> String {
+    if m.from_me {
+        ":me".to_string()
+    } else if m.sender_id.is_empty() {
+        m.sender.clone()
+    } else {
+        m.sender_id.clone()
+    }
+}
+
+/// A person's initials (`Alex Example` -> `AE`, a phone number -> `#`), at most two.
+fn initials(name: &str) -> String {
+    let words: Vec<&str> = name.split_whitespace().collect();
+    let first = |w: &str| w.chars().next();
+    let picked: Vec<char> = match words.as_slice() {
+        [] => Vec::new(),
+        [w] => first(w).into_iter().collect(),
+        [a, .., b] => first(a).into_iter().chain(first(b)).collect(),
+    };
+    if picked.first().is_some_and(|c| !c.is_alphabetic()) {
+        return "#".to_string();
+    }
+    picked.into_iter().flat_map(char::to_uppercase).collect()
+}
+
+/// The two rows of an initials avatar: a block in the person's colour (reverse video when there
+/// is no colour), the initials centred on the top row.
+fn avatar_cells(name: &str, person: Style) -> (Span<'static>, Span<'static>) {
+    let style = match person.fg {
+        Some(c) => Style::new()
+            .bg(c)
+            .fg(Color::Black)
+            .add_modifier(Modifier::BOLD),
+        None => Style::new().add_modifier(Modifier::REVERSED | Modifier::BOLD),
+    };
+    let ini = initials(name);
+    let ini = if sw(&ini) > AVATAR_W {
+        String::new()
+    } else {
+        ini
+    };
+    let left = (AVATAR_W - sw(&ini)) / 2;
+    let top = format!(
+        "{}{ini}{}",
+        " ".repeat(left),
+        " ".repeat(AVATAR_W - sw(&ini) - left)
+    );
+    (
+        Span::styled(top, style),
+        Span::styled(" ".repeat(AVATAR_W), style),
+    )
+}
+
 /// The spans of one wrapped line: words joined by one space, the parts that lie inside a mark
 /// (`marks` are byte ranges in the wrapped text) drawn with the mark's modifier.
 fn piece_spans(
@@ -1716,7 +1840,17 @@ fn draw_convo(f: &mut Frame, app: &App, lay: &Layout) {
     let height = lay.messages.height as usize;
     let end = lines.len() - ns.scroll.min(lines.len().saturating_sub(height));
     let start = end.saturating_sub(height);
-    f.render_widget(Paragraph::new(lines[start..end].to_vec()), lay.messages);
+    f.render_widget(
+        Paragraph::new(lines[start..end].to_vec()),
+        bottom_anchored(lay.messages, end - start),
+    );
+}
+
+/// The bottom `rows` rows of the message area: a short conversation sits next to the message
+/// box, as in other chat apps, instead of under the title.
+fn bottom_anchored(area: Rect, rows: usize) -> Rect {
+    let rows = (rows as u16).min(area.height);
+    Rect::new(area.x, area.y + area.height - rows, area.width, rows)
 }
 
 /// A thumbnail that is wholly on screen: where, and the cached file it comes from. The terminal
@@ -1742,6 +1876,7 @@ pub(crate) fn visible_images(app: &App, lay: &Layout) -> Vec<VisibleImage> {
     let height = lay.messages.height as usize;
     let end = lines.len() - ns.scroll.min(lines.len().saturating_sub(height));
     let start = end.saturating_sub(height);
+    let area = bottom_anchored(lay.messages, end - start);
     let mut out = Vec::new();
     for slot in spans.iter().flat_map(|s| &s.images) {
         if slot.line < start || slot.line + slot.rows > end || slot.cols == 0 {
@@ -1754,8 +1889,8 @@ pub(crate) fn visible_images(app: &App, lay: &Layout) -> Vec<VisibleImage> {
         out.push(VisibleImage {
             path,
             rect: Rect::new(
-                lay.messages.x + slot.indent as u16,
-                lay.messages.y + (slot.line - start) as u16,
+                area.x + slot.indent as u16,
+                area.y + (slot.line - start) as u16,
                 slot.cols as u16,
                 slot.rows as u16,
             )
@@ -2690,6 +2825,42 @@ fn draw_search(f: &mut Frame, app: &App, body: Rect) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn initials_and_avatars() {
+        assert_eq!(initials("Alex Example"), "AE");
+        assert_eq!(initials("Sam"), "S");
+        assert_eq!(initials("Jordan de la Placeholder"), "JP");
+        assert_eq!(initials("007 Agent"), "#");
+        assert_eq!(initials("田中太郎"), "田");
+        assert_eq!(initials("  "), "");
+        let (top, bottom) = avatar_cells("Alex Example", Style::new().fg(Color::Green));
+        assert_eq!(
+            (top.content.as_ref(), bottom.content.as_ref()),
+            (" AE ", "    ")
+        );
+        assert_eq!(top.style.bg, Some(Color::Green));
+        let (top, _) = avatar_cells("田中太郎", Style::new());
+        assert_eq!(top.content.as_ref(), " 田 ");
+        assert!(
+            top.style.add_modifier.contains(Modifier::REVERSED),
+            "no colour: reverse video"
+        );
+    }
+
+    #[test]
+    fn a_person_keeps_one_colour() {
+        let t = Theme::default();
+        assert_eq!(t.person("u1"), t.person("u1"));
+        let picked: std::collections::HashSet<_> =
+            (0..40).map(|i| t.person(&format!("user-{i}")).fg).collect();
+        assert!(
+            picked.len() >= 6,
+            "names spread over the colours: {picked:?}"
+        );
+        assert!(!picked.contains(&Some(Color::Red)), "red is for errors");
+        assert_eq!(t.clone().without_colour().person("u1"), bold());
+    }
 
     #[test]
     fn the_network_goes_after_the_uppercase_key_word() {

@@ -1,22 +1,22 @@
  chatcli  Teams 101 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ┌ Chats ───────────────────┐┌ Alex Example ────────────────────────────────────┐
-│     Alex Example    09:15││                ---- 05/11/26 ----                │
-│     Alex Example: is the…││14:20 Alex Example  Can you review the draft      │
-│99+  Project Team    08:02││                    before Friday?                │
+│     Alex Example    09:15││                                                  │
+│     Alex Example: is the…││You 14:31                                         │
+│99+  Project Team    08:02││Will do.                                          │
 │     Sam Sample: thank ╔ Emoji ═══════════════════════╗                       │
 │  1  Sam Sample        ║Search results                ║ ay ----               │
-│     You: see you tomo ║/heartzzzz                    ║ om the review: the    │
-│     Release Planning… ║                              ║ page needs a shorter  │
-│     Jordan Placeholde ║                              ║ tion, the figures need│
-│     田中太郎 (T… 05/1 ║        No emoji match        ║ , and the appendix can│
-│     了解しました      ║                              ║ the end of the        │
-│     Jordan Plac… 09/1 ║                              ║ .                     │
+│     You: see you tomo ║/heartzzzz                    ║                       │
+│     Release Planning… ║                              ║ ummary page needs a   │
+│     Jordan Placeholde ║                              ║ gures need captions,  │
+│     田中太郎 (T… 05/1 ║        No emoji match        ║  the end of the       │
+│     了解しました      ║                              ║                       │
+│     Jordan Plac… 09/1 ║                              ║                       │
 │     You: thanks       ║                              ║  ----                 │
-│                       ║                              ║ uild done? 🚀         │
-│                       ║                              ║ うですか              │
-│                       ║Esc close                     ║ pped                  │
+│                       ║                              ║                       │
+│                       ║                              ║ どうですか            │
+│                       ║Esc close                     ║                       │
 │                       ╚══════════════════════════════╝                       │
-│                          ││                                                  │
+│                          ││yes, shipped                                      │
 │                          │└──────────────────────────────────────────────────┘
 │                          │╔ Message ═════════════════════════════════════════╗
 │                          │║>                                                 ║
@@ -29,10 +29,9 @@ row 0 cols 27-34: fg=Reset bg=Reset BOLD
 row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
 row 0 cols 69-79: fg=Reset bg=Reset DIM
 row 2 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
-row 2 cols 45-62: fg=DarkGray bg=Reset NONE
 row 3 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
-row 3 cols 29-33: fg=DarkGray bg=Reset NONE
-row 3 cols 35-46: fg=Reset bg=Reset BOLD
+row 3 cols 29-31: fg=Cyan bg=Reset BOLD
+row 3 cols 33-37: fg=DarkGray bg=Reset NONE
 row 4 cols 1-4: fg=Reset bg=Reset BOLD
 row 4 cols 6-20: fg=Reset bg=Reset BOLD
 row 4 cols 21-26: fg=DarkGray bg=Reset NONE

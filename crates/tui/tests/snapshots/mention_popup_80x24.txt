@@ -1,7 +1,7 @@
  chatcli  Teams 3 LIVE   WhatsApp CONNECTING                         Ctrl+C quit
 ┌ Chats ───────────────────┐┌ Project Team ────────────────────────────────────┐
-│  2  Alex Example    09:15││                  ---- Today ----                 │
-│     Alex Example: is the…││08:02 Sam Sample  thanks, see you at the meeting  │
+│  2  Alex Example    09:15││                                                  │
+│     Alex Example: is the…││                                                  │
 │     Project Team    08:02││                                                  │
 │     Sam Sample: thanks   ││                                                  │
 │  1  Sam Sample        Sun││                                                  │
@@ -31,10 +31,7 @@ row 0 cols 69-79: fg=Reset bg=Reset DIM
 row 2 cols 1-4: fg=Reset bg=Reset BOLD
 row 2 cols 6-20: fg=Reset bg=Reset BOLD
 row 2 cols 21-26: fg=DarkGray bg=Reset NONE
-row 2 cols 47-61: fg=DarkGray bg=Reset NONE
 row 3 cols 1-26: fg=DarkGray bg=Reset NONE
-row 3 cols 29-33: fg=DarkGray bg=Reset NONE
-row 3 cols 35-44: fg=Reset bg=Reset BOLD
 row 4 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
 row 5 cols 1-23: fg=Reset bg=Reset BOLD | UNDERLINED
 row 6 cols 1-4: fg=Reset bg=Reset BOLD

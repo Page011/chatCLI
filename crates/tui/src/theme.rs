@@ -241,7 +241,32 @@ pub struct Theme {
     pub network_whatsapp: Style,
     /// Panel outlines and backgrounds, in `Panel` order (the palette plus per-panel keys).
     pub panels: [PanelLook; 6],
+    /// Name colours in group chats: each person keeps one, picked from their id. Empty under
+    /// NO_COLOR, where names are bold only.
+    pub people: &'static [Color],
 }
+
+/// Name colours for a dark terminal: no red (errors) and no cyan of either shade (your own
+/// name).
+const PEOPLE_DARK: [Color; 7] = [
+    Color::Green,
+    Color::Yellow,
+    Color::LightBlue,
+    Color::Magenta,
+    Color::LightGreen,
+    Color::LightYellow,
+    Color::LightMagenta,
+];
+
+/// Name colours for a light terminal: no yellow, which washes out on white.
+const PEOPLE_LIGHT: [Color; 6] = [
+    Color::Blue,
+    Color::Green,
+    Color::Magenta,
+    Color::LightBlue,
+    Color::LightMagenta,
+    Color::DarkGray,
+];
 
 fn fg(c: Color) -> Style {
     Style::new().fg(c)
@@ -275,6 +300,7 @@ impl Default for Theme {
             network_teams: Style::new(),
             network_whatsapp: Style::new(),
             panels: palette_looks("lines", false).expect("lines is built in"),
+            people: &PEOPLE_DARK,
         }
     }
 }
@@ -301,6 +327,7 @@ impl Theme {
             },
             // For a light terminal: no yellow or cyan, which wash out on white.
             "light" => Theme {
+                people: &PEOPLE_LIGHT,
                 accent: fg(Color::Blue),
                 own_name: fg(Color::Blue).patch(bold()),
                 warn: fg(Color::Magenta),
@@ -367,6 +394,18 @@ impl Theme {
         self.panels[p.index()]
     }
 
+    /// One person's name colour, bold, the same every time for the same `key` (their id).
+    pub fn person(&self, key: &str) -> Style {
+        // FNV-1a: stable across runs and builds, unlike the std hasher.
+        let h = key.bytes().fold(0x811c_9dc5_u32, |h, b| {
+            (h ^ u32::from(b)).wrapping_mul(0x0100_0193)
+        });
+        match self.people.len() {
+            0 => bold(),
+            n => fg(self.people[h as usize % n]).patch(bold()),
+        }
+    }
+
     /// `NO_COLOR`: every foreground and background goes. Roles that were only a colour keep a
     /// signal as an attribute: secondary text dims, errors and warnings go bold. A panel that
     /// was told apart by its shade alone gets a line instead.
@@ -387,6 +426,7 @@ impl Theme {
             p.bg = None;
             p.focus_bg = None;
         }
+        self.people = &[];
         self.dim = self.dim.add_modifier(Modifier::DIM);
         self.error = self.error.add_modifier(Modifier::BOLD);
         self.warn = self.warn.add_modifier(Modifier::BOLD);

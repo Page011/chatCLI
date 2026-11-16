@@ -1,18 +1,18 @@
  chatcli  Teams 101 LIVE   WhatsApp CONNECTING   Ctrl+C quit
 ┌ Chats ───────────────────┐┌ Alex Example ────────────────┐
-│     Alex Example    09:15││                    appendix  │
-│     Alex Ex ╔ Emoji ═══════════════════════╗   can move  │
-│99+  Project ║< Faces 2/10 >                ║   to the end│
-│     Sam Sam ║/type to search               ║   of the    │
-│  1  Sam Sam ║😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 ║   document. │
-│     You: se ║🫠 🫫 😉 😊 😇 🥰 😍 🤩 😘 😗 ║  ----       │
-│     Release ║☺️ 😚 😙 🥲 😋 😛 😜 🤪 😝 🤑 ║   is the    │
-│     Jordan  ║🤗 🤭 🫢 🫣 🤫 🤔 🫡 🤐 🤨 😐 ║   build     │
-│     田中太郎║😑 😶 🫥 😶‍🌫️ 😏 😒 🙄 😬 😮‍💨 🤥 ║   done? 🚀  │
-│     了解しま║🫨 🙂‍↔️ 🙂‍↕️ 😌 😔 😪 🤤 😴 🫩 😷 ║   今日はどう│
-│     Jordan  ║🤒 🤕 🤢 🤮 🤧 🥵 🥶 🥴 😵 😵‍💫 ║   ですか    │
-│     You: th ║🤯 🤠 🥳 🥸 😎 🤓 🧐 😕 🫤 😟 ║   yes,      │
-│             ║grinning face :grinning:      ║   shipped   │
+│     Alex Example    09:15││summary page needs a shorter  │
+│     Alex Ex ╔ Emoji ═══════════════════════╗ figures need│
+│99+  Project ║< Faces 2/10 >                ║ appendix can│
+│     Sam Sam ║/type to search               ║  the        │
+│  1  Sam Sam ║😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 ║             │
+│     You: se ║🫠 🫫 😉 😊 😇 🥰 😍 🤩 😘 😗 ║             │
+│     Release ║☺️ 😚 😙 🥲 😋 😛 😜 🤪 😝 🤑 ║  ----       │
+│     Jordan  ║🤗 🤭 🫢 🫣 🤫 🤔 🫡 🤐 🤨 😐 ║             │
+│     田中太郎║😑 😶 🫥 😶‍🌫️ 😏 😒 🙄 😬 😮‍💨 🤥 ║  🚀         │
+│     了解しま║🫨 🙂‍↔️ 🙂‍↕️ 😌 😔 😪 🤤 😴 🫩 😷 ║             │
+│     Jordan  ║🤒 🤕 🤢 🤮 🤧 🥵 🥶 🥴 😵 😵‍💫 ║             │
+│     You: th ║🤯 🤠 🥳 🥸 😎 🤓 🧐 😕 🫤 😟 ║             │
+│             ║grinning face :grinning:      ║             │
 │             ╚══════════════════════════════╝ ────────────┘
 │                          │╔ Message ═════════════════════╗
 │                          │║> hi                          ║
@@ -37,8 +37,8 @@ row 6 cols 1-4: fg=Reset bg=Reset BOLD
 row 6 cols 6-12: fg=Reset bg=Reset BOLD
 row 6 cols 15-16: fg=Reset bg=Reset BOLD | REVERSED
 row 7 cols 1-12: fg=DarkGray bg=Reset NONE
-row 7 cols 47-51: fg=DarkGray bg=Reset NONE
 row 8 cols 1-4: fg=Reset bg=Reset BOLD
+row 8 cols 47-51: fg=DarkGray bg=Reset NONE
 row 9 cols 1-12: fg=DarkGray bg=Reset NONE
 row 10 cols 1-4: fg=Reset bg=Reset BOLD
 row 11 cols 1-13: fg=DarkGray bg=Reset NONE

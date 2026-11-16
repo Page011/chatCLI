@@ -1,28 +1,28 @@
  chatcli  Teams 101 LIVE   WhatsApp SIGN-IN NEEDED                                       Ctrl+C quit
 ┌ Chats ───────────┐┌ Alex Example ────────────────────────────────────────────────────────────────┐
 │     Alex E… 09:15││                              ---- 05/11/26 ----                              │
-│     Alex Example…││14:20 Alex Example  Can you review the draft before Friday?                   │
-│99+  Projec… 08:02││14:31 You           Will do.                                                  │
-│     Sam Sample: …││                              ---- Yesterday ----                             │
-│  1  Sam Samp… Sun││16:05 Alex Example  Notes from the review: the summary page needs a shorter   │
-│     You: see you…││                    introduction, the figures need captions, and the appendix │
-│     Release … Fri││                    can move to the end of the document.                      │
-│     Jordan Place…││                                ---- Today ----                               │
-│     田…  05/11/26││09:10 Alex Example  is the build done? 🚀 今日はどうですか                    │
-│     了解しました ││09:15 You           yes, shipped                                              │
-│     Jor… 09/10/26││09:30 You           on it, will confirm shortly [sending]                     │
-│     You: thanks  ││09:30 You           this one will fail                                        │
-│                  ││                    NOT SENT - demo: this chat refuses messages               │
+│     Alex Example…││Alex Example 14:20                                                            │
+│99+  Projec… 08:02││Can you review the draft before Friday?                                       │
+│     Sam Sample: …││                                                                              │
+│  1  Sam Samp… Sun││You 14:31                                                                     │
+│     You: see you…││Will do.                                                                      │
+│     Release … Fri││                                                                              │
+│     Jordan Place…││                              ---- Yesterday ----                             │
+│     田…  05/11/26││Alex Example 16:05                                                            │
+│     了解しました ││Notes from the review: the summary page needs a shorter introduction, the     │
+│     Jor… 09/10/26││figures need captions, and the appendix can move to the end of the document.  │
+│     You: thanks  ││                                                                              │
+│                  ││                                ---- Today ----                               │
+│                  ││Alex Example 09:10                                                            │
+│                  ││is the build done? 🚀 今日はどうですか                                        │
 │                  ││                                                                              │
+│                  ││You 09:15                                                                     │
+│                  ││yes, shipped                                                                  │
 │                  ││                                                                              │
-│                  ││                                                                              │
-│                  ││                                                                              │
-│                  ││                                                                              │
-│                  ││                                                                              │
-│                  ││                                                                              │
-│                  ││                                                                              │
-│                  ││                                                                              │
-│                  ││                                                                              │
+│                  ││You 09:30                                                                     │
+│                  ││on it, will confirm shortly [sending]                                         │
+│                  ││this one will fail                                                            │
+│                  ││NOT SENT - demo: this chat refuses messages                                   │
 │                  │└──────────────────────────────────────────────────────────────────────────────┘
 │                  │╔ Message ═════════════════════════════════════════════════════════════════════╗
 │                  │║> typing a draft                                                              ║
@@ -37,42 +37,40 @@ row 0 cols 89-99: fg=Reset bg=Reset DIM
 row 2 cols 1-18: fg=Reset bg=Reset BOLD | UNDERLINED
 row 2 cols 51-68: fg=DarkGray bg=Reset NONE
 row 3 cols 1-18: fg=Reset bg=Reset BOLD | UNDERLINED
-row 3 cols 21-25: fg=DarkGray bg=Reset NONE
-row 3 cols 27-38: fg=Reset bg=Reset BOLD
+row 3 cols 21-32: fg=Yellow bg=Reset BOLD
+row 3 cols 34-38: fg=DarkGray bg=Reset NONE
 row 4 cols 1-4: fg=Reset bg=Reset BOLD
 row 4 cols 6-12: fg=Reset bg=Reset BOLD
 row 4 cols 13-18: fg=DarkGray bg=Reset NONE
-row 4 cols 21-25: fg=DarkGray bg=Reset NONE
-row 4 cols 27-38: fg=Cyan bg=Reset BOLD
 row 5 cols 1-18: fg=DarkGray bg=Reset NONE
-row 5 cols 51-69: fg=DarkGray bg=Reset NONE
 row 6 cols 1-4: fg=Reset bg=Reset BOLD
 row 6 cols 6-14: fg=Reset bg=Reset BOLD
 row 6 cols 15-18: fg=DarkGray bg=Reset NONE
-row 6 cols 21-25: fg=DarkGray bg=Reset NONE
-row 6 cols 27-38: fg=Reset bg=Reset BOLD
+row 6 cols 21-23: fg=Cyan bg=Reset BOLD
+row 6 cols 25-29: fg=DarkGray bg=Reset NONE
 row 7 cols 1-18: fg=DarkGray bg=Reset NONE
 row 8 cols 1-4: fg=Reset bg=Reset BOLD
 row 8 cols 15-18: fg=DarkGray bg=Reset NONE
 row 9 cols 1-18: fg=DarkGray bg=Reset NONE
-row 9 cols 53-67: fg=DarkGray bg=Reset NONE
+row 9 cols 51-69: fg=DarkGray bg=Reset NONE
 row 10 cols 1-4: fg=Reset bg=Reset BOLD
 row 10 cols 10-18: fg=DarkGray bg=Reset NONE
-row 10 cols 21-25: fg=DarkGray bg=Reset NONE
-row 10 cols 27-38: fg=Reset bg=Reset BOLD
+row 10 cols 21-32: fg=Yellow bg=Reset BOLD
+row 10 cols 34-38: fg=DarkGray bg=Reset NONE
 row 11 cols 1-17: fg=DarkGray bg=Reset NONE
-row 11 cols 21-25: fg=DarkGray bg=Reset NONE
-row 11 cols 27-38: fg=Cyan bg=Reset BOLD
 row 12 cols 1-4: fg=Reset bg=Reset BOLD
 row 12 cols 10-18: fg=DarkGray bg=Reset NONE
-row 12 cols 21-25: fg=DarkGray bg=Reset NONE
-row 12 cols 27-38: fg=Cyan bg=Reset BOLD
-row 12 cols 68-77: fg=DarkGray bg=Reset NONE
 row 13 cols 1-16: fg=DarkGray bg=Reset NONE
-row 13 cols 21-25: fg=DarkGray bg=Reset NONE
-row 13 cols 27-38: fg=Cyan bg=Reset BOLD
-row 13 cols 41-58: fg=Red bg=Reset NONE
-row 14 cols 41-83: fg=Red bg=Reset BOLD
+row 14 cols 53-67: fg=DarkGray bg=Reset NONE
+row 15 cols 21-32: fg=Yellow bg=Reset BOLD
+row 15 cols 34-38: fg=DarkGray bg=Reset NONE
+row 18 cols 21-23: fg=Cyan bg=Reset BOLD
+row 18 cols 25-29: fg=DarkGray bg=Reset NONE
+row 21 cols 21-23: fg=Cyan bg=Reset BOLD
+row 21 cols 25-29: fg=DarkGray bg=Reset NONE
+row 22 cols 48-57: fg=DarkGray bg=Reset NONE
+row 23 cols 21-38: fg=Red bg=Reset NONE
+row 24 cols 21-63: fg=Red bg=Reset BOLD
 row 26 cols 21-29: fg=Reset bg=Reset BOLD
 row 27 cols 21-22: fg=Reset bg=Reset BOLD
 row 29 cols 0-97: fg=Reset bg=Reset DIM

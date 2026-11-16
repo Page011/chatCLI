@@ -38,6 +38,7 @@ impl App {
             theme: &self.theme,
             clock: &self.clock,
             fmt: self.fmt,
+            avatars: self.layout.avatars,
         }
     }
 
@@ -924,10 +925,13 @@ mod tests {
         seen.sort_unstable();
         seen.dedup();
         assert_eq!(seen.len(), 90);
-        // Every message that was on screen stays on the same row. Only the two rows above them
-        // changed: the note, and the day separator that the older page's own separator replaces.
+        // Every message that was on screen stays on the same row. Only the rows above them
+        // changed: the note, the day separator that the older page's own separator replaces,
+        // and the name row of the oldest held message, which now continues the older page's
+        // run from the same person.
         let after = visible_text(&app);
-        assert_eq!(&after[2..], &loading[2..], "no jump");
+        assert_eq!(loading[2], "Alex Example 02:46", "{loading:?}");
+        assert_eq!(&after[3..], &loading[3..], "no jump");
         assert_eq!(app.ns(Network::Teams).older["a"], Older::Idle);
 
         // Scroll to the top again: the second page is asked for from the new oldest message.

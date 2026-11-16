@@ -3,8 +3,8 @@
 //! `App` applies the settings at once and queues the edits for the run loop to save.
 
 use chatcli_core::settings::{
-    DateOrder, Density, ImageProtocol, NotifyPreview, SettingEdit, SettingValue, Settings,
-    SidebarWidth, TimeFormat, DATE_ORDERS, DENSITIES, IMAGE_PROTOCOLS, NOTIFY_PREVIEWS,
+    Avatars, DateOrder, Density, ImageProtocol, NotifyPreview, SettingEdit, SettingValue, Settings,
+    SidebarWidth, TimeFormat, AVATARS, DATE_ORDERS, DENSITIES, IMAGE_PROTOCOLS, NOTIFY_PREVIEWS,
     TIME_FORMATS,
 };
 
@@ -138,6 +138,7 @@ pub(crate) enum RowId {
     DateOrder,
     Density,
     ShowPreviews,
+    Avatars,
     NotifEnabled,
     NotifPreview,
     NotifSound,
@@ -543,6 +544,13 @@ pub(crate) fn rows(
                 "last message under each chat",
                 l.show_previews != d.layout.show_previews,
             ));
+            out.push(row(
+                RowId::Avatars,
+                "Avatars",
+                name_of(&AVATARS, l.avatars),
+                "groups, all or off",
+                l.avatars != d.layout.avatars,
+            ));
         }
         Section::Notifications => {
             let n = &s.notifications;
@@ -941,6 +949,11 @@ pub(crate) fn change(s: &Settings, id: RowId, c: Change) -> Done {
             n.layout.density = v;
             one(n, mk("layout", "density", reset, v.to_setting()))
         }
+        RowId::Avatars => {
+            let v = choice(&AVATARS, s.layout.avatars, Avatars::default(), &c)?;
+            n.layout.avatars = v;
+            one(n, mk("layout", "avatars", reset, v.to_setting()))
+        }
         RowId::ShowPreviews => {
             let v = flip(s.layout.show_previews, d.layout.show_previews, &c)?;
             n.layout.show_previews = v;
@@ -1122,7 +1135,7 @@ mod tests {
     #[test]
     fn every_selectable_row_survives_every_change() {
         let ids = all_ids();
-        assert_eq!(ids.len(), 19 + 1 + 4 + 6 + ROLES.len());
+        assert_eq!(ids.len(), 20 + 1 + 4 + 6 + ROLES.len());
         for id in ids {
             for c in [Change::Prev, Change::Next, Change::Toggle, Change::Reset] {
                 let (_, edits) = run(&Settings::default(), id, c.clone());

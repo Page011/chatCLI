@@ -1,19 +1,19 @@
  chatcli  Teams 101 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ┌ Chats ───────────────────┐┌ Alex Example ────────────────────────────────────┐
-│     Alex Example    09:15││                  ---- Today ----                 │
-│     Alex Example: is the…││09:00 Alex Example  Photos and files from the site│
-│99+  Project Team    08:02││                    visit:                        │
-│     Sam Sample: thanks   ││09:02 Alex Example  sunset from the lab window    │
-│  1  Sam Sample        Sun││                    [image sunset.png 51 KB]      │
-│     You: see you tomorrow││09:04 Alex Example  [file notes.txt 2 KB]         │
-│     Release Planning… Fri││09:06 Alex Example  [image old-photo.jpg 303 KB]  │
-│     Jordan Placeholder: …││09:08 Alex Example  [file setup.exe 8.0 MB]       │
-│     田中太郎 (T… 05/11/26││09:10 You           two at once                   │
-│     了解しました         ││                    [image a.png 2 KB]            │
-│     Jordan Plac… 09/10/26││                    [image b.png 3.0 MB]          │
-│     You: thanks          ││                                                  │
+│     Alex Example    09:15││                                                  │
+│     Alex Example: is the…││                                                  │
+│99+  Project Team    08:02││                                                  │
+│     Sam Sample: thanks   ││                                                  │
+│  1  Sam Sample        Sun││                  ---- Today ----                 │
+│     You: see you tomorrow││Alex Example 09:00                                │
+│     Release Planning… Fri││Photos and files from the site visit:             │
+│     Jordan Placeholder: …││sunset from the lab window                        │
+│     田中太郎 (T… 05/11/26││[image sunset.png 51 KB]                          │
+│     了解しました         ││[file notes.txt 2 KB]                             │
+│     Jordan Plac… 09/10/26││[image old-photo.jpg 303 KB]                      │
+│     You: thanks          ││[file setup.exe 8.0 MB]                           │
 │                          ││                                                  │
-│                          ││                                                  │
+│                          ││You 09:10                                         │
 │                          ││┌ Files ─────────────────────────────────────────┐│
 │                          │││My Pictures/                                    ││
 │                          ││└────────────────────────────────────────────────┘│
@@ -29,43 +29,33 @@ row 0 cols 27-34: fg=Reset bg=Reset BOLD
 row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
 row 0 cols 69-79: fg=Reset bg=Reset DIM
 row 2 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
-row 2 cols 47-61: fg=DarkGray bg=Reset NONE
 row 3 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
-row 3 cols 29-33: fg=DarkGray bg=Reset NONE
-row 3 cols 35-46: fg=Reset bg=Reset BOLD
 row 4 cols 1-4: fg=Reset bg=Reset BOLD
 row 4 cols 6-20: fg=Reset bg=Reset BOLD
 row 4 cols 21-26: fg=DarkGray bg=Reset NONE
 row 5 cols 1-23: fg=DarkGray bg=Reset NONE
-row 5 cols 29-33: fg=DarkGray bg=Reset NONE
-row 5 cols 35-46: fg=Reset bg=Reset BOLD
 row 6 cols 1-4: fg=Reset bg=Reset BOLD
 row 6 cols 6-22: fg=Reset bg=Reset BOLD
 row 6 cols 23-26: fg=DarkGray bg=Reset NONE
-row 6 cols 49-72: fg=Reset bg=Reset BOLD
+row 6 cols 47-61: fg=DarkGray bg=Reset NONE
 row 7 cols 1-26: fg=DarkGray bg=Reset NONE
-row 7 cols 29-33: fg=DarkGray bg=Reset NONE
-row 7 cols 35-46: fg=Reset bg=Reset BOLD
-row 7 cols 49-69: fg=Reset bg=Reset BOLD
+row 7 cols 29-40: fg=Yellow bg=Reset BOLD
+row 7 cols 42-46: fg=DarkGray bg=Reset NONE
 row 8 cols 1-4: fg=Reset bg=Reset BOLD
 row 8 cols 23-26: fg=DarkGray bg=Reset NONE
-row 8 cols 29-33: fg=DarkGray bg=Reset NONE
-row 8 cols 35-46: fg=Reset bg=Reset BOLD
-row 8 cols 49-76: fg=Reset bg=Reset BOLD
 row 9 cols 1-26: fg=DarkGray bg=Reset NONE
-row 9 cols 29-33: fg=DarkGray bg=Reset NONE
-row 9 cols 35-46: fg=Reset bg=Reset BOLD
-row 9 cols 49-71: fg=Reset bg=Reset BOLD
 row 10 cols 1-4: fg=Reset bg=Reset BOLD
 row 10 cols 18-26: fg=DarkGray bg=Reset NONE
-row 10 cols 29-33: fg=DarkGray bg=Reset NONE
-row 10 cols 35-46: fg=Cyan bg=Reset BOLD
+row 10 cols 29-52: fg=Reset bg=Reset BOLD
 row 11 cols 1-17: fg=DarkGray bg=Reset NONE
-row 11 cols 49-66: fg=Reset bg=Reset BOLD
+row 11 cols 29-49: fg=Reset bg=Reset BOLD
 row 12 cols 1-4: fg=Reset bg=Reset BOLD
 row 12 cols 18-26: fg=DarkGray bg=Reset NONE
-row 12 cols 49-68: fg=Reset bg=Reset BOLD
+row 12 cols 29-56: fg=Reset bg=Reset BOLD
 row 13 cols 1-16: fg=DarkGray bg=Reset NONE
+row 13 cols 29-51: fg=Reset bg=Reset BOLD
+row 15 cols 29-31: fg=Cyan bg=Reset BOLD
+row 15 cols 33-37: fg=DarkGray bg=Reset NONE
 row 17 cols 30-41: fg=Reset bg=Reset BOLD | REVERSED
 row 20 cols 29-41: fg=Reset bg=Reset BOLD
 row 21 cols 29-30: fg=Reset bg=Reset BOLD
