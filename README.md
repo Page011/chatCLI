@@ -16,9 +16,9 @@ You run everything yourself: your own Teams app registration, your own optional 
 │  1 Sam Sample     Sun││                    appendix can move to the end of   │
 │    You: see you tomo…││                    the document.                     │
 │    Release Plann… Fri││                    ---- Today ----                   │
-│    Jordan Placeholde…││09:10 Alex Example  is the build done? 🚀             │
-│    田中太郎… 05/11/26││                    今日はどうですか                  │
-│    了解しました      ││09:15 You           yes, shipped                      │
+│    Jordan Placeholde…││09:10 Alex Example  is the build done? 🚀            │
+│    田中太郎 05/11/26  ││                    今日はどうですか                   │
+│    了解しました       ││09:15 You           yes, shipped                      │
 │    Jordan P… 09/10/26││09:30 You           on it, will confirm shortly       │
 │    You: thanks       ││                    [sending]                         │
 │                      ││09:30 You           this one will fail                │
