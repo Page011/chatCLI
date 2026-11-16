@@ -1733,6 +1733,31 @@ mod tests {
         assert!(app.popup().is_some(), "an edit brings it back");
     }
 
+    #[test]
+    fn a_paste_is_an_edit_so_members_may_open_the_list_again() {
+        let mut app = app_with(ChatKind::Group, three());
+        typed(&mut app, ":he");
+        press(&mut app, KeyCode::Esc);
+        app.handle_paste(" @al");
+        app.handle_event(Event::Members {
+            network: Network::Teams,
+            chat_id: "a".into(),
+            members: Vec::new(),
+            error: None,
+        });
+        assert!(
+            !app.popup_closed,
+            "the paste reopened it for the next refresh"
+        );
+        // A paste that changes nothing (no chat focus) leaves it closed.
+        let mut app = app_with(ChatKind::Group, three());
+        typed(&mut app, ":he");
+        press(&mut app, KeyCode::Esc);
+        to_selection(&mut app);
+        app.handle_paste("x");
+        assert!(app.popup_closed);
+    }
+
     /// The cached member list answers the first `@` at once, before the backend does.
     #[test]
     fn the_stored_member_list_fills_the_mention_list_at_once() {

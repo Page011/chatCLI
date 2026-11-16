@@ -1,6 +1,6 @@
  Teams 103 LIVE   WhatsApp CONN…
 ╔ Commands ════════════════════════════╗
-║/se                                   ║
+║:se                                   ║
 ║Commands                              ║
 ║:settings        theme, layout, keys …║
 ║:search          search every stored …║

@@ -2729,6 +2729,17 @@ fn command_bar_scrolls_with_the_selection() {
     check("command_bar_scrolled", 40, 12, &got);
 }
 
+/// The bar's prompt is its key: `:` by default, the user's own one-character key when rebound.
+#[test]
+fn command_bar_prompt_is_its_key() {
+    let got = render(&mut bar_app(""), 80, 24);
+    assert!(got.contains(":type a command or chat name"), "{got}");
+    let mut app = online_in(new_app_with(one_binding("common", ";", "command_bar")));
+    press(&mut app, KeyCode::Char(';'));
+    let got = render(&mut app, 80, 24);
+    assert!(got.contains(";type a command or chat name"), "{got}");
+}
+
 #[test]
 fn command_bar_dims_what_cannot_run() {
     // Signed in: :signin cannot run and is drawn dim.

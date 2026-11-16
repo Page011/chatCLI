@@ -2084,7 +2084,13 @@ impl App {
         let n = self.active;
         let chat = self.active().open.clone();
         let was_empty = self.active().draft().is_empty();
+        let before = self.active().draft().to_string();
         self.paste_into(text);
+        // A paste that changed the draft is an edit: a list closed earlier may come back for it
+        // (when members arrive). Nothing pasted is run.
+        if self.active().draft() != before {
+            self.popup_closed = false;
+        }
         self.composing_after(n, chat, was_empty)
     }
 
@@ -3340,7 +3346,7 @@ mod tests {
         assert!(app.settings_page().is_none());
         assert_eq!(
             notice_text(&app).as_deref(),
-            Some("/keys takes no arguments")
+            Some(":keys takes no arguments")
         );
     }
 
@@ -4875,12 +4881,12 @@ mod tests {
         assert!(!app.should_quit());
         assert_eq!(
             notice_text(&app).as_deref(),
-            Some("/quit takes no arguments")
+            Some(":quit takes no arguments")
         );
         colon(&mut app, "keys emacs");
         assert_eq!(
             notice_text(&app).as_deref(),
-            Some("/keys takes no arguments")
+            Some(":keys takes no arguments")
         );
     }
 

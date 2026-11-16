@@ -1,6 +1,6 @@
  Teams 103 LIVE   WhatsApp CONN…
 ╔ Commands ════════════════════════════╗
-║/type a command or chat name          ║
+║:type a command or chat name          ║
 ║Commands                              ║
 ║:help            keys and commands    ║
 ║:settings        theme, layout, keys …║

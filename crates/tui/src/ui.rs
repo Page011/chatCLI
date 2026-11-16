@@ -1081,6 +1081,17 @@ pub(crate) fn centered_note(f: &mut Frame, area: Rect, text: &str, t: &Theme) {
     );
 }
 
+/// The prompt in front of a box opened by `action`: its key when that is one character (`:` for
+/// the command bar, `/` for the filter, or whatever they are bound to), else `fallback`.
+fn prompt_for(app: &App, action: Action, fallback: &'static str) -> String {
+    app.keys()
+        .keys_for(Context::Common, action)
+        .into_iter()
+        .chain(app.keys().keys_for(Context::List, action))
+        .find(|k| k.chars().count() == 1)
+        .unwrap_or_else(|| fallback.to_string())
+}
+
 fn draw_sidebar(f: &mut Frame, app: &App, lay: &Layout) {
     let t = app.theme();
     let look = app.look();
@@ -1098,7 +1109,7 @@ fn draw_sidebar(f: &mut Frame, app: &App, lay: &Layout) {
         let (shown, col) = ns.filter.view(r.width.saturating_sub(1) as usize);
         f.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled("/", bold()),
+                Span::styled(prompt_for(app, Action::FilterStart, "/"), bold()),
                 Span::raw(shown),
             ])),
             r,
@@ -2388,13 +2399,14 @@ fn draw_palette(f: &mut Frame, app: &App, body: Rect) {
     };
     f.render_widget(pane("Commands", true), g.outer);
     let (shown, col) = p.query.view(g.query.width.saturating_sub(1) as usize);
+    let prompt = prompt_for(app, Action::CommandBar, ":");
     let query_line = if p.query.is_empty() {
         Line::from(vec![
-            Span::styled("/", bold()),
+            Span::styled(prompt, bold()),
             Span::styled("type a command or chat name", t.dim),
         ])
     } else {
-        Line::from(vec![Span::styled("/", bold()), Span::raw(shown)])
+        Line::from(vec![Span::styled(prompt, bold()), Span::raw(shown)])
     };
     f.render_widget(Paragraph::new(query_line), g.query);
     f.set_cursor_position((g.query.x + 1 + col as u16, g.query.y));

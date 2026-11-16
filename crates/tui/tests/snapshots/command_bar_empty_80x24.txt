@@ -1,6 +1,6 @@
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ╔ Commands ════════════════════════════════════════════════════════════════════╗
-║/type a command or chat name                                                  ║
+║:type a command or chat name                                                  ║
 ║Commands                                                                      ║
 ║:help            keys and commands                                            ║
 ║:settings        theme, layout, keys and more                                 ║

@@ -1,6 +1,6 @@
  Teams 103 LIVE   WhatsApp CONN…
 ╔ Commands ════════════════════════════╗
-║/type a command or chat name          ║
+║:type a command or chat name          ║
 ║:refresh         reload the chat list ║
 ║:readall         mark every chat read…║
 ║:signin          Already signed in to…║

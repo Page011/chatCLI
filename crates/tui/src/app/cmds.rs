@@ -58,7 +58,7 @@ impl App {
                 .iter()
                 .find(|c| c.id == id)
                 .map_or("", |c| c.name);
-            return Some((format!("/{name} takes no arguments"), true));
+            return Some((format!(":{name} takes no arguments"), true));
         }
         None
     }
@@ -102,7 +102,7 @@ impl App {
         let Some(p) = &self.palette else {
             return Vec::new();
         };
-        let query = p.query.text().trim_start_matches('/').trim();
+        let query = p.query.text().trim_start_matches([':', '/']).trim();
         let word = query.split_whitespace().next().unwrap_or("");
         let mut items: Vec<PalItem> = commands::matching(word)
             .into_iter()
@@ -172,7 +172,7 @@ impl App {
                     // Nothing matches: the bar stays open.
                     return Vec::new();
                 };
-                let rest = p.query.text().trim_start_matches('/').trim();
+                let rest = p.query.text().trim_start_matches([':', '/']).trim();
                 let arg = rest
                     .split_once(char::is_whitespace)
                     .map(|(_, a)| a.trim().to_string())
