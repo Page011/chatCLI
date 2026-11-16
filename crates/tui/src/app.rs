@@ -118,6 +118,9 @@ pub(crate) struct NetState {
     /// The highlighted message of the open chat while `focus` is `Select`. Kept by id, so an
     /// incoming message, a resize or a wheel scroll never moves it.
     pub sel_msg: Option<String>,
+    /// Where the selection was before each big jump (`G`, `g g`, `H`, `M`, `L`), newest last, as
+    /// (chat id, message id). `jump_back` (Ctrl+O) walks back through it.
+    pub(crate) jumps: Vec<(String, String)>,
     /// A reply or an edit being composed, per chat id (shown above the message box).
     pub(crate) targets: HashMap<String, Target>,
     /// What the backend can do now. All false until its first `Capabilities` event.
@@ -169,6 +172,7 @@ impl NetState {
             drafts: HashMap::new(),
             scroll: 0,
             sel_msg: None,
+            jumps: Vec::new(),
             targets: HashMap::new(),
             caps: Capabilities::default(),
             members: HashMap::new(),
@@ -1408,6 +1412,7 @@ impl App {
                 self.request_clipboard(n);
             }
             Action::OpenMedia if ctx == Context::Select => return self.open_media(n),
+            Action::JumpBack if ctx == Context::Select => self.jump_back(n),
             Action::ViewImage if ctx == Context::Select => return self.view_image(n),
             Action::SelectMessages if !panel => return self.enter_select(n),
             Action::Search => self.open_search(),

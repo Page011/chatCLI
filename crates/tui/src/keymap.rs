@@ -168,6 +168,7 @@ actions! {
     OpenLink "open_link" "open a link from the selected message (chat list: from the newest message that has one)",
     ConfirmYes "confirm_yes" "yes: open the link, delete the message, send the file or mark all read",
     ConfirmNo "confirm_no" "no, do not open it, delete it or send it",
+    JumpBack "jump_back" "back to the message selected before the last big jump (G, g g, H, M, L)",
     SelectMessages "select_messages" "select a message in the open chat",
     Reply "reply" "reply to the selected message (quote it)",
     CancelReply "cancel_reply" "drop the reply or edit in the message box (back does it too)",
@@ -587,6 +588,7 @@ const OWN: &[Row] = &[
     (Context::Select, "d", Action::Delete),
     (Context::Select, "u", Action::OpenLink),
     (Context::Select, "o", Action::OpenMedia),
+    (Context::Select, "ctrl+o", Action::JumpBack),
     // The message box (its editing keys are in `common`).
     (Context::Composer, "enter", Action::Send),
     // Shift+Enter first: the footer shows it where the terminal reports the Shift (the Windows

@@ -139,6 +139,9 @@ pub(crate) fn suggest_members(members: &[PersonRef], query: &str, limit: usize) 
         .collect()
 }
 
+/// How many places `jump_back` remembers per network.
+const JUMPS_KEPT: usize = 50;
+
 impl App {
     // ---- selection (issue 11) ----
 
@@ -284,6 +287,17 @@ impl App {
                 i
             }
         };
+        let big = matches!(
+            action,
+            Action::Top
+                | Action::Bottom
+                | Action::ScreenTop
+                | Action::ScreenMiddle
+                | Action::ScreenBottom
+        );
+        if big && to != cur {
+            self.push_jump(n, ids[cur].clone());
+        }
         self.ns_mut(n).sel_msg = Some(ids[to].clone());
         self.ensure_sel_visible(n);
         // Up, page up or first at the oldest message held: the user wants more history.
@@ -293,6 +307,33 @@ impl App {
         } else {
             Vec::new()
         }
+    }
+
+    /// Remembers `from` (in the open chat) before a big jump. The list keeps the last 50.
+    fn push_jump(&mut self, n: Network, from: String) {
+        let ns = self.ns_mut(n);
+        let Some(chat) = ns.open.clone() else {
+            return;
+        };
+        ns.jumps.push((chat, from));
+        if ns.jumps.len() > JUMPS_KEPT {
+            ns.jumps.remove(0);
+        }
+    }
+
+    /// `jump_back` (Ctrl+O): the newest remembered place in this chat whose message can still be
+    /// selected. Places in other chats and messages that went away are dropped on the way.
+    pub(super) fn jump_back(&mut self, n: Network) {
+        let ids = self.selectable_ids(n);
+        let open = self.ns(n).open.clone();
+        while let Some((chat, id)) = self.ns_mut(n).jumps.pop() {
+            if open.as_ref() == Some(&chat) && ids.contains(&id) {
+                self.ns_mut(n).sel_msg = Some(id);
+                self.ensure_sel_visible(n);
+                return;
+            }
+        }
+        self.push_notice(n, "No earlier place to jump back to.", false);
     }
 
     /// Scrolls the message pane just enough to show the highlighted message (its first lines
@@ -997,6 +1038,43 @@ mod tests {
         let mut app = app_with(ChatKind::Direct, Vec::new());
         press(&mut app, KeyCode::Esc);
         assert_eq!(app.active().focus, Focus::List);
+    }
+
+    #[test]
+    fn ctrl_o_walks_back_through_the_big_jumps() {
+        let many: Vec<ChatMessage> = (0..40)
+            .map(|i| msg(&format!("m{i:02}"), 1000 + i, false, "x"))
+            .collect();
+        let mut app = app_with(ChatKind::Direct, many);
+        let ctrl_o =
+            |app: &mut App| app.handle_key(key_with(KeyCode::Char('o'), KeyModifiers::CONTROL));
+        ctrl_up(&mut app);
+        ch(&mut app, 'k');
+        assert_eq!(sel(&app), Some("m38"));
+        // g g, then H after G: two places remembered.
+        ch(&mut app, 'g');
+        ch(&mut app, 'g');
+        assert_eq!(sel(&app), Some("m00"));
+        ch(&mut app, 'G');
+        assert_eq!(sel(&app), Some("m39"));
+        // Small moves are not remembered.
+        ch(&mut app, 'k');
+        ctrl_o(&mut app);
+        assert_eq!(sel(&app), Some("m00"), "back to before G");
+        assert!(in_view(&app));
+        ctrl_o(&mut app);
+        assert_eq!(sel(&app), Some("m38"), "back to before g g");
+        ctrl_o(&mut app);
+        assert_eq!(sel(&app), Some("m38"), "nothing left");
+        assert_eq!(
+            app.current_notice().map(|n| n.text.as_str()),
+            Some("No earlier place to jump back to.")
+        );
+        // A jump that lands where it started remembers nothing.
+        ch(&mut app, 'G');
+        ch(&mut app, 'G');
+        ctrl_o(&mut app);
+        assert_eq!(sel(&app), Some("m38"));
     }
 
     #[test]
