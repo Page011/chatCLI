@@ -1,0 +1,313 @@
+//! Drawing the settings screen. The model is `settings_view`, the keys are `app/settings.rs`.
+
+use ratatui::layout::{Margin, Rect};
+use ratatui::style::Style;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Clear, Paragraph};
+use ratatui::Frame;
+
+use crate::app::{App, NARROW};
+use crate::settings_view::{fit_top, Kind, PageEdit, Row, RowId, Section, SettingsPage};
+use crate::text::{fit, sw, tail, truncate, wrap};
+use crate::theme::Theme;
+use crate::ui::{bold, centered_note, pane};
+
+const SECTIONS_W: u16 = 18;
+const LABEL_W: usize = 19;
+const VALUE_W: usize = 14;
+/// The Keys page lists several keys per action, so its value column is wider.
+const KEYS_VALUE_W: usize = 30;
+/// The hint column shows only when the longest hint of the page fits whole; otherwise the status
+/// line under the list shows the chosen row's hint.
+/// Rows the live preview needs: four sample lines, the first one named.
+const PREVIEW_ROWS: usize = 4;
+const TOO_SMALL: &str = "Terminal too small for settings, press Esc to close";
+
+/// Where the parts of the screen are: shared by drawing and the key handling (scroll maths).
+pub(crate) struct Geom {
+    /// The section list pane. None under `NARROW` columns: one pane shows at a time.
+    pub left: Option<Rect>,
+    /// The pane that holds the rows (the whole body when narrow).
+    pub right: Rect,
+    /// Rows (or, when narrow and not in a section, the section names).
+    pub list: Rect,
+    /// One line under the list: the chosen row's hint, or the red error.
+    pub status: Rect,
+}
+
+pub(crate) fn geometry(body: Rect) -> Option<Geom> {
+    let (left, right) = if body.width < NARROW {
+        (None, body)
+    } else {
+        (
+            Some(Rect::new(body.x, body.y, SECTIONS_W, body.height)),
+            Rect::new(
+                body.x + SECTIONS_W,
+                body.y,
+                body.width - SECTIONS_W,
+                body.height,
+            ),
+        )
+    };
+    let inner = right.inner(Margin::new(1, 1));
+    if inner.height < 2 || inner.width < 10 {
+        return None;
+    }
+    Some(Geom {
+        left,
+        right,
+        list: Rect::new(inner.x, inner.y, inner.width, inner.height - 1),
+        status: Rect::new(inner.x, inner.y + inner.height - 1, inner.width, 1),
+    })
+}
+
+/// Rows of the list that fit on screen.
+pub(crate) fn rows_shown(body: Rect) -> usize {
+    geometry(body).map_or(1, |g| g.list.height as usize)
+}
+
+pub(crate) fn draw(f: &mut Frame, app: &App, body: Rect) {
+    let Some(page) = app.settings_page() else {
+        return;
+    };
+    let t = app.theme();
+    f.render_widget(Clear, body);
+    let Some(g) = geometry(body) else {
+        centered_note(f, body, TOO_SMALL, t);
+        return;
+    };
+    let rows = app.page_rows();
+    match g.left {
+        Some(left) => {
+            f.render_widget(pane("Settings", !page.in_rows), left);
+            draw_sections(f, page, left.inner(Margin::new(1, 1)), t, !page.in_rows);
+            f.render_widget(pane(&pane_title(page, &rows, &g), page.in_rows), g.right);
+            draw_rows(f, app, page, &rows, &g);
+        }
+        None if page.in_rows => {
+            f.render_widget(pane(&pane_title(page, &rows, &g), true), g.right);
+            draw_rows(f, app, page, &rows, &g);
+        }
+        None => {
+            f.render_widget(pane("Settings", true), g.right);
+            draw_sections(f, page, g.list, t, true);
+            draw_status(f, page, &rows, &g, t);
+        }
+    }
+}
+
+/// The pane title. On the Keys page it names the context of the first row on screen, so the
+/// rows always say which context they edit (the headings scroll away with the rows).
+fn pane_title(page: &SettingsPage, rows: &[Row], g: &Geom) -> String {
+    if page.section != Section::Keys {
+        return page.section.title().to_string();
+    }
+    let top = fit_top(page.top, page.row, g.list.height as usize, rows.len());
+    match rows[..(top + 1).min(rows.len())]
+        .iter()
+        .rev()
+        .find(|r| r.kind == Kind::Heading)
+    {
+        Some(h) => format!("Keys - {}", h.label),
+        None => page.section.title().to_string(),
+    }
+}
+
+fn draw_sections(f: &mut Frame, page: &SettingsPage, area: Rect, t: &Theme, focused: bool) {
+    let h = area.height as usize;
+    let idx = Section::ALL
+        .iter()
+        .position(|s| *s == page.section)
+        .unwrap_or(0);
+    let top = fit_top(0, idx, h, Section::ALL.len());
+    for (k, s) in Section::ALL.iter().enumerate().skip(top).take(h) {
+        let style = match (*s == page.section, focused) {
+            (true, true) => t.selected,
+            (true, false) => bold(),
+            _ => Style::new(),
+        };
+        f.render_widget(
+            Paragraph::new(fit(s.title(), area.width as usize)).style(style),
+            Rect::new(area.x, area.y + (k - top) as u16, area.width, 1),
+        );
+    }
+}
+
+fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Geom) {
+    let t = app.theme();
+    let area = g.list;
+    let w = area.width as usize;
+    let h = area.height as usize;
+    let label_w = LABEL_W.min(w / 2);
+    let after_label = w.saturating_sub(label_w + 1);
+    let want_w = if page.section == Section::Keys {
+        KEYS_VALUE_W
+    } else {
+        VALUE_W
+    };
+    let longest_hint = rows
+        .iter()
+        .filter(|r| r.selectable())
+        .map(|r| sw(r.hint))
+        .max()
+        .unwrap_or(0);
+    let show_hint = g.left.is_some() && after_label >= want_w + 1 + longest_hint;
+    let value_w = if show_hint { want_w } else { after_label };
+    let top = fit_top(page.top, page.row, h, rows.len());
+    // A problem line wraps over several screen rows: `used` counts the rows drawn.
+    let mut used = 0usize;
+    for (k, row) in rows.iter().enumerate().skip(top) {
+        if used >= h {
+            break;
+        }
+        let y = area.y + used as u16;
+        used += 1;
+        let selected = page.in_rows && k == page.row;
+        let line_area = Rect::new(area.x, y, area.width, 1);
+        let base = if selected { t.selected } else { Style::new() };
+        if row.kind == Kind::Heading {
+            f.render_widget(
+                Paragraph::new(Span::styled(truncate(&row.label, w), bold())),
+                line_area,
+            );
+            continue;
+        }
+        if matches!(row.id, RowId::Problem(_)) {
+            let lines = wrap(&row.value, w);
+            for (i, text) in lines.iter().take(h - (used - 1)).enumerate() {
+                if i > 0 {
+                    used += 1;
+                }
+                f.render_widget(
+                    Paragraph::new(Span::styled(text.clone(), t.error)),
+                    Rect::new(area.x, y + i as u16, area.width, 1),
+                );
+            }
+            continue;
+        }
+        if row.kind == Kind::Info {
+            let style = if row.is_error() { t.error } else { t.hint };
+            let spans = if row.label.is_empty() {
+                vec![Span::styled(truncate(&row.value, w), style)]
+            } else {
+                vec![
+                    Span::styled(fit(&row.label, label_w), bold()),
+                    Span::raw(" "),
+                    Span::raw(truncate(&row.value, after_label)),
+                ]
+            };
+            f.render_widget(Paragraph::new(Line::from(spans)).style(base), line_area);
+            continue;
+        }
+        let editing = match (&page.edit, selected) {
+            (Some(PageEdit::Text(buf)), true) => Some(buf.as_str()),
+            _ => None,
+        };
+        // A key being captured: the row itself says it is listening.
+        let listening = match (&page.edit, selected) {
+            (Some(PageEdit::Capture { .. }), true) => Some("press a key".to_string()),
+            (Some(PageEdit::Conflict { key, .. }), true) => {
+                Some(format!("{}? Enter swaps", key.display()))
+            }
+            _ => None,
+        };
+        let value = match (editing, &listening) {
+            (Some(buf), _) => fit(&tail(buf, value_w.saturating_sub(1)), value_w),
+            (None, Some(text)) => fit(text, value_w),
+            _ => fit(&row.value, value_w),
+        };
+        let mut value_style = if row.custom || listening.is_some() {
+            bold()
+        } else {
+            Style::new()
+        };
+        // The `selected` role is not shown in its own style: reversed text would read as a
+        // second cursor.
+        if let RowId::Role(name) = row.id {
+            if name != "selected" {
+                value_style = value_style.patch(t.role(name).unwrap_or_default());
+            }
+        }
+        let mut spans = vec![
+            Span::raw(fit(&row.label, label_w)),
+            Span::raw(" "),
+            Span::styled(value, value_style),
+        ];
+        if show_hint {
+            let hint_w = after_label - value_w - 1;
+            spans.push(Span::raw(" "));
+            spans.push(Span::styled(fit(row.hint, hint_w), t.hint));
+        }
+        f.render_widget(Paragraph::new(Line::from(spans)).style(base), line_area);
+        if let Some(buf) = editing {
+            let shown = tail(buf, value_w.saturating_sub(1));
+            let x = area.x + (label_w + 1 + sw(&shown)) as u16;
+            f.set_cursor_position((x.min(area.x + area.width - 1), y));
+        }
+    }
+    if page.section == Section::Appearance {
+        let shown_rows = rows.len().saturating_sub(top);
+        let free = h.saturating_sub(shown_rows);
+        if top == 0 && free >= PREVIEW_ROWS {
+            let gap = usize::from(free > PREVIEW_ROWS);
+            let y = area.y + (shown_rows + gap) as u16;
+            draw_preview(f, Rect::new(area.x, y, area.width, PREVIEW_ROWS as u16), t);
+        }
+    }
+    draw_status(f, page, rows, g, t);
+}
+
+/// The line under the list: the red error, else the chosen row's hint.
+fn draw_status(f: &mut Frame, page: &SettingsPage, rows: &[Row], g: &Geom, t: &Theme) {
+    let w = g.status.width as usize;
+    let line = match (&page.error, rows.get(page.row)) {
+        (Some(e), _) => Span::styled(truncate(e, w), t.error),
+        (None, Some(row)) if page.in_rows => Span::styled(truncate(row.hint, w), t.hint),
+        _ => return,
+    };
+    f.render_widget(Paragraph::new(line), g.status);
+}
+
+/// Four sample lines in the live theme, so a colour change is visible without leaving the page.
+fn draw_preview(f: &mut Frame, area: Rect, t: &Theme) {
+    let w = area.width as usize;
+    let lines = [
+        Line::from(vec![
+            Span::styled("Preview ", bold()),
+            Span::styled("Teams", t.network_teams),
+            Span::raw(" "),
+            Span::styled("LIVE", t.chip_live),
+            Span::raw("  "),
+            Span::styled("WhatsApp", t.network_whatsapp),
+            Span::raw(" "),
+            Span::styled("SIGN-IN NEEDED", t.chip_attention),
+        ]),
+        Line::from(vec![
+            Span::raw("["),
+            Span::styled(fit("Alex Morgan", w.saturating_sub(6).min(24)), t.selected),
+            Span::raw("]"),
+            Span::raw(" "),
+            Span::styled("3", t.unread),
+        ]),
+        Line::from(vec![
+            Span::styled("You", t.own_name),
+            Span::styled(" 09:30", t.dim),
+            Span::styled("  See you at ten", t.text),
+        ]),
+        Line::from(vec![
+            Span::styled("NOT SENT", t.error),
+            Span::raw(" "),
+            Span::styled("slow", t.warn),
+            Span::raw(" "),
+            Span::styled("45%", t.ok),
+            Span::raw(" "),
+            Span::styled("Enter", t.hint),
+        ]),
+    ];
+    for (i, line) in lines.into_iter().enumerate() {
+        f.render_widget(
+            Paragraph::new(line),
+            Rect::new(area.x, area.y + i as u16, area.width, 1),
+        );
+    }
+}

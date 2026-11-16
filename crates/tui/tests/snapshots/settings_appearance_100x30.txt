@@ -1,0 +1,75 @@
+ chatcli  Teams 103 LIVE   WhatsApp CONNECTING                                           Ctrl+C quit
+┌ Settings ──────┐╔ Appearance ════════════════════════════════════════════════════════════════════╗
+│Appearance      │║Theme               default        default, high-contrast, light, dark          ║
+│Layout          │║Text                default        name, default or #rrggbb                     ║
+│Notifications   │║Dim text            default        name, default or #rrggbb                     ║
+│Media           │║Hints               default        name, default or #rrggbb                     ║
+│Teams           │║Accent              default        name, default or #rrggbb                     ║
+│WhatsApp        │║Your name           default        name, default or #rrggbb                     ║
+│Keys            │║Unread count        default        name, default or #rrggbb                     ║
+│About           │║Errors              default        name, default or #rrggbb                     ║
+│                │║Warnings            default        name, default or #rrggbb                     ║
+│                │║OK and progress     default        name, default or #rrggbb                     ║
+│                │║Selected row        default        name, default or #rrggbb                     ║
+│                │║Status: live        default        name, default or #rrggbb                     ║
+│                │║Status: attention   default        name, default or #rrggbb                     ║
+│                │║Teams tab           default        name, default or #rrggbb                     ║
+│                │║WhatsApp tab        default        name, default or #rrggbb                     ║
+│                │║                                                                                ║
+│                │║Preview Teams LIVE  WhatsApp SIGN-IN NEEDED                                     ║
+│                │║[Alex Morgan             ] 3                                                    ║
+│                │║You 09:30  See you at ten                                                       ║
+│                │║NOT SENT slow 45% Enter                                                         ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║default, high-contrast, light, dark                                             ║
+└────────────────┘╚════════════════════════════════════════════════════════════════════════════════╝
+Up/Down move  Esc close  Left/Right change  Enter edit  r reset  Tab sections
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 89-99: fg=Reset bg=Reset DIM
+row 1 cols 19-30: fg=Reset bg=Reset BOLD
+row 2 cols 1-16: fg=Reset bg=Reset BOLD
+row 2 cols 19-53: fg=Reset bg=Reset BOLD | REVERSED
+row 2 cols 54-98: fg=Reset bg=Reset BOLD | DIM | REVERSED
+row 3 cols 54-98: fg=Reset bg=Reset DIM
+row 4 cols 39-52: fg=DarkGray bg=Reset NONE
+row 4 cols 54-98: fg=Reset bg=Reset DIM
+row 5 cols 39-52: fg=Reset bg=Reset DIM
+row 5 cols 54-98: fg=Reset bg=Reset DIM
+row 6 cols 39-52: fg=Cyan bg=Reset NONE
+row 6 cols 54-98: fg=Reset bg=Reset DIM
+row 7 cols 39-52: fg=Cyan bg=Reset BOLD
+row 7 cols 54-98: fg=Reset bg=Reset DIM
+row 8 cols 39-52: fg=Reset bg=Reset BOLD
+row 8 cols 54-98: fg=Reset bg=Reset DIM
+row 9 cols 39-52: fg=Red bg=Reset NONE
+row 9 cols 54-98: fg=Reset bg=Reset DIM
+row 10 cols 54-98: fg=Reset bg=Reset DIM
+row 11 cols 39-52: fg=Reset bg=Reset BOLD
+row 11 cols 54-98: fg=Reset bg=Reset DIM
+row 12 cols 54-98: fg=Reset bg=Reset DIM
+row 13 cols 39-52: fg=Green bg=Reset NONE
+row 13 cols 54-98: fg=Reset bg=Reset DIM
+row 14 cols 39-52: fg=Yellow bg=Reset NONE
+row 14 cols 54-98: fg=Reset bg=Reset DIM
+row 15 cols 54-98: fg=Reset bg=Reset DIM
+row 16 cols 54-98: fg=Reset bg=Reset DIM
+row 18 cols 19-26: fg=Reset bg=Reset BOLD
+row 18 cols 33-36: fg=Green bg=Reset NONE
+row 18 cols 48-61: fg=Yellow bg=Reset NONE
+row 19 cols 20-43: fg=Reset bg=Reset BOLD | REVERSED
+row 19 cols 46-46: fg=Reset bg=Reset BOLD
+row 20 cols 19-21: fg=Cyan bg=Reset BOLD
+row 20 cols 22-27: fg=DarkGray bg=Reset NONE
+row 21 cols 19-26: fg=Red bg=Reset NONE
+row 21 cols 33-35: fg=Reset bg=Reset BOLD
+row 21 cols 37-41: fg=Reset bg=Reset DIM
+row 27 cols 19-53: fg=Reset bg=Reset DIM
+row 29 cols 0-76: fg=Reset bg=Reset DIM

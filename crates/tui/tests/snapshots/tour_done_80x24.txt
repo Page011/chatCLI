@@ -1,0 +1,70 @@
+TOUR 26/26 - Tour done. Type / for commands. Ctrl+C quits.
+ chatcli  Teams 101 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
+╔ Chats ═══════════════════╗┌ Alex Example ────────────────────────────────────┐
+║     Alex Example    09:15║│14:31 You           Will do.                      │
+║     Alex Example: is the…║│                ---- Yesterday ----               │
+║99+  Project Team    08:02║│16:05 Alex Example  Notes from the review: the    │
+║     Sam Sample: thanks   ║│                    summary page needs a shorter  │
+║  1  Sam Sample        Sun║│                    introduction, the figures need│
+║     You: see you tomorrow║│                    captions, and the appendix can│
+║     Release Planning… Fri║│                    move to the end of the        │
+║     Jordan Placeholder: …║│                    document.                     │
+║     田中太郎 (T… 05/11/26║│                  ---- Today ----                 │
+║     了解しました         ║│09:10 Alex Example  is the build done? 🚀         │
+║     Jordan Plac… 09/10/26║│                    今日はどうですか              │
+║     You: thanks          ║│09:15 You           yes, shipped                  │
+║                          ║│09:30 You           Hello from the tour 👍        │
+║                          ║│                    [sending]                     │
+║                          ║│09:30 You           > Alex Example: Notes from th…│
+║                          ║│                    Quoted reply [sending]        │
+║                          ║└──────────────────────────────────────────────────┘
+║                          ║┌ Message ─────────────────────────────────────────┐
+║                          ║│> aft                                             │
+╚══════════════════════════╝└──────────────────────────────────────────────────┘
+Any key to leave the tour
+--- styled runs (everything else is default style) ---
+row 0 cols 0-57: fg=Cyan bg=Reset BOLD
+row 1 cols 0-8: fg=Reset bg=Reset BOLD
+row 1 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 1 cols 27-34: fg=Reset bg=Reset BOLD
+row 1 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 1 cols 69-79: fg=Reset bg=Reset DIM
+row 2 cols 1-7: fg=Reset bg=Reset BOLD
+row 3 cols 1-26: fg=Reset bg=Reset BOLD | REVERSED
+row 3 cols 29-33: fg=DarkGray bg=Reset NONE
+row 3 cols 35-46: fg=Cyan bg=Reset BOLD
+row 4 cols 1-26: fg=Reset bg=Reset BOLD | REVERSED
+row 4 cols 45-63: fg=DarkGray bg=Reset NONE
+row 5 cols 1-4: fg=Reset bg=Reset BOLD
+row 5 cols 6-20: fg=Reset bg=Reset BOLD
+row 5 cols 21-26: fg=DarkGray bg=Reset NONE
+row 5 cols 29-33: fg=DarkGray bg=Reset NONE
+row 5 cols 35-46: fg=Reset bg=Reset BOLD
+row 6 cols 1-23: fg=DarkGray bg=Reset NONE
+row 7 cols 1-4: fg=Reset bg=Reset BOLD
+row 7 cols 6-22: fg=Reset bg=Reset BOLD
+row 7 cols 23-26: fg=DarkGray bg=Reset NONE
+row 8 cols 1-26: fg=DarkGray bg=Reset NONE
+row 9 cols 1-4: fg=Reset bg=Reset BOLD
+row 9 cols 23-26: fg=DarkGray bg=Reset NONE
+row 10 cols 1-26: fg=DarkGray bg=Reset NONE
+row 11 cols 1-4: fg=Reset bg=Reset BOLD
+row 11 cols 18-26: fg=DarkGray bg=Reset NONE
+row 11 cols 47-61: fg=DarkGray bg=Reset NONE
+row 12 cols 1-17: fg=DarkGray bg=Reset NONE
+row 12 cols 29-33: fg=DarkGray bg=Reset NONE
+row 12 cols 35-46: fg=Reset bg=Reset BOLD
+row 13 cols 1-4: fg=Reset bg=Reset BOLD
+row 13 cols 18-26: fg=DarkGray bg=Reset NONE
+row 14 cols 1-16: fg=DarkGray bg=Reset NONE
+row 14 cols 29-33: fg=DarkGray bg=Reset NONE
+row 14 cols 35-46: fg=Cyan bg=Reset BOLD
+row 15 cols 29-33: fg=DarkGray bg=Reset NONE
+row 15 cols 35-46: fg=Cyan bg=Reset BOLD
+row 16 cols 49-57: fg=DarkGray bg=Reset NONE
+row 17 cols 29-33: fg=DarkGray bg=Reset NONE
+row 17 cols 35-46: fg=Cyan bg=Reset BOLD
+row 17 cols 49-78: fg=DarkGray bg=Reset NONE
+row 18 cols 61-70: fg=DarkGray bg=Reset NONE
+row 21 cols 29-30: fg=Reset bg=Reset BOLD
+row 23 cols 0-24: fg=Reset bg=Reset DIM

@@ -1,0 +1,83 @@
+ chatcli  Teams 101 LIVE   WhatsApp CONNECTING                                           Ctrl+C quit
+┌ Chats ─────────────────────┐┌ Alex Example ──────────────────────────────────────────────────────┐
+│     Alex Example      09:15││                           ---- Today ----                          │
+│     Alex Example: is the b…││09:00 Alex Example  Can you review the draft before Friday?         │
+│99+  Project Team      08:02││09:05 You           Will do, thanks.                                │
+│     Sam Sample: thanks     ││                    👍 1                                            │
+│  1  Sam Sample          Sun││09:10 Alex Example  > You: Will do, thanks.                         │
+│     You: see you tomorrow  ││                    Great. The summary page still needs a shorter   │
+│     Release Planning f… Fri││                    introduction and captions for the figures.      │
+│     Jordan Placeholder: ag…││                    👍 3  ❤️ 1                                      │
+│     田中太郎 (Tar… 05/11/26││09:12 You           I shortened the introduction. (edited)          │
+│     了解しました           ││09:14 You           [message deleted]                               │
+│     Jordan Placeh… 09/10/26││09:16 Sam Sample    @Demo User can you also check the appendix?     │
+│     You: thanks            ││09:18 Alex Example  > Sam Sample: [original message not available]  │
+│                            ││                    Which one did you mean?                         │
+│                            ││                                                                    │
+│                            ││                                                                    │
+│                            ││                                                                    │
+│                            ││                                                                    │
+│                            ││                                                                    │
+│                            ││                                                                    │
+│                            ││                                                                    │
+│                            ││                                                                    │
+│                            ││                                                                    │
+│                            │└────────────────────────────────────────────────────────────────────┘
+│                            │╔ Message ═══════════════════════════════════════════════════════════╗
+│                            │║Editing: I shortened the introduction.  Esc cancel                  ║
+│                            │║> I shortened the introduction.                                     ║
+└────────────────────────────┘╚════════════════════════════════════════════════════════════════════╝
+Enter send  F1 help  Esc cancel edit  Ctrl+Up select  Ctrl+J newline  Ctrl+E emoji  Ctrl+O attach
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 89-99: fg=Reset bg=Reset DIM
+row 2 cols 1-28: fg=Reset bg=Reset BOLD | UNDERLINED
+row 2 cols 58-72: fg=DarkGray bg=Reset NONE
+row 3 cols 1-28: fg=Reset bg=Reset BOLD | UNDERLINED
+row 3 cols 31-35: fg=DarkGray bg=Reset NONE
+row 3 cols 37-48: fg=Reset bg=Reset BOLD
+row 4 cols 1-4: fg=Reset bg=Reset BOLD
+row 4 cols 6-22: fg=Reset bg=Reset BOLD
+row 4 cols 23-28: fg=DarkGray bg=Reset NONE
+row 4 cols 31-35: fg=DarkGray bg=Reset NONE
+row 4 cols 37-48: fg=Cyan bg=Reset BOLD
+row 5 cols 1-23: fg=DarkGray bg=Reset NONE
+row 5 cols 51-54: fg=Reset bg=Reset BOLD
+row 6 cols 1-4: fg=Reset bg=Reset BOLD
+row 6 cols 6-24: fg=Reset bg=Reset BOLD
+row 6 cols 25-28: fg=DarkGray bg=Reset NONE
+row 6 cols 31-35: fg=DarkGray bg=Reset NONE
+row 6 cols 37-48: fg=Reset bg=Reset BOLD
+row 6 cols 51-73: fg=DarkGray bg=Reset NONE
+row 7 cols 1-26: fg=DarkGray bg=Reset NONE
+row 8 cols 1-4: fg=Reset bg=Reset BOLD
+row 8 cols 25-28: fg=DarkGray bg=Reset NONE
+row 9 cols 1-28: fg=DarkGray bg=Reset NONE
+row 9 cols 57-60: fg=Reset bg=Reset BOLD
+row 10 cols 1-4: fg=Reset bg=Reset BOLD
+row 10 cols 20-28: fg=DarkGray bg=Reset NONE
+row 10 cols 31-35: fg=DarkGray bg=Reset NONE
+row 10 cols 37-48: fg=Cyan bg=Reset BOLD
+row 10 cols 80-88: fg=DarkGray bg=Reset NONE
+row 11 cols 1-17: fg=DarkGray bg=Reset NONE
+row 11 cols 31-35: fg=DarkGray bg=Reset NONE
+row 11 cols 37-48: fg=Cyan bg=Reset BOLD
+row 11 cols 51-67: fg=DarkGray bg=Reset NONE
+row 12 cols 1-4: fg=Reset bg=Reset BOLD
+row 12 cols 20-28: fg=DarkGray bg=Reset NONE
+row 12 cols 31-35: fg=DarkGray bg=Reset NONE
+row 12 cols 37-48: fg=Reset bg=Reset BOLD
+row 12 cols 51-93: fg=Reset bg=Reset BOLD
+row 13 cols 1-16: fg=DarkGray bg=Reset NONE
+row 13 cols 31-35: fg=DarkGray bg=Reset NONE
+row 13 cols 37-48: fg=Reset bg=Reset BOLD
+row 13 cols 51-96: fg=DarkGray bg=Reset NONE
+row 25 cols 31-39: fg=Reset bg=Reset BOLD
+row 26 cols 31-68: fg=DarkGray bg=Reset NONE
+row 26 cols 69-80: fg=Reset bg=Reset DIM
+row 27 cols 31-32: fg=Reset bg=Reset BOLD
+row 29 cols 0-96: fg=Reset bg=Reset DIM
+cursor: 62,27

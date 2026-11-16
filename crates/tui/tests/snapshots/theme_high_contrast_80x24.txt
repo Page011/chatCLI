@@ -1,0 +1,48 @@
+ chatcli  Teams 101 LIVE   WhatsApp NOT LIVE                         Ctrl+C quit
+╔ Chats ═══════════════════╗┌ Alex Example ────────────────────────────────────┐
+║     Alex Example    09:15║│14:20 Alex Example  Can you review the draft      │
+║     Alex Example: is the…║│                    before Friday?                │
+║99+  Project Team    08:02║│14:31 You           Will do.                      │
+║     Sam Sample: thanks   ║│                ---- Yesterday ----               │
+║  1  Sam Sample        Sun║│16:05 Alex Example  Notes from the review: the    │
+║     You: see you tomorrow║│                    summary page needs a shorter  │
+║     Release Planning… Fri║│                    introduction, the figures need│
+║     Jordan Placeholder: …║│                    captions, and the appendix can│
+║     田中太郎 (T… 05/11/26║│                    move to the end of the        │
+║     了解しました         ║│                    document.                     │
+║     Jordan Plac… 09/10/26║│                  ---- Today ----                 │
+║     You: thanks          ║│09:10 Alex Example  is the build done? 🚀         │
+║                          ║│                    今日はどうですか              │
+║                          ║│09:15 You           yes, shipped                  │
+║                          ║│09:30 You           this one will fail            │
+║                          ║│                    NOT SENT - demo: this chat    │
+║                          ║│                    refuses messages              │
+║                          ║└──────────────────────────────────────────────────┘
+║                          ║┌ Message ─────────────────────────────────────────┐
+║                          ║│Enter on a chat to type                           │
+╚══════════════════════════╝└──────────────────────────────────────────────────┘
+Up/Down chat  Enter type  / commands  ? help  Tab network  r refresh  q quit
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-43: fg=Reset bg=Reset BOLD | REVERSED
+row 1 cols 1-7: fg=Reset bg=Reset BOLD
+row 2 cols 1-26: fg=Reset bg=Reset BOLD | REVERSED
+row 2 cols 35-46: fg=Reset bg=Reset BOLD
+row 3 cols 1-26: fg=Reset bg=Reset BOLD | REVERSED
+row 4 cols 1-4: fg=Reset bg=Reset BOLD
+row 4 cols 6-20: fg=Reset bg=Reset BOLD
+row 4 cols 35-46: fg=Reset bg=Reset BOLD
+row 6 cols 1-4: fg=Reset bg=Reset BOLD
+row 6 cols 6-22: fg=Reset bg=Reset BOLD
+row 6 cols 35-46: fg=Reset bg=Reset BOLD
+row 8 cols 1-4: fg=Reset bg=Reset BOLD
+row 10 cols 1-4: fg=Reset bg=Reset BOLD
+row 12 cols 1-4: fg=Reset bg=Reset BOLD
+row 13 cols 35-46: fg=Reset bg=Reset BOLD
+row 15 cols 35-46: fg=Reset bg=Reset BOLD
+row 16 cols 35-46: fg=Reset bg=Reset BOLD
+row 16 cols 49-66: fg=Red bg=Reset BOLD
+row 17 cols 49-74: fg=Red bg=Reset BOLD
+row 18 cols 49-64: fg=Red bg=Reset BOLD

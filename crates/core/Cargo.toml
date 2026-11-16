@@ -8,8 +8,29 @@ license.workspace = true
 
 [dependencies]
 chrono.workspace = true
+# PNG/JPEG/GIF/WebP decode + re-encode for outgoing images (drops EXIF), per the 0.2 contract.
+image.workspace = true
 keyring.workspace = true
+# Opens URLs and files with the OS default app; never goes through a shell.
+opener = "0.8"
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# Cache file names are a hash of the fetch ref, never the sender's file name.
+sha2.workspace = true
+# settings.toml loader.
+toml = "1"
+# settings.toml writer: edits one key and keeps the user's comments and unknown keys.
+toml_edit = { version = "0.25.19", default-features = false, features = ["parse", "display"] }
 tokio.workspace = true
+
+# The workspace keyring entry enables windows-native only. Each other OS needs its own backend
+# feature, otherwise keyring silently falls back to a mock store that forgets everything.
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { workspace = true, features = ["apple-native"] }
+
+# Secret Service (GNOME Keyring, KWallet) persists across reboots; keyutils is the fallback when
+# no Secret Service runs. `vendored` builds libdbus from source so CI and users need no
+# libdbus-dev; crypto-rust avoids an OpenSSL dependency.
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { workspace = true, features = ["linux-native-sync-persistent", "crypto-rust", "vendored"] }

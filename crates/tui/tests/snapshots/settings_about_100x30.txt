@@ -1,0 +1,43 @@
+ chatcli  Teams 103 LIVE   WhatsApp CONNECTING                                           Ctrl+C quit
+╔ Settings ══════╗┌ About ─────────────────────────────────────────────────────────────────────────┐
+║Appearance      ║│Version             chatcli 0.1.0                                               │
+║Layout          ║│Data folder         -                                                           │
+║Notifications   ║│Log file            -                                                           │
+║Media           ║│Settings file       -                                                           │
+║Teams           ║│                                                                                │
+║WhatsApp        ║│                                                                                │
+║Keys            ║│                                                                                │
+║About           ║│                                                                                │
+║                ║│                                                                                │
+║                ║│                                                                                │
+║                ║│                                                                                │
+║                ║│                                                                                │
+║                ║│                                                                                │
+║                ║│                                                                                │
+║                ║│                                                                                │
+║                ║│                                                                                │
+║                ║│                                                                                │
+║                ║│                                                                                │
+║                ║│                                                                                │
+║                ║│                                                                                │
+║                ║│                                                                                │
+║                ║│                                                                                │
+║                ║│                                                                                │
+║                ║│                                                                                │
+║                ║│                                                                                │
+║                ║│                                                                                │
+╚════════════════╝└────────────────────────────────────────────────────────────────────────────────┘
+Up/Down section  Esc close  Enter open  F1 help
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 89-99: fg=Reset bg=Reset DIM
+row 1 cols 1-10: fg=Reset bg=Reset BOLD
+row 2 cols 19-37: fg=Reset bg=Reset BOLD
+row 3 cols 19-37: fg=Reset bg=Reset BOLD
+row 4 cols 19-37: fg=Reset bg=Reset BOLD
+row 5 cols 19-37: fg=Reset bg=Reset BOLD
+row 9 cols 1-16: fg=Reset bg=Reset BOLD | REVERSED
+row 29 cols 0-46: fg=Reset bg=Reset DIM

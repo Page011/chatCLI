@@ -3,28 +3,41 @@
 //!
 //! No timers call Graph to poll Teams (Microsoft allows at most one poll a day). Chats are
 //! listed at start, on the user's Refresh, and in a catch-up after a relay reconnect; messages
-//! are fetched when the user opens a chat or a change notification names one. The only timer
-//! is subscription upkeep (renew at half-life, retry after a failure), which is not polling.
+//! are fetched when the user opens a chat, scrolls to the top, or a change notification names
+//! one. The only timer is subscription upkeep (renew at half-life, retry after a failure), which
+//! is not polling.
+//!
+//! Uploads and downloads run on spawned tasks with cloned handles, so a slow transfer never
+//! blocks the command loop; `Shutdown` aborts them.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::mpsc;
+use tokio::task::JoinSet;
 use tokio::time::Instant;
 
+use chatcli_core::limits::{text_fits, TEAMS_TEXT_MAX_BYTES};
+use chatcli_core::media::{self, MediaCache};
 use chatcli_core::model::{
-    now_ms, ChatMessage, ChatSummary, Command, CommandRx, Event, EventTx, MessageState, Network,
-    Status,
+    now_ms, Capabilities, ChatFlag, ChatKind, ChatMessage, ChatSummary, Command, CommandRx, Event,
+    EventTx, MediaKind, MessageState, Network, PersonRef, QuotedRef, Status, MUTE_FOREVER,
 };
-use chatcli_core::store::Store;
+use chatcli_core::runtime::BackendCtx;
+use chatcli_core::settings::Settings;
+use chatcli_core::store::{Store, REACTOR_ME};
 use chatcli_core::{config, log};
 
-use crate::auth::{self, AuthFailure};
-use crate::graph::{ApiResult, Graph};
-use crate::map::{self, TOKEN_MARGIN_MS};
+use crate::auth::{self, AuthFailure, ScopeSet};
+use crate::body;
+use crate::graph::{self, ApiResult, Graph};
+use crate::map::{self, FetchSpec, Local, RemoteLast, TOKEN_MARGIN_MS};
 use crate::relay::{self, Frame, LifecycleItem, Notification, RelayEvent};
 use crate::subscription::{self, Spec, SubState, SUB_ID_KEY};
+use crate::transfer;
 
 const NET: Network = Network::Teams;
 /// 20 pages of 50 = 1000 chats. More is reported, never dropped silently.
@@ -33,11 +46,23 @@ const MAX_CHAT_PAGES: u32 = 20;
 const FETCH_MESSAGES: u32 = 50;
 /// Messages shown from the local store.
 const STORE_MESSAGES: u32 = 200;
+/// Older messages answered per scroll past the top.
+const OLDER_PAGE: u32 = 50;
 /// Chats fetched in one catch-up, so a long absence cannot trigger a request storm.
 const CATCH_UP_MAX_CHATS: usize = 25;
 /// After a failed subscription create or renew, try again after this long.
 const SUBSCRIPTION_RETRY_MS: i64 = 10 * 60 * 1000;
 const SHUTDOWN_CLEANUP: Duration = Duration::from_secs(5);
+/// A saved member list younger than this is served without asking Teams again.
+const MEMBERS_FRESH_MS: i64 = 10 * 60 * 1000;
+/// Pages of members read for one chat (50 each): well past any real chat.
+const MEMBERS_MAX_PAGES: u32 = 21;
+/// Upload progress goes to the TUI at most four times a second per transfer.
+const PROGRESS_EVERY: Duration = Duration::from_millis(250);
+
+/// Fixed user-facing texts (contract section 2).
+const REPLY_NEEDS_SCOPE: &str = "REPLY NEEDS ChatMessage.Send, sign in again";
+const NOT_SIGNED_IN: &str = "Not signed in to Teams. Sign in first.";
 
 /// Why a Graph call failed, as far as the backend needs to tell.
 enum Fail {
@@ -92,10 +117,19 @@ fn next_upkeep_ms(sub: Option<&SubState>, retry_at_ms: Option<i64>) -> Option<i6
 
 struct Backend {
     store: Store,
+    settings: Arc<Settings>,
+    media: MediaCache,
     events: EventTx,
     http: reqwest::Client,
     relay_tx: mpsc::UnboundedSender<RelayEvent>,
     token: Option<CachedToken>,
+    /// The scopes the current token carries.
+    granted: Vec<String>,
+    last_caps: Option<Capabilities>,
+    /// The "scopes not granted yet" notice goes out once per sign-in, not on every refresh.
+    scope_warned: bool,
+    /// Uploads and downloads in flight.
+    tasks: JoinSet<()>,
     me_id: Option<String>,
     tenant_id: Option<String>,
     relay: Option<relay::Client>,
@@ -111,12 +145,15 @@ struct Backend {
     /// A notification for one of these is dropped without a Graph call.
     not_shown: HashSet<String>,
     /// 1:1 and group chats the user hid. A new message unhides them on Teams, so a "created"
-    /// notification for one is followed up (re-list, then fetch) instead of dropped.
+    /// notification for one is followed up (re-list, then fetch) instead of trusting the flag.
     hidden: HashSet<String>,
     last_status: Option<Status>,
+    /// Tests point Graph at a local mock server.
+    #[cfg(test)]
+    graph_base: Option<String>,
 }
 
-pub async fn run(store: Store, mut commands: CommandRx, events: EventTx) {
+pub async fn run(ctx: BackendCtx, mut commands: CommandRx, events: EventTx) {
     let (relay_tx, mut relay_rx) = mpsc::unbounded_channel();
     let http = match auth::http_client() {
         Ok(h) => h,
@@ -131,7 +168,7 @@ pub async fn run(store: Store, mut commands: CommandRx, events: EventTx) {
             return;
         }
     };
-    let mut b = Backend::new(store, events, http, relay_tx);
+    let mut b = Backend::new(ctx, events, http, relay_tx);
     b.start().await;
     loop {
         let deadline = b.next_deadline();
@@ -145,25 +182,218 @@ pub async fn run(store: Store, mut commands: CommandRx, events: EventTx) {
                 }
             },
             Some(ev) = relay_rx.recv() => b.relay_event(ev).await,
+            Some(done) = b.tasks.join_next(), if !b.tasks.is_empty() => {
+                if let Err(e) = done {
+                    if !e.is_cancelled() {
+                        log::error("teams", &format!("a transfer task stopped: {e}"));
+                    }
+                }
+            }
             _ = tokio::time::sleep_until(deadline) => b.upkeep().await,
         }
     }
     b.shutdown().await;
 }
 
+// --- helpers that need no backend state: shared by the command loop and spawned tasks ----------
+
+/// What storing a fetched message found.
+struct Stored {
+    /// As read back from the store: attachments, reactions and quote included.
+    message: ChatMessage,
+    existed: bool,
+    /// Differs from what was stored before (an edit, a delete, a reaction).
+    changed: bool,
+}
+
+/// Maps fetched messages, stores them with their reactions (Graph gives the full list each
+/// time) and reads them back. A message without a timestamp is skipped and logged.
+fn store_fetched(
+    store: &Store,
+    chat_id: &str,
+    fetched: &[graph::Message],
+    me: &str,
+) -> Result<Vec<Stored>, String> {
+    let mapped: Vec<(&graph::Message, ChatMessage)> = fetched
+        .iter()
+        .filter_map(|m| map::map_message(m, chat_id, me).map(|c| (m, c)))
+        .collect();
+    if mapped.len() < fetched.len() {
+        log::error("teams", "some messages had no timestamp and were skipped");
+    }
+    let before = mapped
+        .iter()
+        .map(|(_, c)| store.message(NET, chat_id, &c.id))
+        .collect::<Result<Vec<_>, _>>()?;
+    let all: Vec<ChatMessage> = mapped.iter().map(|(_, c)| c.clone()).collect();
+    store.upsert_messages(&all)?;
+    let mut out = Vec::with_capacity(mapped.len());
+    for ((raw, mapped), before) in mapped.iter().zip(before) {
+        let rows = if mapped.state == MessageState::Deleted {
+            Vec::new()
+        } else {
+            map::reaction_rows(raw, me)
+        };
+        store.replace_reactions(NET, chat_id, &mapped.id, &rows)?;
+        let after = store
+            .message(NET, chat_id, &mapped.id)?
+            .unwrap_or_else(|| mapped.clone());
+        out.push(Stored {
+            existed: before.is_some(),
+            changed: before.as_ref().is_some_and(|b| *b != after),
+            message: after,
+        });
+    }
+    Ok(out)
+}
+
+/// Moves a chat's last-message fields forward for one message and sends ChatUpdated.
+/// `unread`: the new count, or None to leave it.
+fn touch_chat(
+    store: &Store,
+    events: &EventTx,
+    chat_id: &str,
+    message: &ChatMessage,
+    unread: Option<u32>,
+) {
+    let Ok(Some(mut chat)) = store.chat(NET, chat_id) else {
+        return;
+    };
+    if message.ts >= chat.last_ts.unwrap_or(i64::MIN) {
+        chat.last_ts = Some(message.ts);
+        chat.last_preview = map::preview_line(&message.sender, message.from_me, &message.text);
+    }
+    if let Some(n) = unread {
+        chat.unread = n;
+    }
+    if let Err(e) = store.upsert_chats(std::slice::from_ref(&chat)) {
+        log::error("teams", &e);
+    }
+    // Read back: the stored copy carries the mention counter and the flags.
+    let chat = store.chat(NET, chat_id).ok().flatten().unwrap_or(chat);
+    let _ = events.send(Event::ChatUpdated(chat));
+}
+
+/// The deleted form of a stored message: no text, files, quote, mentions or reactions. Read back
+/// from the store before and after, so nothing else about the message is lost.
+fn apply_deleted(
+    store: &Store,
+    chat_id: &str,
+    message_id: &str,
+) -> Result<Option<ChatMessage>, String> {
+    let Some(mut m) = store.message(NET, chat_id, message_id)? else {
+        return Ok(None);
+    };
+    m.state = MessageState::Deleted;
+    m.text.clear();
+    m.attachments.clear();
+    m.reactions.clear();
+    m.mentions.clear();
+    m.mentions_me = false;
+    m.reply_to = None;
+    store.upsert_messages(std::slice::from_ref(&m))?;
+    store.replace_reactions(NET, chat_id, message_id, &[])?;
+    store.message(NET, chat_id, message_id)
+}
+
+/// Ends a send: confirms the pending message with Graph's answer, or keeps it as failed so it
+/// still shows NOT SENT after reopening. Returns the failure text when it failed.
+#[allow(clippy::too_many_arguments)]
+fn finish_send(
+    store: &Store,
+    events: &EventTx,
+    me: &str,
+    chat_id: &str,
+    client_id: &str,
+    fallback_text: &str,
+    reply_to: Option<QuotedRef>,
+    result: Result<graph::Message, String>,
+) -> Option<String> {
+    match result {
+        Ok(sent) => {
+            // Graph's answer has the real id and time; without a time, use ours.
+            let mut message = map::map_message(&sent, chat_id, me).unwrap_or_else(|| ChatMessage {
+                chat_id: chat_id.to_string(),
+                id: sent.id.clone(),
+                ts: now_ms(),
+                sender: "You".into(),
+                from_me: true,
+                text: fallback_text.to_string(),
+                ..ChatMessage::blank(NET)
+            });
+            message.from_me = true;
+            // Graph's answer carries the quote; the one the user chose is the fallback.
+            if message.reply_to.is_none() {
+                message.reply_to = reply_to;
+            }
+            if let Err(e) = store.confirm_message(client_id, &message) {
+                log::error("teams", &e);
+                let _ = events.send(Event::Notice {
+                    network: NET,
+                    text: e,
+                    is_error: true,
+                });
+            }
+            let _ = events.send(Event::MessageConfirmed {
+                client_id: client_id.to_string(),
+                message: message.clone(),
+            });
+            touch_chat(store, events, chat_id, &message, None);
+            None
+        }
+        Err(error) => {
+            log::error("teams-send", &format!("send failed: {error}"));
+            let failed = ChatMessage {
+                chat_id: chat_id.to_string(),
+                id: client_id.to_string(),
+                ts: now_ms(),
+                sender: "You".into(),
+                from_me: true,
+                text: fallback_text.to_string(),
+                state: MessageState::Failed(error.clone()),
+                reply_to,
+                ..ChatMessage::blank(NET)
+            };
+            if let Err(e) = store.upsert_messages(&[failed]) {
+                log::error("teams", &e);
+            }
+            let _ = events.send(Event::MessageFailed {
+                network: NET,
+                chat_id: chat_id.to_string(),
+                client_id: client_id.to_string(),
+                error: error.clone(),
+            });
+            Some(error)
+        }
+    }
+}
+
+/// Mutable parts of one chat refresh.
+struct Refreshed {
+    shown: Vec<ChatSummary>,
+    /// What each chat's list entry says its last message is.
+    last: HashMap<String, RemoteLast>,
+}
+
 impl Backend {
     fn new(
-        store: Store,
+        ctx: BackendCtx,
         events: EventTx,
         http: reqwest::Client,
         relay_tx: mpsc::UnboundedSender<RelayEvent>,
     ) -> Self {
         Backend {
-            store,
+            store: ctx.store,
+            settings: ctx.settings,
+            media: ctx.media,
             events,
             http,
             relay_tx,
             token: None,
+            granted: Vec::new(),
+            last_caps: None,
+            scope_warned: false,
+            tasks: JoinSet::new(),
             me_id: None,
             tenant_id: None,
             relay: None,
@@ -177,6 +407,8 @@ impl Backend {
             not_shown: HashSet::new(),
             hidden: HashSet::new(),
             last_status: None,
+            #[cfg(test)]
+            graph_base: None,
         }
     }
 
@@ -251,7 +483,77 @@ impl Backend {
         }
     }
 
+    /// What Teams can do now (the token's scopes and the settings).
+    fn caps(&self) -> Capabilities {
+        map::capabilities(&self.granted, &self.settings.teams)
+    }
+
+    /// The user changed settings in the TUI: use the new limits and capability switches now.
+    /// File scopes themselves are asked for at the next sign-in, which reads `settings.toml`
+    /// again (`auth::settings_scopes`).
+    fn apply_settings(&mut self, settings: Arc<Settings>) {
+        self.media = self.media.with_limits(&settings.media);
+        self.settings = settings;
+        // Nothing sent yet (not signed in): the sign-in publishes the first set.
+        if self.last_caps.is_some() {
+            self.publish_caps();
+        }
+    }
+
+    /// Sends the capabilities when they differ from the last ones sent.
+    fn publish_caps(&mut self) {
+        let caps = self.caps();
+        if self.last_caps != Some(caps) {
+            self.last_caps = Some(caps);
+            self.emit(Event::Capabilities { network: NET, caps });
+        }
+    }
+
+    /// A refresh can fall back to fewer scopes (a new one was never consented to), and the TUI
+    /// only dims the action. Say once, in words, which scopes are missing and what to do.
+    fn warn_missing_scopes(&mut self) {
+        if self.scope_warned {
+            return;
+        }
+        let caps = self.caps();
+        let teams = &self.settings.teams;
+        let mut missing = Vec::new();
+        if !caps.reply {
+            missing.push("ChatMessage.Send (replies)");
+        }
+        if teams.files_read && !caps.fetch_files {
+            missing.push("Files.Read.All (file downloads)");
+        }
+        if teams.files_write && !caps.send_file {
+            missing.push("Files.ReadWrite (sending files)");
+        }
+        if !missing.is_empty() {
+            self.scope_warned = true;
+            self.notice(
+                &format!(
+                    "Not granted yet: {}. Log out of Teams and sign in again to get them.",
+                    missing.join(", ")
+                ),
+                false,
+            );
+        }
+    }
+
     // --- tokens and Graph calls ------------------------------------------------------------
+
+    fn scopes(&self) -> ScopeSet {
+        ScopeSet::from_settings(&self.settings.teams)
+    }
+
+    fn graph(&self, token: String) -> Graph {
+        let g = Graph::new(self.http.clone(), token);
+        #[cfg(test)]
+        let g = match &self.graph_base {
+            Some(base) => g.with_base(base),
+            None => g,
+        };
+        g
+    }
 
     fn set_token(&mut self, token: auth::Token) {
         if let Some(tid) = map::tid_from_jwt(&token.access) {
@@ -259,10 +561,16 @@ impl Backend {
         }
         let expires_at_ms =
             now_ms() + i64::try_from(token.expires_in_secs).unwrap_or(i64::MAX / 2_000) * 1000;
+        self.granted = token.granted;
         self.token = Some(CachedToken {
             access: token.access,
             expires_at_ms,
         });
+        // A refresh that had to drop a scope, or a new sign-in that gained one, changes what
+        // the TUI may offer.
+        if self.me_id.is_some() {
+            self.publish_caps();
+        }
     }
 
     /// The cached access token, refreshed a minute early (or now, when `force`).
@@ -274,7 +582,7 @@ impl Backend {
                 }
             }
         }
-        match auth::refresh(&self.http).await {
+        match auth::refresh_with(&self.http, &self.scopes()).await {
             Ok(token) => {
                 let access = token.access.clone();
                 self.set_token(token);
@@ -296,12 +604,12 @@ impl Backend {
         Fut: Future<Output = ApiResult<T>>,
     {
         let token = self.token(false).await?;
-        match f(Graph::new(self.http.clone(), token)).await {
+        match f(self.graph(token)).await {
             Ok(v) => Ok(v),
             Err(e) if e.status == 401 => {
                 log::info("teams", "Graph answered 401, refreshing the token once");
                 let token = self.token(true).await?;
-                f(Graph::new(self.http.clone(), token)).await.map_err(|e| {
+                f(self.graph(token)).await.map_err(|e| {
                     if e.status == 401 {
                         Fail::NeedsLogin(e.message)
                     } else {
@@ -310,6 +618,21 @@ impl Backend {
                 })
             }
             Err(e) => Err(Fail::Other(e.message, e.status)),
+        }
+    }
+
+    /// A Graph handle for a spawned task, or the reason there is none (signed out).
+    async fn task_graph(&mut self) -> Result<Graph, String> {
+        if self.me_id.is_none() {
+            return Err(NOT_SIGNED_IN.to_string());
+        }
+        match self.token(false).await {
+            Ok(token) => Ok(self.graph(token)),
+            Err(Fail::NeedsLogin(reason)) => {
+                self.signed_out(Some(reason.clone()));
+                Err(reason)
+            }
+            Err(Fail::Other(message, _)) => Err(message),
         }
     }
 
@@ -338,12 +661,20 @@ impl Backend {
         self.retry_at_ms = None;
     }
 
+    /// Forgets who is signed in. Capabilities are re-sent after the next sign-in.
+    fn forget_session(&mut self) {
+        self.token = None;
+        self.granted.clear();
+        self.last_caps = None;
+        self.scope_warned = false;
+        self.me_id = None;
+        self.tenant_id = None;
+    }
+
     /// Back to the sign-in panel, with Microsoft's reason when there is one.
     fn signed_out(&mut self, reason: Option<String>) {
         self.teardown_live();
-        self.token = None;
-        self.me_id = None;
-        self.tenant_id = None;
+        self.forget_session();
         if let Some(r) = &reason {
             self.notice(r, true);
         }
@@ -378,28 +709,49 @@ impl Backend {
             Ok(me) => me,
             Err(f) => return self.fail(f, "Could not reach Teams", true),
         };
+        // The cached rows carry account-relative facts (from_me, unread): another account
+        // signing in over them would show the old account's messages as "You".
+        match self.store.bind_account(NET, &me.id) {
+            Ok(true) => {
+                log::info(
+                    "teams",
+                    "a different account signed in: cached Teams data cleared",
+                );
+                self.emit_chats();
+            }
+            Ok(false) => {}
+            Err(e) => self.notice(&e, true),
+        }
         self.me_id = Some(me.id);
         if let Err(f) = self.refresh_chats().await {
             return self.fail(f, "Could not load chats", true);
         }
         self.setup_live().await;
+        self.publish_caps();
+        self.warn_missing_scopes();
     }
 
-    /// Lists every chat, keeps 1:1 and group chats that are not hidden, replaces the store's
-    /// copy and sends the sidebar. Returns the fresh summaries.
-    async fn refresh_chats(&mut self) -> Outcome<Vec<ChatSummary>> {
+    /// Lists every chat, keeps 1:1 and group chats (hidden ones flagged, not dropped), replaces
+    /// the store's copy and sends the sidebar. Returns the fresh summaries.
+    async fn refresh_chats(&mut self) -> Outcome<Refreshed> {
         let page = self
             .call(|g| async move { g.chats_all(MAX_CHAT_PAGES).await })
             .await?;
         let me = self.me_id.clone().unwrap_or_default();
         let mut shown = Vec::new();
+        let mut last = HashMap::new();
         self.not_shown.clear();
         self.hidden.clear();
         for chat in &page.chats {
             match map::chat_summary(chat, &me) {
-                Some(summary) => shown.push(summary),
-                None if map::is_hidden_chat(chat) => {
-                    self.hidden.insert(chat.id.clone());
+                Some(summary) => {
+                    if summary.flags.hidden {
+                        self.hidden.insert(chat.id.clone());
+                    }
+                    if let Some(l) = map::remote_last(chat) {
+                        last.insert(chat.id.clone(), l);
+                    }
+                    shown.push(summary);
                 }
                 None => {
                     self.not_shown.insert(chat.id.clone());
@@ -423,8 +775,25 @@ impl Backend {
         if let Err(e) = saved {
             self.notice(&e, true);
         }
+        self.sync_hidden_flags(&shown);
         self.emit_chats();
-        Ok(shown)
+        Ok(Refreshed { shown, last })
+    }
+
+    /// Teams knows which chats the user hid: its answer wins over the stored flag. Pin and mute
+    /// are local only and are never touched here.
+    fn sync_hidden_flags(&self, shown: &[ChatSummary]) {
+        for chat in shown {
+            let Ok(mut flags) = self.store.chat_flags(NET, &chat.id) else {
+                continue;
+            };
+            if flags.hidden != chat.flags.hidden {
+                flags.hidden = chat.flags.hidden;
+                if let Err(e) = self.store.set_chat_flags(NET, &chat.id, flags) {
+                    self.notice(&e, true);
+                }
+            }
+        }
     }
 
     async fn login(&mut self, commands: &mut CommandRx) -> bool {
@@ -432,7 +801,8 @@ impl Backend {
         self.emit_status(Status::LoggingIn);
         let events = self.events.clone();
         let http = self.http.clone();
-        let sign_in = auth::sign_in_token(&http, move |url| {
+        let scopes = self.scopes();
+        let sign_in = auth::sign_in_token_with(&http, &scopes, move |url| {
             let _ = events.send(Event::Notice {
                 network: NET,
                 text: format!("If no browser opened, sign in at: {url}"),
@@ -440,17 +810,25 @@ impl Backend {
             });
         });
         tokio::pin!(sign_in);
+        // The pinned sign-in future borrows nothing of self, but keep the newest settings and
+        // apply them once it is done.
+        let mut new_settings = None;
         let result = loop {
             tokio::select! {
                 result = &mut sign_in => break result,
                 cmd = commands.recv() => {
                     // Quit stays possible while the browser is open; anything else waits.
-                    if matches!(cmd, None | Some(Command::Shutdown)) {
-                        return true;
+                    match cmd {
+                        None | Some(Command::Shutdown) => return true,
+                        Some(Command::Settings(s)) => new_settings = Some(s),
+                        Some(_) => {}
                     }
                 }
             }
         };
+        if let Some(s) = new_settings {
+            self.apply_settings(s);
+        }
         match result {
             Ok(token) => {
                 log::info("teams", "sign-in finished");
@@ -474,15 +852,14 @@ impl Backend {
                 true,
             );
         }
-        self.token = None;
-        self.me_id = None;
-        self.tenant_id = None;
+        self.forget_session();
         self.emit_status(Status::NeedsLogin { reason: None });
     }
 
     // --- commands --------------------------------------------------------------------------
 
-    /// Returns true when the task should end.
+    /// Returns true when the task should end. Every command is answered (contract section 3);
+    /// `Typing` is the one documented silent drop: the TUI never sends it to Teams.
     async fn command(&mut self, cmd: Command, commands: &mut CommandRx) -> bool {
         match cmd {
             Command::Login => return self.login(commands).await,
@@ -493,8 +870,51 @@ impl Backend {
                 chat_id,
                 text,
                 client_id,
-            } => self.send(&chat_id, &text, &client_id).await,
+                reply_to,
+                mentions,
+            } => {
+                self.send(&chat_id, &text, &client_id, reply_to, &mentions)
+                    .await
+            }
             Command::MarkRead { chat_id } => self.mark_read(&chat_id).await,
+            Command::SendMedia {
+                chat_id,
+                client_id,
+                path,
+                kind: _,
+                caption,
+            } => self.send_media(chat_id, client_id, path, caption).await,
+            Command::React {
+                chat_id,
+                message_id,
+                emoji,
+                remove,
+            } => self.react(&chat_id, &message_id, &emoji, remove).await,
+            Command::Edit {
+                chat_id,
+                message_id,
+                text,
+            } => self.edit(&chat_id, &message_id, &text).await,
+            Command::Delete {
+                chat_id,
+                message_id,
+            } => self.delete(&chat_id, &message_id).await,
+            Command::FetchMedia {
+                chat_id,
+                message_id,
+                index,
+            } => self.fetch_media(chat_id, message_id, index).await,
+            Command::LoadOlder {
+                chat_id,
+                before_ts,
+                before_id,
+            } => self.load_older(&chat_id, before_ts, &before_id).await,
+            Command::LoadMembers { chat_id } => self.load_members(&chat_id).await,
+            Command::Typing { .. } => {}
+            Command::Settings(s) => self.apply_settings(s),
+            Command::SetChatFlag { chat_id, flag, on } => {
+                self.set_chat_flag(&chat_id, flag, on).await
+            }
             Command::Shutdown => return true,
         }
         false
@@ -522,32 +942,35 @@ impl Backend {
         }
     }
 
-    /// Stores the newest messages of a chat. Returns how many are newer than what was stored.
-    /// The flag is true when every fetched message is newer than the stored ones and the
-    /// fetch was full, so older messages in between may be missing.
-    async fn fetch_history(&mut self, chat_id: &str) -> Outcome<(usize, bool)> {
+    /// Stores the newest messages of a chat and says which are new, which changed.
+    async fn fetch_history(&mut self, chat_id: &str) -> Outcome<History> {
         let newest = self.newest_stored(chat_id);
         let me = self.me_id.clone().unwrap_or_default();
         let fetched = self
             .call(move |g| async move { g.messages(chat_id, FETCH_MESSAGES).await })
             .await?;
-        let mapped: Vec<ChatMessage> = fetched
-            .iter()
-            .filter_map(|m| map::map_message(m, chat_id, &me))
-            .collect();
-        if mapped.len() < fetched.len() {
-            log::error("teams", "some messages had no timestamp and were skipped");
-        }
-        if let Err(e) = self.store.upsert_messages(&mapped) {
-            self.notice(&e, true);
-        }
-        let newer = mapped
-            .iter()
-            .filter(|m| newest.is_none_or(|n| m.ts > n))
-            .count();
-        let gap =
-            newest.is_some() && fetched.len() >= FETCH_MESSAGES as usize && newer == mapped.len();
-        Ok((newer, gap))
+        let stored =
+            store_fetched(&self.store, chat_id, &fetched, &me).map_err(|e| Fail::Other(e, 0))?;
+        let is_new = |s: &Stored| !s.existed && newest.is_none_or(|n| s.message.ts > n);
+        let gap = newest.is_some()
+            && fetched.len() >= FETCH_MESSAGES as usize
+            && stored
+                .iter()
+                .all(|s| s.message.ts > newest.unwrap_or(i64::MIN));
+        Ok(History {
+            new: stored
+                .iter()
+                .filter(|s| is_new(s))
+                .map(|s| s.message.clone())
+                .collect(),
+            // A message that was missing from the middle counts as changed: no toast for it.
+            changed: stored
+                .iter()
+                .filter(|s| s.changed || (!s.existed && !is_new(s)))
+                .map(|s| s.message.clone())
+                .collect(),
+            gap,
+        })
     }
 
     /// Newest message Teams itself reported: local failed sends are left out, see the store.
@@ -555,115 +978,685 @@ impl Backend {
         self.store.newest_synced_ts(NET, chat_id).ok().flatten()
     }
 
-    async fn send(&mut self, chat_id: &str, text: &str, client_id: &str) {
+    // --- sending ---------------------------------------------------------------------------
+
+    async fn send(
+        &mut self,
+        chat_id: &str,
+        text: &str,
+        client_id: &str,
+        reply_to: Option<QuotedRef>,
+        mentions: &[PersonRef],
+    ) {
         let me = self.me_id.clone().unwrap_or_default();
-        let result = if self.me_id.is_none() {
-            Err(Fail::NeedsLogin(
-                "Not signed in to Teams. Sign in first.".into(),
-            ))
-        } else {
-            self.call(move |g| async move { g.send_text(chat_id, text).await })
-                .await
-        };
-        match result {
+        let result = self
+            .post_text(chat_id, text, reply_to.as_ref(), mentions)
+            .await;
+        let (error, login) = match result {
             Ok(sent) => {
-                // Graph's answer has the real id and time; without a time, use ours.
-                let mut message =
-                    map::map_message(&sent, chat_id, &me).unwrap_or_else(|| ChatMessage {
-                        network: NET,
-                        chat_id: chat_id.to_string(),
-                        id: sent.id.clone(),
-                        ts: now_ms(),
-                        sender: "You".into(),
-                        from_me: true,
-                        text: text.to_string(),
-                        state: MessageState::Sent,
-                    });
-                message.from_me = true;
-                if let Err(e) = self.store.confirm_message(client_id, &message) {
-                    self.notice(&e, true);
-                }
-                self.emit(Event::MessageConfirmed {
-                    client_id: client_id.to_string(),
-                    message: message.clone(),
-                });
-                self.touch_chat(chat_id, &message, None);
+                finish_send(
+                    &self.store,
+                    &self.events,
+                    &me,
+                    chat_id,
+                    client_id,
+                    text,
+                    reply_to,
+                    Ok(sent),
+                );
+                return;
             }
-            Err(f) => {
-                let (error, status_failure) = match f {
-                    Fail::NeedsLogin(reason) => (reason.clone(), Some(Fail::NeedsLogin(reason))),
-                    Fail::Other(message, _) => (message, None),
-                };
-                log::error("teams-send", &format!("send failed: {error}"));
-                // Keep the failed message so it still shows as NOT SENT after reopening.
-                let failed = ChatMessage {
-                    network: NET,
-                    chat_id: chat_id.to_string(),
-                    id: client_id.to_string(),
-                    ts: now_ms(),
-                    sender: "You".into(),
-                    from_me: true,
-                    text: text.to_string(),
-                    state: MessageState::Failed(error.clone()),
-                };
-                if let Err(e) = self.store.upsert_messages(&[failed]) {
-                    self.notice(&e, true);
-                }
-                self.emit(Event::MessageFailed {
-                    network: NET,
-                    chat_id: chat_id.to_string(),
-                    client_id: client_id.to_string(),
-                    error,
-                });
-                if let Some(f) = status_failure {
-                    self.fail(f, "Could not send", false);
-                }
+            Err(Fail::NeedsLogin(reason)) => (reason.clone(), Some(Fail::NeedsLogin(reason))),
+            Err(Fail::Other(message, _)) => (message, None),
+        };
+        finish_send(
+            &self.store,
+            &self.events,
+            &me,
+            chat_id,
+            client_id,
+            text,
+            reply_to,
+            Err(error),
+        );
+        if let Some(f) = login {
+            self.fail(f, "Could not send", false);
+        }
+    }
+
+    async fn post_text(
+        &mut self,
+        chat_id: &str,
+        text: &str,
+        reply_to: Option<&QuotedRef>,
+        mentions: &[PersonRef],
+    ) -> Outcome<graph::Message> {
+        if self.me_id.is_none() {
+            return Err(Fail::NeedsLogin(NOT_SIGNED_IN.into()));
+        }
+        // A reply never goes out as a plain message: the quote would silently vanish.
+        if reply_to.is_some() && !self.caps().reply {
+            return Err(Fail::Other(REPLY_NEEDS_SCOPE.into(), 403));
+        }
+        let too_long = || {
+            Fail::Other(
+                "MESSAGE TOO LONG: Teams takes about 80 KB per message, so split it.".into(),
+                0,
+            )
+        };
+        if !text_fits(NET, text) {
+            return Err(too_long());
+        }
+        // @mentions work in group chats; in a 1:1 chat they stay plain text.
+        let group =
+            matches!(self.store.chat(NET, chat_id), Ok(Some(c)) if c.kind == ChatKind::Group);
+        let built = body::text_body(text, if group { mentions } else { &[] });
+        if built.html.len() > TEAMS_TEXT_MAX_BYTES {
+            return Err(too_long());
+        }
+        let message = body::message_json(&built);
+        match reply_to {
+            None => {
+                let message = &message;
+                self.call(move |g| async move { g.post_message(chat_id, message).await })
+                    .await
+            }
+            Some(quoted) => {
+                let request = body::reply_json(&quoted.id, message);
+                let request = &request;
+                self.call(move |g| async move { g.reply_with_quote(chat_id, request).await })
+                    .await
+                    // The scope was revoked or never consented: say so, never retry plain.
+                    .map_err(|f| match f {
+                        Fail::Other(_, 403) => Fail::Other(REPLY_NEEDS_SCOPE.into(), 403),
+                        other => other,
+                    })
             }
         }
     }
 
+    async fn send_media(
+        &mut self,
+        chat_id: String,
+        client_id: String,
+        path: PathBuf,
+        caption: String,
+    ) {
+        let me = self.me_id.clone().unwrap_or_default();
+        // The backend decides by content what the file is, whatever the TUI guessed.
+        let as_image = path.is_file() && media::kind_for_path(&path) == MediaKind::Image;
+        let fallback = if caption.is_empty() {
+            if as_image { "[image]" } else { "[file]" }.to_string()
+        } else {
+            caption.clone()
+        };
+        let early = if !path.exists() {
+            Some(transfer::FILE_NOT_FOUND.to_string())
+        } else if !text_fits(NET, &caption) {
+            Some("MESSAGE TOO LONG: shorten the caption.".to_string())
+        } else if !as_image && !self.caps().send_file {
+            // Nothing is uploaded without the opt-in setting and the consented scope.
+            Some(transfer::FILE_SEND_NEEDS_SCOPE.to_string())
+        } else {
+            None
+        };
+        if let Some(error) = early {
+            finish_send(
+                &self.store,
+                &self.events,
+                &me,
+                &chat_id,
+                &client_id,
+                &fallback,
+                None,
+                Err(error),
+            );
+            return;
+        }
+        let graph = match self.task_graph().await {
+            Ok(g) => g,
+            Err(reason) => {
+                finish_send(
+                    &self.store,
+                    &self.events,
+                    &me,
+                    &chat_id,
+                    &client_id,
+                    &fallback,
+                    None,
+                    Err(reason),
+                );
+                return;
+            }
+        };
+        let (store, events) = (self.store.clone(), self.events.clone());
+        log::info(
+            "teams",
+            &format!(
+                "sending {} in the background",
+                if as_image { "a picture" } else { "a file" }
+            ),
+        );
+        self.tasks.spawn(async move {
+            let result = if as_image {
+                transfer::send_image(&graph, &chat_id, &path, &caption).await
+            } else {
+                let mut last: Option<Instant> = None;
+                let progress_events = events.clone();
+                let (progress_chat, progress_client) = (chat_id.clone(), client_id.clone());
+                let mut progress = move |done: u64, total: u64| {
+                    let due = last.is_none_or(|t| t.elapsed() >= PROGRESS_EVERY);
+                    if due || done >= total {
+                        last = Some(Instant::now());
+                        let _ = progress_events.send(Event::SendProgress {
+                            network: NET,
+                            chat_id: progress_chat.clone(),
+                            client_id: progress_client.clone(),
+                            done,
+                            total,
+                        });
+                    }
+                };
+                transfer::send_file(
+                    &graph,
+                    &chat_id,
+                    &path,
+                    &caption,
+                    transfer::UPLOAD_CHUNK,
+                    &mut progress,
+                )
+                .await
+            };
+            let result = result.map_err(|e| {
+                // A 403 on the upload means OneDrive writes are not allowed for this sign-in.
+                if !as_image && e.status == 403 {
+                    transfer::FILE_SEND_NEEDS_SCOPE.to_string()
+                } else {
+                    e.message
+                }
+            });
+            finish_send(
+                &store, &events, &me, &chat_id, &client_id, &fallback, None, result,
+            );
+        });
+    }
+
+    // --- reactions, edit, delete -----------------------------------------------------------
+
+    /// Sets or removes the user's reaction. Teams lets a user hold several, so setting a new
+    /// emoji first removes any other one of theirs: one per user per message. The stored copy
+    /// follows each successful step, and the change goes out as `MessageChanged`.
+    async fn react(&mut self, chat_id: &str, message_id: &str, emoji: &str, remove: bool) {
+        if self.me_id.is_none() {
+            return self.notice(NOT_SIGNED_IN, true);
+        }
+        let mine: Vec<String> = match self.store.message(NET, chat_id, message_id) {
+            Ok(Some(m)) => m
+                .reactions
+                .into_iter()
+                .filter(|r| r.mine)
+                .map(|r| r.emoji)
+                .collect(),
+            Ok(None) => {
+                log::info("teams", "reaction for a message chatcli does not hold");
+                Vec::new()
+            }
+            Err(e) => return self.notice(&e, true),
+        };
+        let steps = reaction_steps(&mine, emoji, remove);
+        let mut failure = None;
+        let mut applied = false;
+        for (e, set) in &steps {
+            let result = self
+                .call(move |g| async move { g.react(chat_id, message_id, e, *set).await })
+                .await;
+            if let Err(f) = result {
+                failure = Some(f);
+                break;
+            }
+            applied = true;
+            let key = map::reactor_key(REACTOR_ME, e);
+            match self.store.set_reaction(
+                NET,
+                chat_id,
+                message_id,
+                &key,
+                true,
+                set.then_some(e.as_str()),
+                now_ms(),
+            ) {
+                Ok(true) => {}
+                // Unknown message: log and drop, never a panic.
+                Ok(false) => log::info("teams", "reaction for a message chatcli does not hold"),
+                Err(err) => self.notice(&err, true),
+            }
+        }
+        if applied {
+            if let Ok(Some(m)) = self.store.message(NET, chat_id, message_id) {
+                self.emit(Event::MessageChanged(m));
+            }
+        }
+        if let Some(f) = failure {
+            // Which emoji Teams accepts is not documented: its own answer says why.
+            self.fail(f, "Could not react", false);
+        }
+    }
+
+    /// The stored message when it is the user's own and can be edited or deleted; else the
+    /// notice that says why not.
+    fn own_message(&self, chat_id: &str, message_id: &str, verb: &str) -> Option<ChatMessage> {
+        let m = match self.store.message(NET, chat_id, message_id) {
+            Ok(Some(m)) => m,
+            Ok(None) => {
+                self.notice(
+                    "That message is not stored: reopen the chat and try again.",
+                    true,
+                );
+                return None;
+            }
+            Err(e) => {
+                self.notice(&e, true);
+                return None;
+            }
+        };
+        if !m.from_me || m.state != MessageState::Sent {
+            self.notice(
+                &format!("You can only {verb} your own sent messages."),
+                true,
+            );
+            return None;
+        }
+        Some(m)
+    }
+
+    async fn edit(&mut self, chat_id: &str, message_id: &str, text: &str) {
+        if self.me_id.is_none() {
+            return self.notice(NOT_SIGNED_IN, true);
+        }
+        let Some(old) = self.own_message(chat_id, message_id, "edit") else {
+            return;
+        };
+        if text.trim().is_empty() {
+            return self.notice(
+                "An edited message cannot be empty: delete it instead.",
+                true,
+            );
+        }
+        if !text_fits(NET, text) {
+            return self.notice(
+                "MESSAGE TOO LONG: Teams takes about 80 KB per message.",
+                true,
+            );
+        }
+        // The new body replaces the whole old one, so a quote or a file in it would be lost.
+        if old.reply_to.is_some() || !old.attachments.is_empty() {
+            return self.notice(
+                "This message has a quote or a file: edit it in Teams.",
+                true,
+            );
+        }
+        // The old mentions go back in, or the people would stop counting as mentioned.
+        let built = body::text_body(text, &old.mentions);
+        let request = body::edit_json(&built);
+        let request = &request;
+        if let Err(f) = self
+            .call(move |g| async move { g.edit_message(chat_id, message_id, request).await })
+            .await
+        {
+            // The stored text stays as it was: pane and server remain in step.
+            return self.fail(f, "Could not edit the message", false);
+        }
+        let mut m = self
+            .store
+            .message(NET, chat_id, message_id)
+            .ok()
+            .flatten()
+            .unwrap_or(old);
+        m.text = crate::html::to_text(&chatcli_core::limits::teams_escape(text));
+        m.edited = true;
+        // Only the mentions whose token is still in the text survive the edit.
+        m.mentions = built.used;
+        m.mentions_me = false;
+        if let Err(e) = self.store.upsert_messages(std::slice::from_ref(&m)) {
+            return self.notice(&e, true);
+        }
+        if let Ok(Some(m)) = self.store.message(NET, chat_id, message_id) {
+            self.touch_if_last(chat_id, &m);
+            self.emit(Event::MessageChanged(m));
+        }
+    }
+
+    async fn delete(&mut self, chat_id: &str, message_id: &str) {
+        let Some(me) = self.me_id.clone() else {
+            return self.notice(NOT_SIGNED_IN, true);
+        };
+        if self.own_message(chat_id, message_id, "delete").is_none() {
+            return;
+        }
+        let me = me.as_str();
+        if let Err(f) = self
+            .call(move |g| async move { g.soft_delete(me, chat_id, message_id).await })
+            .await
+        {
+            return self.fail(f, "Could not delete the message", false);
+        }
+        match apply_deleted(&self.store, chat_id, message_id) {
+            Ok(Some(m)) => self.emit(Event::MessageChanged(m)),
+            Ok(None) => {}
+            Err(e) => self.notice(&e, true),
+        }
+    }
+
+    /// After an edit of the chat's newest message the sidebar preview follows.
+    fn touch_if_last(&self, chat_id: &str, message: &ChatMessage) {
+        touch_chat(&self.store, &self.events, chat_id, message, None);
+    }
+
+    // --- media -----------------------------------------------------------------------------
+
+    async fn fetch_media(&mut self, chat_id: String, message_id: String, index: u32) {
+        let failed = |b: &Backend, reason: String, fallback_url: Option<String>| {
+            b.emit(Event::MediaFailed {
+                network: NET,
+                chat_id: chat_id.clone(),
+                message_id: message_id.clone(),
+                index,
+                reason,
+                fallback_url,
+            });
+        };
+        let att = match self.store.message(NET, &chat_id, &message_id) {
+            Ok(Some(m)) => m.attachments.into_iter().nth(index as usize),
+            Ok(None) => None,
+            Err(e) => return failed(self, e, None),
+        };
+        let Some(att) = att else {
+            return failed(self, "That attachment is no longer available.".into(), None);
+        };
+        let Some(spec) = FetchSpec::from_ref(&att.fetch_ref) else {
+            return failed(
+                self,
+                "That attachment cannot be fetched from Teams.".into(),
+                att.open_url,
+            );
+        };
+        let files_allowed = self.caps().fetch_files;
+        // A linked file without the scope never touches the network: the browser opens it.
+        if matches!(spec, FetchSpec::File { .. }) && !files_allowed {
+            return failed(self, transfer::FILE_OPEN_IN_BROWSER.into(), att.open_url);
+        }
+        let graph = match self.task_graph().await {
+            Ok(g) => g,
+            Err(reason) => return failed(self, reason, att.open_url),
+        };
+        let (cache, events) = (self.media.clone(), self.events.clone());
+        self.tasks.spawn(async move {
+            let event =
+                match transfer::fetch_media(&graph, &cache, &att, &spec, files_allowed).await {
+                    Ok(path) => Event::MediaReady {
+                        network: NET,
+                        chat_id,
+                        message_id,
+                        index,
+                        path,
+                    },
+                    Err(f) => {
+                        log::error("teams", "a media download failed");
+                        Event::MediaFailed {
+                            network: NET,
+                            chat_id,
+                            message_id,
+                            index,
+                            reason: f.reason,
+                            fallback_url: f.fallback_url,
+                        }
+                    }
+                };
+            let _ = events.send(event);
+        });
+    }
+
+    // --- older history and members ---------------------------------------------------------
+
+    /// Older messages for a user scroll past the top. The store answers first; Teams is asked
+    /// only when the store has nothing older, one page per request, following Graph's own next
+    /// link. Never from a timer.
+    async fn load_older(&mut self, chat_id: &str, before_ts: i64, before_id: &str) {
+        let failed = |b: &Backend, error: String| {
+            b.emit(Event::OlderFailed {
+                network: NET,
+                chat_id: chat_id.to_string(),
+                error,
+            });
+        };
+        match self
+            .store
+            .messages_before(NET, chat_id, before_ts, before_id, OLDER_PAGE)
+        {
+            Ok(rows) if !rows.is_empty() => {
+                return self.emit(Event::OlderMessages {
+                    network: NET,
+                    chat_id: chat_id.to_string(),
+                    messages: rows,
+                    at_start: false,
+                })
+            }
+            Ok(_) => {}
+            Err(e) => return failed(self, e),
+        }
+        let key = format!("teams.older.{chat_id}");
+        let saved = self.store.meta(&key).ok().flatten();
+        if saved.as_deref() == Some("start") {
+            return self.emit(Event::OlderMessages {
+                network: NET,
+                chat_id: chat_id.to_string(),
+                messages: Vec::new(),
+                at_start: true,
+            });
+        }
+        let Some(me) = self.me_id.clone() else {
+            return failed(self, NOT_SIGNED_IN.into());
+        };
+        let next = saved
+            .as_deref()
+            .and_then(|s| s.strip_prefix("next:"))
+            .map(str::to_string);
+        let link = next.as_deref();
+        let page = match self
+            .call(move |g| async move { g.messages_before(chat_id, before_ts, link).await })
+            .await
+        {
+            Ok(page) => page,
+            Err(Fail::NeedsLogin(reason)) => {
+                failed(self, reason.clone());
+                return self.signed_out(Some(reason));
+            }
+            Err(Fail::Other(message, status)) => {
+                // A saved link that Graph no longer accepts is dropped: the next try starts
+                // from the filter again.
+                if next.is_some() && matches!(status, 400 | 404 | 410) {
+                    let _ = self.store.set_meta(&key, None);
+                }
+                self.notice(&format!("Could not load older messages: {message}"), true);
+                return failed(self, message);
+            }
+        };
+        let stored = match store_fetched(&self.store, chat_id, &page.messages, &me) {
+            Ok(s) => s,
+            Err(e) => return failed(self, e),
+        };
+        let at_start = page.next_link.is_none();
+        let saved = page
+            .next_link
+            .as_ref()
+            .map_or("start".to_string(), |l| format!("next:{l}"));
+        if let Err(e) = self.store.set_meta(&key, Some(&saved)) {
+            self.notice(&e, true);
+        }
+        let mut messages: Vec<ChatMessage> = stored.into_iter().map(|s| s.message).collect();
+        messages.sort_by(|a, b| (a.ts, &a.id).cmp(&(b.ts, &b.id)));
+        self.emit(Event::OlderMessages {
+            network: NET,
+            chat_id: chat_id.to_string(),
+            messages,
+            at_start,
+        });
+    }
+
+    /// Members for @-completion: a saved list younger than ten minutes, else one listing from
+    /// Teams (saved for next time).
+    async fn load_members(&mut self, chat_id: &str) {
+        let answer = |b: &Backend, members: Vec<PersonRef>, error: Option<String>| {
+            b.emit(Event::Members {
+                network: NET,
+                chat_id: chat_id.to_string(),
+                members,
+                error,
+            });
+        };
+        let key = format!("teams.members.{chat_id}");
+        let saved_at = self
+            .store
+            .meta(&key)
+            .ok()
+            .flatten()
+            .and_then(|s| s.parse::<i64>().ok());
+        if saved_at.is_some_and(|t| now_ms() - t < MEMBERS_FRESH_MS) {
+            if let Ok(cached) = self.store.members(NET, chat_id, 1024) {
+                if !cached.is_empty() {
+                    return answer(self, cached, None);
+                }
+            }
+        }
+        let Some(me) = self.me_id.clone() else {
+            return answer(self, Vec::new(), Some(NOT_SIGNED_IN.into()));
+        };
+        let listed = match self
+            .call(move |g| async move { g.members(chat_id, MEMBERS_MAX_PAGES).await })
+            .await
+        {
+            Ok(m) => m,
+            Err(Fail::NeedsLogin(reason)) => {
+                answer(self, Vec::new(), Some(reason.clone()));
+                return self.signed_out(Some(reason));
+            }
+            Err(Fail::Other(message, _)) => {
+                return answer(
+                    self,
+                    Vec::new(),
+                    Some(format!("Could not load the members: {message}")),
+                )
+            }
+        };
+        let mut people: Vec<PersonRef> = Vec::new();
+        for m in &listed {
+            let (Some(id), Some(name)) = (m.user_id.as_deref(), m.display_name.as_deref()) else {
+                continue;
+            };
+            let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+            if id == me || name.is_empty() || people.iter().any(|p| p.id == id) {
+                continue;
+            }
+            people.push(PersonRef {
+                id: id.to_string(),
+                name,
+            });
+        }
+        if let Err(e) = self.store.replace_members(NET, chat_id, &people) {
+            self.notice(&e, true);
+        }
+        if let Err(e) = self.store.set_meta(&key, Some(&now_ms().to_string())) {
+            self.notice(&e, true);
+        }
+        let ordered = self.store.members(NET, chat_id, 1024).unwrap_or(people);
+        answer(self, ordered, None);
+    }
+
+    // --- read state and chat flags ---------------------------------------------------------
+
     async fn mark_read(&mut self, chat_id: &str) {
+        let before = self
+            .store
+            .chat(NET, chat_id)
+            .ok()
+            .flatten()
+            .map(|c| (c.unread, c.mentions));
         if let Err(e) = self.store.set_unread(NET, chat_id, 0) {
             self.notice(&e, true);
         }
         self.emit_chat(chat_id);
         let Some(me) = self.me_id.clone() else { return };
-        // The tenant id comes from the access token's `tid` claim, so get a token first.
-        if let Err(f) = self.token(false).await {
-            return self.fail(f, "Could not mark the chat read on Teams", false);
-        }
-        let Some(tenant) = self.tenant_id.clone() else {
-            return self.notice(
-                "Could not mark the chat read on Teams: the access token has no tenant id.",
-                true,
-            );
-        };
-        let (me, tenant) = (me.as_str(), tenant.as_str());
-        if let Err(f) = self
-            .call(move |g| async move { g.mark_read(chat_id, me, tenant).await })
-            .await
-        {
+        if let Err(f) = self.mark_read_remote(chat_id, &me).await {
+            // Teams still thinks the chat is unread, so chatcli shows it unread too.
+            if let Some((unread, mentions)) = before {
+                let _ = self.store.set_unread(NET, chat_id, unread);
+                for _ in 0..mentions {
+                    let _ = self.store.bump_mentions(NET, chat_id);
+                }
+            }
+            self.emit_chat(chat_id);
             self.fail(f, "Could not mark the chat read on Teams", false);
         }
     }
 
-    /// Moves a chat's last-message fields forward for one message and sends ChatUpdated.
-    /// `unread`: the new count, or None to leave it.
-    fn touch_chat(&self, chat_id: &str, message: &ChatMessage, unread: Option<u32>) {
-        let Ok(Some(mut chat)) = self.store.chat(NET, chat_id) else {
-            return;
+    async fn mark_read_remote(&mut self, chat_id: &str, me: &str) -> Outcome<()> {
+        // The tenant id comes from the access token's `tid` claim, so get a token first.
+        self.token(false).await?;
+        let Some(tenant) = self.tenant_id.clone() else {
+            return Err(Fail::Other("the access token has no tenant id.".into(), 0));
         };
-        if message.ts >= chat.last_ts.unwrap_or(i64::MIN) {
-            chat.last_ts = Some(message.ts);
-            chat.last_preview = map::preview_line(&message.sender, message.from_me, &message.text);
+        let tenant = tenant.as_str();
+        self.call(move |g| async move { g.mark_read(chat_id, me, tenant).await })
+            .await
+    }
+
+    /// Pin and mute are local only. Hide is written to the store first, then to Teams; if Teams
+    /// refuses, the flag goes back and the user is told.
+    async fn set_chat_flag(&mut self, chat_id: &str, flag: ChatFlag, on: bool) {
+        let old = match self.store.chat_flags(NET, chat_id) {
+            Ok(f) => f,
+            Err(e) => return self.notice(&e, true),
+        };
+        let mut new = old;
+        match flag {
+            ChatFlag::Pinned => new.pinned = on,
+            ChatFlag::Muted => new.muted_until = on.then_some(MUTE_FOREVER),
+            ChatFlag::Hidden => new.hidden = on,
         }
-        if let Some(n) = unread {
-            chat.unread = n;
-        }
-        if let Err(e) = self.store.upsert_chats(std::slice::from_ref(&chat)) {
+        if let Err(e) = self.store.set_chat_flags(NET, chat_id, new) {
             self.notice(&e, true);
+            return self.emit_chat(chat_id);
         }
-        self.emit(Event::ChatUpdated(chat));
+        self.emit_chat(chat_id);
+        if flag != ChatFlag::Hidden {
+            return;
+        }
+        let result = match (self.me_id.clone(), self.token(false).await) {
+            (None, _) => Err(Fail::NeedsLogin(NOT_SIGNED_IN.into())),
+            (_, Err(f)) => Err(f),
+            (Some(me), Ok(_)) => match self.tenant_id.clone() {
+                None => Err(Fail::Other("the access token has no tenant id.".into(), 0)),
+                Some(tenant) => {
+                    let (me, tenant) = (me.as_str(), tenant.as_str());
+                    self.call(move |g| async move { g.set_hidden(chat_id, on, me, tenant).await })
+                        .await
+                }
+            },
+        };
+        if let Err(f) = result {
+            let _ = self.store.set_chat_flags(NET, chat_id, old);
+            self.emit_chat(chat_id);
+            let what = if on {
+                "Could not hide the chat on Teams"
+            } else {
+                "Could not unhide the chat on Teams"
+            };
+            self.fail(f, what, false);
+        } else if on {
+            self.hidden.insert(chat_id.to_string());
+        } else {
+            self.hidden.remove(chat_id);
+        }
     }
 
     // --- live updates: relay socket and subscription ---------------------------------------
@@ -685,9 +1678,10 @@ impl Backend {
             return self.publish_online();
         };
         let (Some(secrets), Some(user_id)) = (secrets, self.me_id.clone()) else {
-            self.relay_note = Some("relay secrets missing: run chatcli relay setup".into());
+            self.relay_note =
+                Some("RELAY SECRETS MISSING: quit chatcli, then run chatcli relay setup".into());
             self.notice(
-                "Live updates are off: relay secrets are missing. Run: chatcli relay setup <url>",
+                "Live updates are off: relay secrets are missing. Quit chatcli, then run: chatcli relay setup <url>",
                 true,
             );
             return self.publish_online();
@@ -933,9 +1927,11 @@ impl Backend {
         relisted: &mut bool,
     ) {
         let mut counted_by_list = false;
-        if !matches!(self.store.chat(NET, chat_id), Ok(Some(_))) {
-            // A chat chatcli has not seen: list again once, and remember ids that stay
-            // unknown so their messages do not trigger a list each.
+        // A chat chatcli has not seen, or one the user hid that a new message just unhid on
+        // Teams: list again once, so the flag and the chat are current before the fetch.
+        let stale = !matches!(self.store.chat(NET, chat_id), Ok(Some(_)))
+            || (created && self.hidden.contains(chat_id));
+        if stale {
             if !*relisted {
                 *relisted = true;
                 if let Err(f) = self.refresh_chats().await {
@@ -944,11 +1940,9 @@ impl Backend {
                 counted_by_list = true;
             }
             if !matches!(self.store.chat(NET, chat_id), Ok(Some(_))) {
-                // Still hidden after the re-list: leave it in `hidden`, so the next "created"
-                // notification looks again.
-                if !self.hidden.contains(chat_id) {
-                    self.not_shown.insert(chat_id.to_string());
-                }
+                // Still unknown after the re-list: remember it, so its messages do not trigger
+                // a list each.
+                self.not_shown.insert(chat_id.to_string());
                 return;
             }
         }
@@ -964,17 +1958,26 @@ impl Backend {
             }
             Err(f) => return self.fail(f, "Could not load a new message", false),
         };
-        let Some(message) = map::map_message(&fetched, chat_id, &me) else {
-            return log::error("teams", "a new message had no timestamp and was skipped");
+        let stored = match store_fetched(&self.store, chat_id, std::slice::from_ref(&fetched), &me)
+        {
+            Ok(mut s) if !s.is_empty() => s.remove(0),
+            Ok(_) => return log::error("teams", "a new message had no timestamp and was skipped"),
+            Err(e) => return self.notice(&e, true),
         };
-        let existed = self
-            .store
-            .messages(NET, chat_id, STORE_MESSAGES)
-            .is_ok_and(|all| all.iter().any(|m| m.id == message.id));
-        if let Err(e) = self.store.upsert_messages(std::slice::from_ref(&message)) {
-            self.notice(&e, true);
+        let message = stored.message;
+        // Message is only for one that just arrived; an edit, delete or reaction is a change
+        // and never raises a notification.
+        let is_new = created && !stored.existed;
+        if is_new {
+            self.emit(Event::Message(message.clone()));
+        } else {
+            self.emit(Event::MessageChanged(message.clone()));
         }
-        self.emit(Event::Message(message.clone()));
+        if is_new && !message.from_me && message.mentions_me {
+            if let Err(e) = self.store.bump_mentions(NET, chat_id) {
+                self.notice(&e, true);
+            }
+        }
         let unread = (!counted_by_list).then(|| {
             let current = self
                 .store
@@ -982,30 +1985,22 @@ impl Backend {
                 .ok()
                 .flatten()
                 .map_or(0, |c| c.unread);
-            map::unread_after(current, message.from_me, created && !existed)
+            map::unread_after(current, message.from_me, is_new)
         });
-        self.touch_chat(chat_id, &message, unread);
+        touch_chat(&self.store, &self.events, chat_id, &message, unread);
     }
 
     fn mark_deleted(&self, chat_id: &str, message_id: &str) {
-        let found = self
-            .store
-            .messages(NET, chat_id, STORE_MESSAGES)
-            .ok()
-            .and_then(|all| all.into_iter().find(|m| m.id == message_id));
-        let Some(mut message) = found else {
-            return log::info("teams", "delete notice for a message chatcli never stored");
-        };
-        message.state = MessageState::Deleted;
-        message.text = "[deleted]".into();
-        if let Err(e) = self.store.upsert_messages(std::slice::from_ref(&message)) {
-            return self.notice(&e, true);
+        match apply_deleted(&self.store, chat_id, message_id) {
+            Ok(Some(m)) => self.emit(Event::MessageChanged(m)),
+            Ok(None) => log::info("teams", "delete notice for a message chatcli never stored"),
+            Err(e) => self.notice(&e, true),
         }
-        self.emit(Event::Message(message));
     }
 
-    /// After a reconnect or a `missed` event: list chats again and fetch the messages of
-    /// every chat that has stored history and a newer last message on Teams.
+    /// After a reconnect or a `missed` event: list chats again and fetch the messages of every
+    /// chat that has stored history and either a newer last message on Teams or a last message
+    /// that was edited or deleted while chatcli was away.
     async fn catch_up(&mut self) {
         if self.me_id.is_none() {
             return;
@@ -1014,16 +2009,31 @@ impl Backend {
             Ok(f) => f,
             Err(f) => return self.fail(f, "Could not catch up on Teams", false),
         };
-        let (ids, capped) =
-            map::catch_up_chats(&fresh, |id| self.newest_stored(id), CATCH_UP_MAX_CHATS);
+        let store = self.store.clone();
+        let (ids, capped) = map::catch_up_chats(
+            &fresh.shown,
+            &fresh.last,
+            |id, last_id| Local {
+                newest_ts: store.newest_synced_ts(NET, id).ok().flatten(),
+                last: last_id.and_then(|m| store.message(NET, id, m).ok().flatten()),
+            },
+            CATCH_UP_MAX_CHATS,
+        );
         let mut filled = 0;
         let mut gaps = 0;
         for id in &ids {
             match self.fetch_history(id).await {
-                Ok((n, gap)) => {
-                    filled += n;
-                    gaps += usize::from(gap);
-                    self.emit_history(id);
+                Ok(h) => {
+                    filled += h.new.len();
+                    gaps += usize::from(h.gap);
+                    // Missed messages arrive like live ones (the TUI never toasts an old one);
+                    // edits, deletes and reactions are changes.
+                    for m in h.new {
+                        self.emit(Event::Message(m));
+                    }
+                    for m in h.changed {
+                        self.emit(Event::MessageChanged(m));
+                    }
                     self.emit_chat(id);
                 }
                 Err(f) => return self.fail(f, "Could not catch up on Teams", false),
@@ -1052,123 +2062,43 @@ impl Backend {
 
     async fn shutdown(&mut self) {
         self.relay = None;
+        // Uploads and downloads stop at once; a half-written cache file is removed on drop.
+        self.tasks.abort_all();
+        let _ = tokio::time::timeout(SHUTDOWN_CLEANUP, async {
+            while self.tasks.join_next().await.is_some() {}
+        })
+        .await;
         self.remove_subscription("shutdown").await;
         self.teardown_live();
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn live_only_when_relay_socket_and_subscription_are_all_up() {
-        assert_eq!(live_state(None, true, None, true, None), (true, None));
-        let not_live = |args: (Option<&str>, bool, Option<&str>, bool, Option<&str>)| {
-            live_state(args.0, args.1, args.2, args.3, args.4)
-        };
-        assert_eq!(
-            not_live((Some("relay not set up"), true, None, true, None)),
-            (false, Some("relay not set up".into()))
-        );
-        assert_eq!(
-            not_live((None, false, Some("relay offline: timed out"), true, None)),
-            (false, Some("relay offline: timed out".into()))
-        );
-        assert_eq!(
-            not_live((None, false, None, true, None)),
-            (false, Some("connecting to relay".into()))
-        );
-        assert_eq!(
-            not_live((
-                None,
-                true,
-                None,
-                false,
-                Some("Teams subscription failed: x")
-            )),
-            (false, Some("Teams subscription failed: x".into()))
-        );
-        assert_eq!(
-            not_live((None, true, None, false, None)),
-            (false, Some("no Teams subscription yet".into()))
-        );
-    }
-
-    /// An unconfigured install: the task announces itself, shows the cached chats, asks for
-    /// setup (never touching the credential store) and ends on Shutdown.
-    #[tokio::test]
-    async fn unconfigured_start_asks_for_setup_and_shuts_down() {
-        let dir = std::env::temp_dir().join(format!("chatcli-backend-test-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        std::env::set_var("CHATCLI_DATA_DIR", &dir);
-        let store = Store::open_in_memory().unwrap();
-        let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
-        let (ev_tx, mut ev_rx) = mpsc::unbounded_channel();
-        let task = tokio::spawn(run(store, cmd_rx, ev_tx));
-        let mut seen = Vec::new();
-        while seen.len() < 3 {
-            seen.push(
-                tokio::time::timeout(Duration::from_secs(5), ev_rx.recv())
-                    .await
-                    .unwrap()
-                    .unwrap(),
-            );
-        }
-        assert_eq!(seen[0], Event::Status(Network::Teams, Status::Starting));
-        assert_eq!(seen[1], Event::Chats(Network::Teams, vec![]));
-        let Event::Status(
-            _,
-            Status::NeedsLogin {
-                reason: Some(reason),
-            },
-        ) = &seen[2]
-        else {
-            panic!("expected NeedsLogin with a reason, got {:?}", seen[2]);
-        };
-        assert!(reason.contains(auth::NOT_SET_UP), "{reason}");
-        cmd_tx.send(Command::Shutdown).unwrap();
-        tokio::time::timeout(Duration::from_secs(5), task)
-            .await
-            .unwrap()
-            .unwrap();
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    fn test_backend() -> (Backend, mpsc::UnboundedReceiver<Event>) {
-        let (ev_tx, ev_rx) = mpsc::unbounded_channel();
-        let (relay_tx, _relay_rx) = mpsc::unbounded_channel();
-        let http = reqwest::Client::new();
-        (
-            Backend::new(Store::open_in_memory().unwrap(), ev_tx, http, relay_tx),
-            ev_rx,
-        )
-    }
-
-    #[tokio::test]
-    async fn sign_in_needed_is_not_overwritten_by_online_status() {
-        let (mut b, mut ev) = test_backend();
-        b.me_id = Some("u".into());
-        b.signed_out(Some("password changed".into()));
-        while ev.try_recv().is_ok() {}
-        // What upkeep and frame do after a rejected refresh, and a stale relay event.
-        b.upkeep().await;
-        b.relay_event(RelayEvent::Up).await;
-        b.publish_online();
-        assert!(ev.try_recv().is_err(), "nothing may follow NeedsLogin");
-        assert!(matches!(b.last_status, Some(Status::NeedsLogin { .. })));
-    }
-
-    #[test]
-    fn upkeep_runs_at_renew_time_unless_a_retry_is_pending() {
-        let sub = SubState {
-            id: "s".into(),
-            expires_ms: 1000,
-            renew_at_ms: 500,
-        };
-        assert_eq!(next_upkeep_ms(Some(&sub), None), Some(500));
-        assert_eq!(next_upkeep_ms(Some(&sub), Some(900)), Some(900));
-        assert_eq!(next_upkeep_ms(None, Some(900)), Some(900));
-        assert_eq!(next_upkeep_ms(None, None), None);
-    }
+/// What a catch-up or an opened chat found.
+struct History {
+    /// Messages that arrived since the newest stored one.
+    new: Vec<ChatMessage>,
+    /// Stored messages that changed (edit, delete, reaction) or were missing from the middle.
+    changed: Vec<ChatMessage>,
+    /// Every fetched message was new and the fetch was full: older ones may be missing.
+    gap: bool,
 }
+
+/// The Graph calls that make `emoji` the user's one reaction (or remove it): every other
+/// reaction of theirs is unset first, then the emoji is set unless it already is. `true` = set.
+fn reaction_steps(mine: &[String], emoji: &str, remove: bool) -> Vec<(String, bool)> {
+    if remove {
+        return vec![(emoji.to_string(), false)];
+    }
+    let mut steps: Vec<(String, bool)> = mine
+        .iter()
+        .filter(|e| e.as_str() != emoji)
+        .map(|e| (e.clone(), false))
+        .collect();
+    if !mine.iter().any(|e| e == emoji) {
+        steps.push((emoji.to_string(), true));
+    }
+    steps
+}
+
+#[cfg(test)]
+mod tests;

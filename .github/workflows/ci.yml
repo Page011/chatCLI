@@ -37,6 +37,34 @@ jobs:
       - name: Test
         run: cargo test --workspace --locked
 
+  # Best-effort until proven: the code was written on Windows and these targets have never been
+  # built by a person. continue-on-error keeps a red job here from blocking a merge. Once both
+  # go green on main, delete this line and add the jobs to the required checks.
+  rust-unix:
+    name: Rust ${{ matrix.os }} (best effort)
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Test
+        run: cargo test --workspace --locked
+
   relay:
     name: Relay (test, typecheck)
     runs-on: ubuntu-latest
@@ -57,3 +85,11 @@ jobs:
         run: bun test
       - name: Typecheck
         run: bun run typecheck
+      - name: End-to-end
+        run: bun run test:e2e
+      - name: Release notes script
+        working-directory: .
+        run: bash scripts/test-release-notes.sh
+      - name: Packaging manifests
+        working-directory: .
+        run: bun scripts/check-packaging.ts

@@ -6,7 +6,7 @@
 ║                          ║│                                                  │
 ║                          ║│                                                  │
 ║                          ║│     Select a chat and press Enter to open it.    │
-║       No chats yet       ║│                                                  │
+║       No chats yet       ║│    Type / for commands: /help /settings /keys    │
 ║                          ║│                                                  │
 ║                          ║│                                                  │
 ║                          ║│                                                  │
@@ -21,7 +21,7 @@
 ║                          ║┌ Message ─────────────────────────────────────────┐
 ║                          ║│Open a chat to type                               │
 ╚══════════════════════════╝└──────────────────────────────────────────────────┘
-Tab network  Up/Down chat  Enter open  / filter  r refresh  q quit
+Up/Down chat  Enter open  / commands  ? help  Tab network  r refresh  q quit
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-20: fg=Reset bg=Reset BOLD | REVERSED
@@ -56,4 +56,4 @@ row 19 cols 1-26: fg=Reset bg=Reset DIM
 row 20 cols 1-26: fg=Reset bg=Reset DIM
 row 21 cols 1-26: fg=Reset bg=Reset DIM
 row 21 cols 29-47: fg=Reset bg=Reset DIM
-row 23 cols 0-65: fg=Reset bg=Reset DIM
+row 23 cols 0-75: fg=Reset bg=Reset DIM

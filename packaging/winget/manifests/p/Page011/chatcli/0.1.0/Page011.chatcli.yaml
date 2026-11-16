@@ -1,0 +1,7 @@
+# Version manifest. Schema: https://learn.microsoft.com/windows/package-manager/package/manifest
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
+PackageIdentifier: Page011.chatcli
+PackageVersion: 0.1.0
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0

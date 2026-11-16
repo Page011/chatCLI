@@ -7,10 +7,24 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
+# Clipboard image for "paste image" (issue 20). Default features: the image-data reader.
+arboard = "3.7"
 chatcli-core.workspace = true
 chrono.workspace = true
 crossterm.workspace = true
-futures-util.workspace = true
+emojis = "0.9.1"
+# Same spec as core, so the crate is built once: thumbnails decode here, the clipboard image is
+# encoded as PNG here.
+image.workspace = true
 qrcode.workspace = true
 ratatui.workspace = true
+# Sixel, Kitty and iTerm2 drawing and terminal detection (issue 37). No chafa: half-blocks are
+# drawn by hand.
+ratatui-image = { version = "11.1", default-features = false }
 tokio.workspace = true
+unicode-segmentation = "1.13"
+unicode-width = "0.2"
+
+[dev-dependencies]
+# Paused clock for the tour test (tests/tour.rs): the real demo backend, no real waiting.
+tokio = { workspace = true, features = ["test-util"] }

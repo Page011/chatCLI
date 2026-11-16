@@ -213,21 +213,16 @@ async fn create(g: &Graph, store: &Store, spec: &Spec, now_ms: i64) -> ApiResult
     Ok(state_from(&sub, requested, now_ms))
 }
 
-/// Graph said `reauthorizationRequired`: reauthorize, and fall back to a plain renew.
+/// Graph said `reauthorizationRequired`. One PATCH with a new expiry both reauthorizes and
+/// renews. The `reauthorize` POST is deliberately not sent as well: Microsoft warns that the two
+/// calls within ten minutes can leave the subscription in an inconsistent state.
 pub async fn reauthorize(g: &Graph, id: &str, now_ms: i64) -> ApiResult<SubState> {
-    match g.reauthorize_subscription(id).await {
-        Ok(()) => {
-            log::info("teams-subscription", "subscription reauthorized");
-            renew(g, id, now_ms).await
-        }
-        Err(e) => {
-            log::error(
-                "teams-subscription",
-                &format!("reauthorize failed ({}), trying a plain renew", e.message),
-            );
-            renew(g, id, now_ms).await
-        }
-    }
+    let state = renew(g, id, now_ms).await?;
+    log::info(
+        "teams-subscription",
+        "subscription reauthorized and renewed",
+    );
+    Ok(state)
 }
 
 /// Deletes the subscription on Graph and forgets its id.
@@ -343,6 +338,38 @@ mod tests {
         assert_ne!(spec_fingerprint(&a), spec_fingerprint(&b));
         assert_ne!(spec_fingerprint(&a), spec_fingerprint(&c));
         assert!(!spec_fingerprint(&a).contains("state"));
+    }
+
+    /// CodeRabbit 6: reauthorize POST then renew PATCH on one subscription is the sequence
+    /// Microsoft says not to send. A reauthorization event is one PATCH with a new expiry.
+    #[tokio::test]
+    async fn a_reauthorization_request_sends_one_patch_and_no_reauthorize_post() {
+        use crate::testkit::{Mock, Reply};
+        let mock = Mock::start(|_| {
+            Reply::json(
+                200,
+                serde_json::json!({ "id": "sub1", "expirationDateTime": "2099-01-01T00:00:00Z" }),
+            )
+        });
+        let g = Graph::new(reqwest::Client::new(), "tok".into()).with_base(&mock.graph_base());
+        let state = reauthorize(&g, "sub1", 1_000_000).await.unwrap();
+        assert_eq!(state.id, "sub1");
+        let reqs = mock.requests();
+        assert_eq!(reqs.len(), 1, "exactly one request");
+        assert_eq!(reqs[0].method, "PATCH");
+        assert_eq!(reqs[0].path(), "/v1.0/subscriptions/sub1");
+        assert!(reqs[0].json()["expirationDateTime"].is_string());
+        assert!(mock.hits("/reauthorize").is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_failed_reauthorization_is_an_error_not_a_second_request() {
+        use crate::testkit::{Mock, Reply};
+        let mock = Mock::start(|_| Reply::error(403, "Forbidden", "consent revoked"));
+        let g = Graph::new(reqwest::Client::new(), "tok".into()).with_base(&mock.graph_base());
+        let err = reauthorize(&g, "sub1", 0).await.unwrap_err();
+        assert_eq!(err.status, 403);
+        assert_eq!(mock.count(), 1);
     }
 
     #[test]

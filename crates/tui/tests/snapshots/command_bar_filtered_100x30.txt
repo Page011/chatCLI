@@ -1,0 +1,46 @@
+ chatcli  Teams 103 LIVE   WhatsApp CONNECTING                                           Ctrl+C quit
+          ╔ Commands ════════════════════════════════════════════════════════════════════╗
+          ║/se                                                                           ║
+          ║Commands                                                                      ║
+          ║/settings        theme, layout, keys and more                                 ║
+          ║/search          search every stored message                                  ║
+          ║Chats                                                                         ║
+          ║Release Planning for the Autumn Quarter Kickoff                               ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ║                                                                              ║
+          ╚══════════════════════════════════════════════════════════════════════════════╝
+Up/Down choose  Esc close  Enter run  Type to filter
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 89-99: fg=Reset bg=Reset DIM
+row 1 cols 11-20: fg=Reset bg=Reset BOLD
+row 2 cols 11-11: fg=Reset bg=Reset BOLD
+row 3 cols 11-18: fg=Reset bg=Reset BOLD
+row 4 cols 11-27: fg=Reset bg=Reset BOLD | REVERSED
+row 4 cols 28-55: fg=Reset bg=Reset BOLD | DIM | REVERSED
+row 4 cols 56-88: fg=Reset bg=Reset BOLD | REVERSED
+row 5 cols 11-26: fg=Reset bg=Reset BOLD
+row 5 cols 28-54: fg=Reset bg=Reset DIM
+row 6 cols 11-15: fg=Reset bg=Reset BOLD
+row 29 cols 0-51: fg=Reset bg=Reset DIM

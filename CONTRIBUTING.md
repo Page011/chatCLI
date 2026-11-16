@@ -18,7 +18,7 @@ Use obvious fake data (`Alex Example`, `Sam Sample`, `example.invalid`). Securit
 cargo run -p chatcli -- --demo
 ```
 
-`--demo` shows the full screen on fake data. No Teams or WhatsApp account and no network is needed. Press `Ctrl+C` to leave.
+`--demo` shows the full screen on fake data. No Teams or WhatsApp account and no network is needed. Press `Ctrl+C` to leave. Every feature you add must work in `--demo`: give the demo backend (`crates/tui/src/demo.rs`) a sample of it and a test in `crates/tui/tests/demo.rs`. `--demo --keys vim` shows the vim preset.
 
 ## Build and check
 
@@ -27,11 +27,13 @@ You need Rust stable (see `rust-toolchain.toml`) and, on Windows, the Visual Stu
 ```
 cargo build --workspace
 cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
 ```
 
-Run `cargo fmt --all` to fix formatting. CI runs the same commands and must be green before merge.
+Run `cargo fmt --all` to fix formatting. CI runs the same commands and must be green before merge. If you change dependencies, run `cargo build` once without `--locked` so `Cargo.lock` updates, then run the commands above. Versions used by more than one crate go in the root `[workspace.dependencies]`. Linux and macOS jobs run too but are best effort.
+
+Tests never touch your real data: set `CHATCLI_DATA_DIR` to a temp folder, and use test-only credential names. Never run `chatcli` itself from a test.
 
 ## Relay Worker
 
@@ -42,7 +44,10 @@ cd relay
 bun install
 bun test
 bun run typecheck
+bun run test:e2e
 ```
+
+`test:e2e` starts `wrangler dev` locally with random secrets and needs no Cloudflare login. More about the test harnesses, and what they cannot prove: [docs/testing.md](docs/testing.md). `bash scripts/test-release-notes.sh` and `bun scripts/check-packaging.ts` check the release-notes script and the winget/Scoop manifests.
 
 ## UI snapshots
 
@@ -58,7 +63,7 @@ On Windows `cmd`, run `set UPDATE_SNAPSHOTS=1`, then the test, then `set UPDATE_
 
 - One change per PR. Keep it small and reviewable.
 - Use [Conventional Commits](https://www.conventionalcommits.org) for commit messages and PR titles: `feat: ...`, `fix: ...`, `docs: ...`, `refactor: ...`, `test: ...`, `chore: ...`. Add `!` or a `BREAKING CHANGE:` footer for breaking changes.
-- Add or update tests for behaviour changes. Update docs and the `[Unreleased]` section of [CHANGELOG.md](CHANGELOG.md).
+- Add or update tests for behaviour changes. Update docs and the `[Unreleased]` section of [CHANGELOG.md](CHANGELOG.md) (one line per change, under Added, Changed or Fixed). A release needs a `## [x.y.z]` section: the release workflow builds its notes from it.
 - Fill in the PR template, including the commands you ran.
 - Every failure the user can see must show as a notice or status, and be logged without tokens or message text. See the failure table in the design doc.
 

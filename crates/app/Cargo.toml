@@ -17,3 +17,9 @@ chatcli-teams.workspace = true
 chatcli-tui.workspace = true
 chatcli-whatsapp.workspace = true
 tokio.workspace = true
+chrono.workspace = true
+
+# Windows toast notifications (issue 24): the same windows crate version ratatui-image already
+# links, so the lockfile gains an edge, not a crate. Only the three areas the toast needs.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = ["Data_Xml_Dom", "UI_Notifications", "Win32_System_Registry"] }
