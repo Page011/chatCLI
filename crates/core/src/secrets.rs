@@ -114,22 +114,22 @@ fn file_store_chosen() -> Result<bool> {
     }
 }
 
-/// The Linux fallback for systems with no Secret Service: one JSON object of
-/// `<service>/<user>` to value. Every change rewrites the whole file through
-/// `config::write_private` (an exclusive temp file of mode 0600, then a rename), so a crash
-/// leaves the old file or the new one. Not encrypted: it relies on the file mode.
+/// The Linux fallback for systems with no Secret Service: a JSON object of service to an
+/// object of user to value, nested so no service or user name can collide with another.
+/// Every change rewrites the whole file through `config::write_private` (an exclusive temp
+/// file of mode 0600, then a rename), so a crash leaves the old file or the new one. Not
+/// encrypted: it relies on the file mode.
 #[cfg(target_os = "linux")]
 struct FileVault {
     path: PathBuf,
 }
 
 #[cfg(target_os = "linux")]
-impl FileVault {
-    fn key(service: &str, user: &str) -> String {
-        format!("{service}/{user}")
-    }
+type FileEntries = std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>;
 
-    fn load(&self) -> Result<std::collections::BTreeMap<String, String>> {
+#[cfg(target_os = "linux")]
+impl FileVault {
+    fn load(&self) -> Result<FileEntries> {
         match std::fs::read_to_string(&self.path) {
             Ok(text) => serde_json::from_str(&text)
                 .map_err(|e| format!("secrets file {} is damaged: {e}", self.path.display())),
@@ -138,7 +138,7 @@ impl FileVault {
         }
     }
 
-    fn save(&self, all: &std::collections::BTreeMap<String, String>) -> Result<()> {
+    fn save(&self, all: &FileEntries) -> Result<()> {
         let text = serde_json::to_string_pretty(all).map_err(|e| format!("secrets file: {e}"))?;
         crate::config::write_private(&self.path, &text)
     }
@@ -147,21 +147,32 @@ impl FileVault {
 #[cfg(target_os = "linux")]
 impl Vault for FileVault {
     fn get(&self, service: &str, user: &str) -> Result<Option<String>> {
-        Ok(self.load()?.remove(&Self::key(service, user)))
+        Ok(self
+            .load()?
+            .get_mut(service)
+            .and_then(|users| users.remove(user)))
     }
 
     fn set(&self, service: &str, user: &str, value: &str) -> Result<()> {
         let mut all = self.load()?;
-        all.insert(Self::key(service, user), value.to_string());
+        all.entry(service.to_string())
+            .or_default()
+            .insert(user.to_string(), value.to_string());
         self.save(&all)
     }
 
     fn delete(&self, service: &str, user: &str) -> Result<()> {
         let mut all = self.load()?;
-        if all.remove(&Self::key(service, user)).is_some() {
-            self.save(&all)?;
+        let Some(users) = all.get_mut(service) else {
+            return Ok(());
+        };
+        if users.remove(user).is_none() {
+            return Ok(());
         }
-        Ok(())
+        if users.is_empty() {
+            all.remove(service);
+        }
+        self.save(&all)
     }
 }
 
@@ -563,6 +574,20 @@ mod tests {
             .map(|e| e.unwrap().file_name())
             .collect();
         assert_eq!(names, [FILE_STORE_NAME], "no temp files are left behind");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn file_vault_keeps_names_with_slashes_apart() {
+        let (dir, v) = file_vault("slashes");
+        v.set("a/b", "c", "first").unwrap();
+        v.set("a", "b/c", "second").unwrap();
+        assert_eq!(v.get("a/b", "c").unwrap().as_deref(), Some("first"));
+        assert_eq!(v.get("a", "b/c").unwrap().as_deref(), Some("second"));
+        v.delete("a/b", "c").unwrap();
+        assert_eq!(v.get("a/b", "c").unwrap(), None);
+        assert_eq!(v.get("a", "b/c").unwrap().as_deref(), Some("second"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

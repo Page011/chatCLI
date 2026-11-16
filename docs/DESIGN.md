@@ -38,7 +38,7 @@ All under `%LOCALAPPDATA%\chatcli` on Windows (macOS `~/Library/Application Supp
 | `secrets.json` | Linux only, with `CHATCLI_SECRET_STORE=file`: the secrets, in place of the Secret Service | Mode 0600, not encrypted. Absent otherwise. |
 | `chatcli.lock`, `secrets.lock` | Single-instance lock, credential-store guard | Empty. `std::fs::File::try_lock` (LockFileEx on Windows, flock elsewhere); the OS frees it when the process dies. |
 
-Secrets (Teams refresh token, relay token, relay client state) live in Windows Credential Manager under service `chatcli`, split into numbered pieces past its 2560-byte limit (macOS Keychain and Linux Secret Service elsewhere). On Linux, `CHATCLI_SECRET_STORE=file` swaps the store for `secrets.json` in the data folder, which holds the same entries as one JSON object and is rewritten whole through `config::write_private` (exclusive temp file, mode 0600, rename). Any other value of the variable is an error.
+Secrets (Teams refresh token, relay token, relay client state) live in Windows Credential Manager under service `chatcli`, split into numbered pieces past its 2560-byte limit (macOS Keychain and Linux Secret Service elsewhere). On Linux, `CHATCLI_SECRET_STORE=file` swaps the store for `secrets.json` in the data folder, which holds the same entries as a JSON object of service to an object of entry name to value, and is rewritten whole through `config::write_private` (exclusive temp file, mode 0600, rename). Any other value of the variable is an error.
 
 ## Backend contract
 
