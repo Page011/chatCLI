@@ -24,11 +24,23 @@ pub fn data_dir() -> Result<PathBuf> {
     Ok(dir)
 }
 
+/// Cargo names every test binary `<crate>-<16 hex digits>` (in `deps\` or, with newer cargo,
+/// `build\<pkg>\<hash>\out\`). The app always runs as plain `chatcli.exe`. The folder layout
+/// changed between cargo versions; the hashed file name did not.
 fn is_test_binary() -> bool {
     std::env::current_exe()
         .ok()
-        .and_then(|exe| exe.parent().map(|p| p.ends_with("deps")))
+        .and_then(|exe| {
+            exe.file_stem()
+                .map(|s| is_hashed_name(&s.to_string_lossy()))
+        })
         .unwrap_or(false)
+}
+
+fn is_hashed_name(stem: &str) -> bool {
+    stem.rsplit_once('-').is_some_and(|(name, hash)| {
+        !name.is_empty() && hash.len() == 16 && hash.chars().all(|c| c.is_ascii_hexdigit())
+    })
 }
 
 pub fn store_db() -> Result<PathBuf> {
@@ -56,7 +68,11 @@ mod tests {
     /// temp folder, never the user's real data folder.
     #[test]
     fn test_binaries_never_get_the_real_folder() {
-        assert!(super::is_test_binary());
+        assert!(super::is_hashed_name("chatcli_core-c95379607136e937"));
+        assert!(!super::is_hashed_name("chatcli"));
+        assert!(!super::is_hashed_name("chatcli-tui"));
+        assert!(!super::is_hashed_name("-c95379607136e937"));
+        assert!(super::is_test_binary(), "{:?}", std::env::current_exe());
         if std::env::var_os("CHATCLI_DATA_DIR").is_none() {
             let dir = super::data_dir().unwrap();
             assert!(dir.starts_with(std::env::temp_dir()), "{}", dir.display());
