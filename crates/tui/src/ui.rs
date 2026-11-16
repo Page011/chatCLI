@@ -398,6 +398,14 @@ fn hints(app: &App) -> Vec<(String, bool)> {
         if let Some(line) = crate::settings_view::capture_line(page.edit.as_ref()) {
             return vec![(line, true)];
         }
+        if page.filtering {
+            return vec![
+                (format!("/{}", page.filter.text()), true),
+                ("Up/Down move".to_string(), true),
+                ("Enter keep".to_string(), true),
+                ("Esc clear".to_string(), true),
+            ];
+        }
         let row = app.current_row().map(|r| r.id);
         let items: &[&str] = if page.edit.is_some() {
             &["Enter save", "Esc cancel", "Type a value"]
@@ -409,6 +417,7 @@ fn hints(app: &App) -> Vec<(String, bool)> {
                 "a add",
                 "d delete",
                 "r reset",
+                "/ filter",
                 "Tab sections",
             ]
         } else if page.in_rows && row == Some(RowId::ResetAllKeys) {

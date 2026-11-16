@@ -2927,6 +2927,25 @@ fn settings_keys() {
     at_sizes("settings_keys", &[(100, 30), (80, 24), (40, 12)], keys_app);
 }
 
+/// `/` on the Keys page: the actions that match, under their context, while the filter is typed
+/// and after Enter keeps it.
+#[test]
+fn keys_filtered() {
+    at_sizes("keys_filtering", &[(80, 24)], || {
+        let mut app = settings_app(6, true);
+        press(&mut app, KeyCode::Char('/'));
+        type_str(&mut app, "ctrl+");
+        app
+    });
+    at_sizes("keys_filtered", &[(80, 24)], || {
+        let mut app = settings_app(6, true);
+        press(&mut app, KeyCode::Char('/'));
+        type_str(&mut app, "unread");
+        press(&mut app, KeyCode::Enter);
+        app
+    });
+}
+
 /// Waiting for the new key: the footer asks, Esc cancels.
 #[test]
 fn key_capture() {

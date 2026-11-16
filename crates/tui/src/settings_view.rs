@@ -70,6 +70,10 @@ pub(crate) struct SettingsPage {
     pub edit: Option<PageEdit>,
     /// Red line for the selected row: a range error or a failed save.
     pub error: Option<String>,
+    /// The Keys page shows only the actions that match this (`filter_key_rows`).
+    pub filter: TextInput,
+    /// Keys go to `filter` (after `/`) until Enter or Esc.
+    pub filtering: bool,
 }
 
 /// A value being typed.
@@ -156,6 +160,8 @@ impl SettingsPage {
             top: 0,
             edit: None,
             error: None,
+            filter: TextInput::default(),
+            filtering: false,
         }
     }
 }
@@ -420,6 +426,47 @@ fn key_rows(out: &mut Vec<Row>, s: &Settings, keys: &Keymap) {
         "Enter removes every key you set, after y/n",
         false,
     ));
+}
+
+/// The Keys page cut down to the actions that match `query` (ignoring case) in their label, their
+/// `settings.toml` name, their keys or the context's title. A heading stays only above a
+/// match; the legend becomes the filter line, and Reset all goes. An empty query changes nothing.
+pub(crate) fn filter_key_rows(rows: Vec<Row>, query: &str) -> Vec<Row> {
+    use crate::list::matches;
+    if query.is_empty() {
+        return rows;
+    }
+    let hit = |r: &Row| match r.id {
+        RowId::KeyAction(ctx, a) => [r.label.as_str(), a.name(), r.value.as_str(), ctx.title()]
+            .iter()
+            .any(|t| matches(t, query)),
+        _ => false,
+    };
+    let found = rows.iter().filter(|r| hit(r)).count();
+    let mut out = Vec::new();
+    let mut heading: Option<Row> = None;
+    for r in rows {
+        match r.id {
+            RowId::Info("keys") => out.push(row(
+                RowId::Info("filter"),
+                "",
+                match found {
+                    0 => format!("No keys match \"{query}\" - Esc clears"),
+                    _ => format!("Keys matching \"{query}\" - Esc clears"),
+                },
+                "",
+                false,
+            )),
+            RowId::KeyHeading(_) => heading = Some(r),
+            RowId::KeyAction(..) if hit(&r) => {
+                out.extend(heading.take());
+                out.push(r);
+            }
+            RowId::KeyAction(..) | RowId::ResetAllKeys => {}
+            _ => out.push(r),
+        }
+    }
+    out
 }
 
 /// The rows of `section`. `keys` is the live keymap (the Keys page). `about` and `problems` feed the About page and the header above every

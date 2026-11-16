@@ -21,7 +21,7 @@
 │                │║Refresh             r                                       ║
 │                │║ask the network for a fresh chat list                       ║
 └────────────────┘╚════════════════════════════════════════════════════════════╝
-Up/Down move  Esc close  Enter replace  a add  d delete  r reset  Tab sections
+Up/Down move  Esc close  Enter replace  a add  d delete  r reset  / filter
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -33,4 +33,4 @@ row 8 cols 1-16: fg=Reset bg=Reset BOLD
 row 15 cols 19-27: fg=Reset bg=Reset BOLD
 row 20 cols 19-78: fg=Reset bg=Reset BOLD | REVERSED
 row 21 cols 19-55: fg=Reset bg=Reset DIM
-row 23 cols 0-77: fg=Reset bg=Reset DIM
+row 23 cols 0-73: fg=Reset bg=Reset DIM

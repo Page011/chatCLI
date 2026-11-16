@@ -58,6 +58,9 @@ impl App {
                     &self.about,
                     &self.file_problems,
                 );
+                if p.section == Section::Keys {
+                    rows = settings_view::filter_key_rows(rows, p.filter.text());
+                }
                 // NO_COLOR strips every colour: say so, or a colour change looks broken.
                 if p.section == Section::Appearance && self.no_colour {
                     rows.insert(0, settings_view::no_colour_row());
@@ -186,10 +189,52 @@ impl App {
     fn move_section(&mut self, step: isize) {
         if let Some(p) = self.settings_page.as_mut() {
             p.section = p.section.step(step);
+            p.filter.clear();
+            p.filtering = false;
             p.row = 0;
             p.top = 0;
         }
         self.settings_fit();
+    }
+
+    /// The Keys filter changed: the cursor goes to the first row that matches.
+    fn filter_changed(&mut self) {
+        let first = self.page_rows().iter().position(Row::selectable);
+        if let Some(p) = self.settings_page.as_mut() {
+            p.row = first.unwrap_or(0);
+            p.top = 0;
+        }
+        self.settings_fit();
+    }
+
+    /// One key while the Keys filter takes typing: characters and Backspace edit it, Up and Down
+    /// move through what matches, Enter keeps it, Esc clears it. Anything else (F1, F2, the quit
+    /// key) works as on the page.
+    fn filter_key(&mut self, key: &KeyEvent, global: Option<Action>) -> Out {
+        let Some(page) = self.settings_page.as_mut() else {
+            return Vec::new();
+        };
+        if let Some(c) = crate::keymap::typed_char(key) {
+            page.filter.insert_char(c);
+            self.filter_changed();
+            return Vec::new();
+        }
+        match key.code {
+            KeyCode::Backspace => {
+                page.filter.delete_back();
+                self.filter_changed();
+            }
+            KeyCode::Enter => page.filtering = false,
+            KeyCode::Esc => {
+                page.filter.clear();
+                page.filtering = false;
+                self.filter_changed();
+            }
+            KeyCode::Up => self.move_row(-1),
+            KeyCode::Down => self.move_row(1),
+            _ => return self.settings_global(global, key),
+        }
+        Vec::new()
     }
 
     /// Into the rows of the current section. Stays on the sections when none can be changed.
@@ -432,6 +477,11 @@ impl App {
 
     /// Typed or pasted text into the value being edited. False when nothing is being edited.
     pub(super) fn settings_type(&mut self, text: &str) -> bool {
+        if let Some(p) = self.settings_page.as_mut().filter(|p| p.filtering) {
+            p.filter.insert_str(text);
+            self.filter_changed();
+            return true;
+        }
         match self.settings_page.as_mut().and_then(|p| p.edit.as_mut()) {
             Some(PageEdit::Text(buf)) => {
                 buf.insert_str(text);
@@ -465,6 +515,9 @@ impl App {
         let plain = !key
             .modifiers
             .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
+        if page.filtering {
+            return self.filter_key(key, global);
+        }
         if let Some(PageEdit::Text(buf)) = page.edit.as_mut() {
             if let Some(c) = crate::keymap::typed_char(key) {
                 buf.insert_char(c);
@@ -482,6 +535,8 @@ impl App {
             return Vec::new();
         }
         let in_rows = page.in_rows;
+        let section = page.section;
+        let filtered = !page.filter.is_empty();
         match (key.code, plain) {
             (KeyCode::Up | KeyCode::Char('k'), true) => {
                 if in_rows {
@@ -517,6 +572,21 @@ impl App {
             (KeyCode::Enter, _) if in_rows => return self.enter_row(),
             (KeyCode::Char('r'), true) if in_rows => return self.change_row(Change::Reset),
             (KeyCode::Char(c @ ('a' | 'd')), true) if in_rows => self.start_key_edit(c == 'a'),
+            // `/` filters the Keys page, from its rows or from the section list.
+            (KeyCode::Char('/'), true) if section == Section::Keys => {
+                if let Some(p) = self.settings_page.as_mut() {
+                    p.filtering = true;
+                    p.in_rows = true;
+                }
+                self.filter_changed();
+            }
+            // Esc clears a kept filter before it closes the page.
+            (KeyCode::Esc, _) if filtered => {
+                if let Some(p) = self.settings_page.as_mut() {
+                    p.filter.clear();
+                }
+                self.filter_changed();
+            }
             _ => return self.settings_global(global, key),
         }
         Vec::new()
@@ -913,6 +983,72 @@ mod tests {
 
     fn kset(table: &str, key: &str, v: &str) -> SettingEdit {
         SettingEdit::set(table, key, SettingValue::str(v))
+    }
+
+    #[test]
+    fn slash_filters_the_keys_page_by_label_name_key_or_context() {
+        let actions = |a: &App| -> Vec<RowId> {
+            a.page_rows()
+                .into_iter()
+                .filter(|r| matches!(r.id, RowId::KeyAction(..)))
+                .map(|r| r.id)
+                .collect()
+        };
+        let mut a = in_section(Section::Keys);
+        press(&mut a, KeyCode::Char('/'));
+        assert!(a.settings_page().unwrap().filtering);
+        // The settings.toml name.
+        type_text(&mut a, "mark_read");
+        assert_eq!(actions(&a), [keys_row(Context::List, Action::MarkRead)]);
+        assert_eq!(
+            row_id(&a),
+            keys_row(Context::List, Action::MarkRead),
+            "on the match"
+        );
+        // A key, any case.
+        for _ in 0..9 {
+            press(&mut a, KeyCode::Backspace);
+        }
+        type_text(&mut a, "ctrl+o");
+        assert_eq!(
+            actions(&a),
+            [
+                keys_row(Context::Composer, Action::Attach),
+                keys_row(Context::Select, Action::JumpBack)
+            ]
+        );
+        // Up and Down move through the matches while typing.
+        press(&mut a, KeyCode::Down);
+        assert_eq!(row_id(&a), keys_row(Context::Select, Action::JumpBack));
+        // Enter keeps the filter: the page keys work on the matches again (r resets, d deletes).
+        press(&mut a, KeyCode::Enter);
+        assert!(!a.settings_page().unwrap().filtering);
+        assert_eq!(actions(&a).len(), 2);
+        // Esc clears it first, then closes the page.
+        press(&mut a, KeyCode::Esc);
+        assert!(a.settings_page().unwrap().filter.is_empty());
+        assert!(actions(&a).len() > 20);
+        press(&mut a, KeyCode::Esc);
+        assert!(a.settings_page().is_none());
+        // A context title shows its section; nothing matching says so; Esc while typing clears.
+        let mut a = in_section(Section::Keys);
+        press(&mut a, KeyCode::Char('/'));
+        type_text(&mut a, "message selection");
+        assert!(actions(&a)
+            .iter()
+            .all(|r| matches!(r, RowId::KeyAction(Context::Select, _))));
+        type_text(&mut a, "zzz");
+        assert!(actions(&a).is_empty());
+        assert!(a
+            .page_rows()
+            .iter()
+            .any(|r| r.value.starts_with("No keys match")));
+        press(&mut a, KeyCode::Esc);
+        assert!(
+            a.settings_page().is_some(),
+            "Esc while typing clears, the page stays"
+        );
+        assert!(a.settings_page().unwrap().filter.is_empty());
     }
 
     #[test]

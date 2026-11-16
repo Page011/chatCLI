@@ -80,7 +80,7 @@ chatcli --demo
 
 Press `Ctrl+C` to leave the demo. The demo shows every feature below on fake data: replies, reactions, edits, mentions, attachments and thumbnails, older history, pin/mute/hide, search, typing, and a footer line where a toast would be. It starts from a copy of your `settings.toml` (so you can try a theme or a layout), keeps its messages, its downloads and that copy in a temporary folder that is deleted on exit, and never touches your real data, your real `settings.toml` or the network.
 
-Want it shown instead of reading about it? `chatcli --demo --tour` plays a guided tour: it signs in, opens a chat, sends, replies, reacts, edits, deletes, searches, opens the settings screen and rebinds a key, with a caption on the top row. `Space` pauses, `n` skips to the next step, `Esc` ends it (`/tour` in the demo plays it again). The tour starts from the default settings and puts everything back.
+Want it shown instead of reading about it? `chatcli --demo --tour` plays a guided tour: it signs in, opens a chat, sends, replies, reacts, edits, deletes, searches, opens the settings screen and rebinds a key, with a caption on the top row. `Space` pauses, `n` skips to the next step, `Esc` ends it (`:tour` in the demo plays it again). The tour starts from the default settings and puts everything back.
 
 ## Set up Teams
 
@@ -381,10 +381,10 @@ Command-line times are UTC.
 
 ## Settings
 
-The settings screen (`F2` or `/settings`) edits this file for you. Editing it by hand is optional and still works. chatcli writes `settings.toml` only from that screen, one key at a time, keeping your comments and unknown keys; a file that does not parse is never written (the screen says `NOT SAVED` and the change applies for this session only: fix the file first). The commands write `config.json`: Teams ids and the relay URL.
+The settings screen (`F2` or `:settings`) edits this file for you. Editing it by hand is optional and still works. chatcli writes `settings.toml` only from that screen, one key at a time, keeping your comments and unknown keys; a file that does not parse is never written (the screen says `NOT SAVED` and the change applies for this session only: fix the file first). The commands write `config.json`: Teams ids and the relay URL.
 
 - Where: `chatcli settings path` (by default `%LOCALAPPDATA%\chatcli\settings.toml`).
-- Changes made in the settings screen apply at once. A hand edit is read at start only: restart chatcli after it. Two settings apply later: the image protocol (next start) and the Teams file permissions (`/signout`, then `/signin`).
+- Changes made in the settings screen apply at once. A hand edit is read at start only: restart chatcli after it. Two settings apply later: the image protocol (next start) and the Teams file permissions (`:signout`, then `:signin`).
 - No file means the defaults.
 - A broken section falls back to its defaults and shows one notice with the file, line and key. The other sections still load. An unknown key gives one warning.
 - `chatcli settings check` prints every problem and exits 1 on any error, 0 on warnings only. `chatcli doctor` counts them too.
@@ -430,7 +430,7 @@ name = "default"            # "default", "high-contrast", "light" or "dark"
 
 ### Key bindings
 
-The `/keys` page (or the Keys section of `F2`) lists every action with its keys: `Enter` on an action, then press the new key. Every key you press is taken, `Esc`, `Backspace` and `Ctrl+C` included: no key cancels (press the key the action already has to leave it as it is, or delete the new key afterwards). If the key already runs another action you are asked whether to swap. An action can have several keys: `a` adds one and keeps the others (a key another action of the same context holds is refused with its name, and a key that would hide or be hidden by an `Everywhere` key, or a two-key sequence, asks first), and `d` lets you choose one of its keys with `Left` / `Right` and deletes it with `Enter`. The key you set last is the one the footer shows. `r` resets one action, and the last row resets them all. `Ctrl+C` and `Esc` are ordinary keys, but a change that would leave nothing to quit with somewhere, or nothing to close help, a popup or a `y/n` question with, is refused. What follows is the same thing as a file.
+The `:keys` page (or the Keys section of `F2`) lists every action with its keys: `/` filters it by an action's name, its `settings.toml` name, a key (`ctrl+o`) or a context (`chat list`), `Enter` keeps the filter and `Esc` clears it. `Enter` on an action, then press the new key. Every key you press is taken, `Esc`, `Backspace` and `Ctrl+C` included: no key cancels (press the key the action already has to leave it as it is, or delete the new key afterwards). If the key already runs another action you are asked whether to swap. An action can have several keys: `a` adds one and keeps the others (a key another action of the same context holds is refused with its name, and a key that would hide or be hidden by an `Everywhere` key, or a two-key sequence, asks first), and `d` lets you choose one of its keys with `Left` / `Right` and deletes it with `Enter`. The key you set last is the one the footer shows. `r` resets one action, and the last row resets them all. `Ctrl+C` and `Esc` are ordinary keys, but a change that would leave nothing to quit with somewhere, or nothing to close help, a popup or a `y/n` question with, is refused. What follows is the same thing as a file.
 
 Your own bindings sit in one table per context, `key = "action"`, over the built-in keys:
 
