@@ -314,9 +314,10 @@ Message selection (`Enter` on a chat, or `Esc` from the message box). The footer
 | `d` or `x` | Delete your own message for everyone, after a `y/n` |
 | `u` | Open a link from this message |
 | `o` | Open the attachment (downloads first if needed) |
+| `v` | Show or hide a thumbnail of an image |
 | `y` | Copy the message's text (for an attachment with no caption, its file name). chatcli uses the system clipboard (on Linux the Wayland one natively, on wlroots compositors and KDE) and also asks the terminal to copy it (OSC 52), which is what works over SSH; some terminals must be told to allow that |
 
-Popups and pickers take `Enter` (not `Tab`) for the chosen item. `view_image` (a thumbnail of an image, in message selection), `open_link` in the chat list (a link from the newest message) and `select_messages` in the message box (selection even while a reply is pending) have no default key: bind one if you want them.
+Popups and pickers take `Enter` (not `Tab`) for the chosen item. `open_link` in the chat list (a link from the newest message) and `select_messages` in the message box (selection even while a reply is pending) have no default key: bind one if you want them.
 
 The mouse works too: click a tab, click a chat (previews it, like moving the cursor), scroll the wheel. A preview does not mark the chat read: going into the chat, sending, or two seconds on it does. Unsent text is kept per chat. Times are local.
 
@@ -463,7 +464,7 @@ Roles: `text` (messages, chat titles, your draft), `dim` (times, previews, separ
 
 ### Media
 
-Nothing downloads until you press `o` on a message, or the key you bound to `view_image`. `o` fetches the attachment into the media cache and opens it in the default app. `view_image` (no default key) shows a thumbnail under the message.
+Nothing downloads until you press `o` or `v` on a message. `o` fetches the attachment into the media cache and opens it in the default app. `v` shows a thumbnail under the message.
 
 - The cache is `media\<network>\` in the data folder, files named by a hash, never by the sender's file name. It is capped by `cache_max_mb` and `retention_days` (oldest files go first, checked at start and after each download). A file over `max_file_mb` is not downloaded: you get a notice that names the setting. `chatcli media clear` empties it.
 - **Cached files are not encrypted on disk.** Use full-disk encryption.

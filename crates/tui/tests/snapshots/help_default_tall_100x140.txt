@@ -82,6 +82,7 @@
 ║x, d      Delete            delete the selected message of yours for everyone                     ║
 ║u         Open link         open a link from the selected message (chat list: from the newest mes…║
 ║o         Open media        open the selected message's attachment in the default app             ║
+║v         View image        show or hide a thumbnail of the selected image                        ║
 ║y         Copy              copy the selected message's text (an attachment without a caption: it…║
 ║Ctrl+O    Jump back         back to the message selected before the last big jump (G, g, H, M, L) ║
 ║                                                                                                  ║
@@ -134,8 +135,7 @@
 ║                                                                                                  ║
 ║                                                                                                  ║
 ║                                                                                                  ║
-║                                                                                                  ║
-║lines 1-91 of 91                                                                                  ║
+║lines 1-92 of 92                                                                                  ║
 ╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
 Esc close  Up/Down scroll  PgUp/PgDn page
 --- styled runs (everything else is default style) ---
@@ -296,18 +296,20 @@ row 82 cols 27-98: fg=DarkGray bg=Reset NONE
 row 83 cols 1-9: fg=Reset bg=Reset BOLD
 row 83 cols 27-85: fg=DarkGray bg=Reset NONE
 row 84 cols 1-9: fg=Reset bg=Reset BOLD
-row 84 cols 27-98: fg=DarkGray bg=Reset NONE
+row 84 cols 27-74: fg=DarkGray bg=Reset NONE
 row 85 cols 1-9: fg=Reset bg=Reset BOLD
-row 85 cols 27-97: fg=DarkGray bg=Reset NONE
-row 87 cols 1-33: fg=Reset bg=Reset BOLD
-row 88 cols 1-9: fg=Reset bg=Reset BOLD
-row 88 cols 27-98: fg=DarkGray bg=Reset NONE
+row 85 cols 27-98: fg=DarkGray bg=Reset NONE
+row 86 cols 1-9: fg=Reset bg=Reset BOLD
+row 86 cols 27-97: fg=DarkGray bg=Reset NONE
+row 88 cols 1-33: fg=Reset bg=Reset BOLD
 row 89 cols 1-9: fg=Reset bg=Reset BOLD
-row 89 cols 27-68: fg=DarkGray bg=Reset NONE
-row 91 cols 1-9: fg=Reset bg=Reset BOLD
+row 89 cols 27-98: fg=DarkGray bg=Reset NONE
+row 90 cols 1-9: fg=Reset bg=Reset BOLD
+row 90 cols 27-68: fg=DarkGray bg=Reset NONE
 row 92 cols 1-9: fg=Reset bg=Reset BOLD
-row 92 cols 27-90: fg=DarkGray bg=Reset NONE
 row 93 cols 1-9: fg=Reset bg=Reset BOLD
-row 93 cols 27-84: fg=DarkGray bg=Reset NONE
+row 93 cols 27-90: fg=DarkGray bg=Reset NONE
+row 94 cols 1-9: fg=Reset bg=Reset BOLD
+row 94 cols 27-84: fg=DarkGray bg=Reset NONE
 row 137 cols 1-16: fg=Reset bg=Reset DIM
 row 139 cols 0-40: fg=Reset bg=Reset DIM

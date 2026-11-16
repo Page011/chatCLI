@@ -159,8 +159,14 @@ pub(crate) const STEPS: &[Step] = &[
         acts: &[ESC, ch('d'), Act::Wait(1200), ch('y')],
     },
     Step {
-        caption: "Attachments show as chips; o opens one in its app. Esc goes back to the chats.",
-        acts: &[Act::SelectMsg("[image] sunset"), Act::Wait(2500), ESC],
+        caption: "Attachments show as chips. v shows a picture, o opens it in its app.",
+        acts: &[
+            Act::SelectMsg("[image] sunset"),
+            Act::Wait(1200),
+            ch('v'),
+            Act::Wait(2500),
+            ESC,
+        ],
     },
     Step {
         caption: "Ctrl+F searches every message stored on this PC.",

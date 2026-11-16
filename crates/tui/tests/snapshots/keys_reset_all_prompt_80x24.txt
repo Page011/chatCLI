@@ -9,9 +9,9 @@
 │Keys            │║Delete              x, d                                    ║
 │About           │║Open link           u                                       ║
 │                │║Open media          o                                       ║
+│                │║View image          v                                       ║
 │                │║Copy                y                                       ║
 │                │║Jump back           Ctrl+O                                  ║
-│                │║View image          -                                       ║
 │                │║Confirm (link, delete, mark read)                           ║
 │                │║Confirm yes         y                                       ║
 │                │║Confirm no          n                                       ║

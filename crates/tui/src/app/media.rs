@@ -956,16 +956,9 @@ mod tests {
         }
     }
 
-    /// Teams online, chat "a" open (message box focused) holding `messages`. `view_image` has no
-    /// default key: these tests bind it to v in message selection.
+    /// Teams online, chat "a" open (message box focused) holding `messages`.
     fn app_with(messages: Vec<ChatMessage>) -> App {
         let mut app = App::new(clock());
-        let mut keys = chatcli_core::settings::KeySettings::default();
-        keys.bindings.insert(
-            "select".to_string(),
-            [("v".to_string(), "view_image".to_string())].into(),
-        );
-        app.keys = crate::keymap::Keymap::build(&keys).0;
         app.set_color_depth(Depth::True);
         app.handle_event(Event::Status(
             Network::Teams,

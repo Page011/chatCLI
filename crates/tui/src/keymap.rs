@@ -590,6 +590,7 @@ const OWN: &[Row] = &[
     (Context::Select, "d", Action::Delete),
     (Context::Select, "u", Action::OpenLink),
     (Context::Select, "o", Action::OpenMedia),
+    (Context::Select, "v", Action::ViewImage),
     (Context::Select, "y", Action::Copy),
     (Context::Select, "ctrl+o", Action::JumpBack),
     // The message box (its editing keys are in `common`).
@@ -628,7 +629,6 @@ fn builtin(key: &str) -> KeyChord {
 const EXTRA: &[(Context, Action)] = &[
     (Context::List, Action::OpenLink),
     (Context::List, Action::MarkAllRead),
-    (Context::Select, Action::ViewImage),
 ];
 
 /// Where a key bound to `action` in `[keys.common]` works: quitting everywhere; the tabs, help,
@@ -1439,7 +1439,6 @@ mod tests {
             (Context::List, "u"),
             (Context::List, "M"),
             (Context::List, "x"),
-            (Context::Select, "v"),
             (Context::Select, "E"),
             (Context::Select, "/"),
             (Context::Popup, "tab"),
@@ -1451,9 +1450,14 @@ mod tests {
             assert_eq!(map.lookup(ctx, k(key)), None, "{ctx:?} {key}");
         }
         // The actions stay, and can be bound.
-        let (map, problems) = build(&[("select", "v", "view_image"), ("list", "u", "open_link")]);
+        let (map, problems) = build(&[("list", "u", "open_link")]);
         assert!(problems.is_empty(), "{problems:?}");
-        assert_eq!(map.lookup(Context::Select, k("v")), Some(Action::ViewImage));
+        assert_eq!(map.lookup(Context::List, k("u")), Some(Action::OpenLink));
+        // v views a picture in message selection.
+        assert_eq!(
+            Keymap::default().lookup(Context::Select, k("v")),
+            Some(Action::ViewImage)
+        );
     }
 
     /// `g` and `G` are in `common`: top and bottom where they apply, typed text where you type.

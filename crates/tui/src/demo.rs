@@ -60,7 +60,7 @@ const LINES: [&str; 6] = [
 /// Extra messages in the first chat of each network, so the composer, emoji and link features
 /// can be tried with `chatcli --demo`. Placeholder links only (example.invalid never resolves).
 const LAB: [&str; 4] = [
-    "Try it: Enter on a chat (or Esc from the box) selects a message (r reply, e react, c edit or d delete your own, y copy, u link, o open an attachment, Ctrl+O jump back, i to the box, Esc back to the chats). Ctrl+O attaches a file, Alt+V pastes a clipboard picture, Ctrl+E opens the emoji picker, :thu then Enter completes an emoji, Ctrl+J adds a line, a pasted block stays in the box. In Project Team and Family Group type @ and a name to mention someone.",
+    "Try it: Enter on a chat (or Esc from the box) selects a message (r reply, e react, c edit or d delete your own, y copy, u link, o open or v view an attachment, Ctrl+O jump back, i to the box, Esc back to the chats). Ctrl+O attaches a file, Alt+V pastes a clipboard picture, Ctrl+E opens the emoji picker, :thu then Enter completes an emoji, Ctrl+J adds a line, a pasted block stays in the box. In Project Team and Family Group type @ and a name to mention someone.",
     "Docs: https://docs.example.invalid/handbook/section/page?id=12345&view=full#top (updated today).",
     "Two links: https://one.example.invalid/a and https://two.example.invalid/b",
     "Emoji \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467} family, \u{1F1FA}\u{1F1F3} flag, \u{1F44D}\u{1F3FD} thumbs up, \u{2764}\u{FE0F} heart, 1\u{FE0F}\u{20E3} keycap, \u{4f60}\u{597d}",

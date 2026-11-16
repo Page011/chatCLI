@@ -1603,12 +1603,8 @@ fn media_history() -> Vec<ChatMessage> {
 }
 
 /// Teams, Alex Example open with the media history, capabilities all true, a fixed colour depth.
-/// `view_image` has no default key: v is bound to it in message selection here.
 fn media_app(depth: Depth) -> App {
-    let mut app = open_media_in(
-        new_app_with(one_binding("select", "v", "view_image")),
-        depth,
-    );
+    let mut app = open_media_in(new_app(), depth);
     app.handle_event(Event::Messages {
         network: Network::Teams,
         chat_id: "alex".into(),
@@ -1824,7 +1820,7 @@ fn thumbnail_failure_shows_on_the_chip() {
 /// `inline_images = false`: no thumbnail, and `v` points to `o`.
 #[test]
 fn inline_images_off_keeps_the_chip_only() {
-    let mut s = one_binding("select", "v", "view_image");
+    let mut s = Settings::default();
     s.media.inline_images = false;
     let mut app = open_media_in(new_app_with(s), Depth::True);
     app.handle_event(Event::Messages {
