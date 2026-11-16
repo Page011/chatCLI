@@ -95,6 +95,22 @@ impl App {
         self.settings_fit();
     }
 
+    /// After a key edit the rows can change (a filter stops matching, a row made by a user entry
+    /// goes): the cursor stays on `id` if it is still there, else on the nearest row that can be
+    /// chosen, never on a heading.
+    fn keep_cursor(&mut self, id: Option<RowId>) {
+        let rows = self.page_rows();
+        let at = id.and_then(|id| rows.iter().position(|r| r.id == id));
+        if let Some(p) = self.settings_page.as_mut() {
+            let from = at.unwrap_or(p.row).min(rows.len().saturating_sub(1));
+            let near = (from..rows.len())
+                .chain((0..from).rev())
+                .find(|&i| rows[i].selectable());
+            p.row = near.unwrap_or(from);
+        }
+        self.settings_fit();
+    }
+
     /// The run loop could not save: one red line. The change still applies for this session.
     pub fn settings_save_failed(&mut self, error: &str) {
         self.push_global_notice(error, true);
@@ -284,9 +300,12 @@ impl App {
     fn key_result(&mut self, done: keys_edit::Done) -> Out {
         match done {
             Ok((keys, edits)) => {
+                let at = self.current_row().map(|r| r.id);
                 let mut new = self.settings.clone();
                 new.keys = keys;
-                self.commit_change(new, edits)
+                let out = self.commit_change(new, edits);
+                self.keep_cursor(at);
+                out
             }
             Err(msg) => {
                 self.set_error(Some(msg));
@@ -307,7 +326,8 @@ impl App {
     /// question (swap, add anyway, which key to delete) reads its own keys, then the quit key.
     fn capture_key(&mut self, chord: KeyChord, code: KeyCode) -> Out {
         self.set_error(None);
-        let quit = self.keys.lookup(Context::Common, chord) == Some(Action::Quit);
+        // The settings screen is an overlay: its quit key is the popups' one.
+        let quit = self.keys.lookup(Context::Popup, chord) == Some(Action::Quit);
         let edit = self.settings_page.as_ref().and_then(|p| p.edit.clone());
         match edit {
             Some(PageEdit::Conflict {
@@ -353,12 +373,29 @@ impl App {
                 KeyCode::Esc => self.set_edit(None),
                 _ => self.quit |= quit,
             },
+            Some(PageEdit::CaptureOverlap {
+                ctx, action, key, ..
+            }) => match code {
+                KeyCode::Enter => {
+                    self.set_edit(None);
+                    let done = keys_edit::bind(&self.keys, &self.settings.keys, ctx, action, key);
+                    return self.key_result(done);
+                }
+                KeyCode::Esc => self.set_edit(None),
+                _ => self.quit |= quit,
+            },
             Some(PageEdit::Pick { ctx, action, index }) => {
                 return self.pick_key(chord, code, ctx, action, index)
             }
             Some(PageEdit::Capture { ctx, action }) => {
                 match keys_edit::capture(&self.keys, ctx, action, chord) {
                     Captured::Same => self.set_edit(None),
+                    Captured::Overlaps(note) => self.set_edit(Some(PageEdit::CaptureOverlap {
+                        ctx,
+                        action,
+                        key: chord,
+                        note,
+                    })),
                     Captured::Refused(msg) => self.set_error(Some(msg)),
                     Captured::Conflict(other) => self.set_edit(Some(PageEdit::Conflict {
                         ctx,
@@ -414,7 +451,7 @@ impl App {
                 }
             }
             (KeyCode::Esc, _) => self.set_edit(None),
-            _ if self.keys.lookup(Context::Common, chord) == Some(Action::Quit) => self.quit = true,
+            _ if self.keys.lookup(Context::Popup, chord) == Some(Action::Quit) => self.quit = true,
             _ => {}
         }
         Vec::new()
@@ -983,6 +1020,34 @@ mod tests {
 
     fn kset(table: &str, key: &str, v: &str) -> SettingEdit {
         SettingEdit::set(table, key, SettingValue::str(v))
+    }
+
+    #[test]
+    fn the_cursor_stays_on_a_row_that_can_be_chosen_after_an_edit() {
+        // Filtered to Refresh by its key; rebinding it to F6 makes the row stop matching.
+        let mut a = in_section(Section::Keys);
+        press(&mut a, KeyCode::Char('/'));
+        type_text(&mut a, "refresh");
+        press(&mut a, KeyCode::Enter);
+        assert_eq!(row_id(&a), keys_row(Context::List, Action::Refresh));
+        press(&mut a, KeyCode::Enter);
+        press(&mut a, KeyCode::F(6));
+        assert_eq!(
+            row_id(&a),
+            keys_row(Context::List, Action::Refresh),
+            "still there"
+        );
+        // Filtered on a key the edit takes away: the row goes, the cursor lands on the next match,
+        // not on a heading.
+        let mut a = in_section(Section::Keys);
+        press(&mut a, KeyCode::Char('/'));
+        type_text(&mut a, "shift+");
+        press(&mut a, KeyCode::Enter);
+        assert_eq!(row_id(&a), keys_row(Context::Common, Action::PrevNetwork));
+        press(&mut a, KeyCode::Enter);
+        press(&mut a, KeyCode::F(9));
+        assert!(a.current_row().is_some_and(|r| r.selectable()));
+        assert_ne!(row_id(&a), keys_row(Context::Common, Action::PrevNetwork));
     }
 
     #[test]

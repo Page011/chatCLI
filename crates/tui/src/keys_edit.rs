@@ -16,6 +16,9 @@ pub(crate) type Done = Result<(KeySettings, Vec<SettingEdit>), String>;
 /// What a key pressed while capturing means.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Captured {
+    /// Free here, but it would stop something else (a key sequence, a `common` key): the warning,
+    /// and Enter binds it anyway.
+    Overlaps(String),
     /// This key cannot be used: the message, and the capture stays open.
     Refused(String),
     /// The action already has this key.
@@ -38,12 +41,36 @@ pub(crate) fn capture(keys: &Keymap, ctx: Context, action: Action, k: KeyChord) 
             k.display()
         ));
     }
+    if let Some(why) = types_everywhere(ctx, action, k) {
+        return Captured::Refused(why);
+    }
     // A `common` key that works here counts too: the swap gives it the old key in this table.
     match keys.lookup(ctx, k) {
         Some(a) if a == action => Captured::Same,
         Some(b) => Captured::Conflict(b),
-        None => Captured::Bind,
+        None => {
+            let notes = overlaps(keys, ctx, action, k);
+            if notes.is_empty() {
+                Captured::Bind
+            } else {
+                Captured::Overlaps(format!("{} {}", k.display(), notes.join("; ")))
+            }
+        }
     }
+}
+
+/// A printable key for an action in `[keys.common]` that only works where you type: it would type
+/// text there and do nothing anywhere. The refusal, or None.
+fn types_everywhere(ctx: Context, action: Action, k: KeyChord) -> Option<String> {
+    (ctx == Context::Common && k.prints() && crate::keymap::only_where_you_type(action)).then(
+        || {
+            format!(
+                "{} types text everywhere {} works: use a Ctrl or Alt key",
+                k.display(),
+                action.label()
+            )
+        },
+    )
 }
 
 fn table_of(user: &KeySettings, ctx: Context) -> BTreeMap<String, String> {
@@ -61,11 +88,11 @@ fn default_binds(ctx: Context, k: KeyChord) -> bool {
 }
 
 /// `old` stops doing anything in this table: a user entry for it goes, and a key chatcli
-/// binds (to this action or, after a move, to another) is written as unbound, so dropping the
-/// entry never brings an older binding back.
+/// binds here, in this table or through `[keys.common]`, is written as unbound, so dropping the
+/// entry never brings an older binding back (`r` resets to the defaults).
 fn unbind(t: &mut BTreeMap<String, String>, ctx: Context, old: KeyChord) -> Result<(), String> {
     t.retain(|key, _| parse_key(key).ok() != Some(old));
-    if default_binds(ctx, old) {
+    if default_binds(ctx, old) || Keymap::default().common_for(ctx, old).is_some() {
         t.insert(spelled(old)?, Action::Unbound.name().to_string());
     }
     Ok(())
@@ -229,6 +256,9 @@ pub(crate) fn capture_add(keys: &Keymap, ctx: Context, action: Action, k: KeyCho
             k.display()
         ));
     }
+    if let Some(why) = types_everywhere(ctx, action, k) {
+        return Adding::Refused(why);
+    }
     match keys.find(ctx, k) {
         Some(a) if a == action => return Adding::Same,
         Some(other) => {
@@ -255,6 +285,13 @@ pub(crate) fn capture_add(keys: &Keymap, ctx: Context, action: Action, k: KeyCho
 fn overlaps(keys: &Keymap, ctx: Context, action: Action, k: KeyChord) -> Vec<String> {
     let mut out = Vec::new();
     if ctx == Context::Common {
+        let own = keys.sequences_from(Context::Common, k);
+        if !own.is_empty() {
+            out.push(format!(
+                "starts {} everywhere, which stop working",
+                own.join(", ")
+            ));
+        }
         for c in Context::ALL {
             let reaches = c != Context::Common
                 && common_applies(action, c)
@@ -268,7 +305,7 @@ fn overlaps(keys: &Keymap, ctx: Context, action: Action, k: KeyChord) -> Vec<Str
                     other.label(),
                     c.title()
                 ));
-            } else if !keys.sequences_from(c, k).is_empty() {
+            } else if !keys.own_sequences_from(c, k).is_empty() {
                 out.push(format!(
                     "starts key sequences in {}, which stop working",
                     c.title()
@@ -437,6 +474,64 @@ mod tests {
                 KeyChord::new(KeyCode::Null, KeyModifiers::NONE)
             ),
             Captured::Refused("This key cannot be saved: pick another".to_string())
+        );
+    }
+
+    #[test]
+    fn a_letter_for_a_type_only_action_in_common_is_refused() {
+        let map = keymap(&KeySettings::default());
+        let why = "h types text everywhere Cursor left works: use a Ctrl or Alt key".to_string();
+        assert_eq!(
+            capture(&map, Context::Common, Action::CursorLeft, k("h")),
+            Captured::Refused(why.clone())
+        );
+        assert_eq!(
+            capture_add(&map, Context::Common, Action::CursorLeft, k("h")),
+            Adding::Refused(why)
+        );
+        // Accept works in the chat list too, so a letter is fine there.
+        assert_ne!(
+            capture(&map, Context::Common, Action::Accept, k("o")),
+            Captured::Refused(String::new())
+        );
+        assert!(!matches!(
+            capture(&map, Context::Common, Action::Accept, k("o")),
+            Captured::Refused(_)
+        ));
+        // A hand-written file is warned.
+        let (_, problems) = Keymap::build(&user(&[("common", "h", "cursor_left")]));
+        assert!(
+            problems.iter().any(|p| p.message.contains("does nothing")),
+            "{problems:?}"
+        );
+    }
+
+    #[test]
+    fn a_key_that_starts_g_g_warns_before_it_is_bound() {
+        let map = keymap(&KeySettings::default());
+        assert_eq!(
+            capture(&map, Context::Select, Action::Copy, k("g")),
+            Captured::Overlaps("g starts g g, which stop working".to_string())
+        );
+        assert_eq!(
+            capture_add(&map, Context::List, Action::Refresh, k("g")),
+            Adding::Overlaps("g starts g g, which stop working".to_string())
+        );
+        assert!(matches!(
+            capture_add(&map, Context::Common, Action::Search, k("g")),
+            Adding::Overlaps(n) if n.contains("starts g g everywhere")
+        ));
+    }
+
+    #[test]
+    fn deleting_a_key_that_took_over_a_common_one_leaves_it_doing_nothing() {
+        let u = user(&[("list", "esc", "refresh")]);
+        let (new, edits) = remove_key(&u, Context::List, k("esc")).unwrap();
+        assert_eq!(edits, vec![set("keys.list", "esc", "unbound")]);
+        assert_eq!(keymap(&new).lookup(Context::List, k("esc")), None);
+        assert_eq!(
+            keymap(&new).lookup(Context::Select, k("esc")),
+            Some(Action::Back)
         );
     }
 

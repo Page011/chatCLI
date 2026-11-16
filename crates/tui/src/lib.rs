@@ -293,30 +293,31 @@ fn spawn_work<R: Send + 'static>(
     });
 }
 
-/// Saves the clipboard's picture as a PNG in the data folder's `tmp`. Blocking: run it on a
-/// worker thread. Clipboard access fails over remote sessions: that is a notice, never a crash.
-/// `y`: puts `text` on the clipboard, two ways at once. The terminal is always asked (OSC 52):
+/// `y`: puts `text` on the clipboard, two ways at once. `clipboard` (the native one) first, except
+/// over SSH, where it would be the remote machine's. Then the terminal is asked too (OSC 52):
 /// most terminals do it (Ghostty, kitty, foot, WezTerm, Windows Terminal), it reaches the right
-/// machine over SSH, and a terminal without it ignores the sequence. `clipboard` (the native one)
-/// is used too, except over SSH, where it would be the remote machine's. The `Ok` text is the
-/// notice.
+/// machine over SSH, and a terminal without it ignores the sequence. Last, so where it works the
+/// terminal holds the text: on Wayland the native copy is served by chatcli and would go when it
+/// quits. The `Ok` text is the notice.
 fn copy_text(
     clipboard: &mut Option<arboard::Clipboard>,
     text: &str,
 ) -> std::result::Result<&'static str, String> {
     use std::io::Write;
-    let mut out = io::stdout();
-    let terminal = out
-        .write_all(osc52(text).as_bytes())
-        .and_then(|()| out.flush());
     let ssh = std::env::var_os("SSH_CONNECTION").is_some() || std::env::var_os("SSH_TTY").is_some();
+    let mut native = false;
     if !ssh {
         if clipboard.is_none() {
             *clipboard = arboard::Clipboard::new().ok();
         }
-        if clipboard.as_mut().is_some_and(|c| c.set_text(text).is_ok()) {
-            return Ok("Copied.");
-        }
+        native = clipboard.as_mut().is_some_and(|c| c.set_text(text).is_ok());
+    }
+    let mut out = io::stdout();
+    let terminal = out
+        .write_all(osc52(text).as_bytes())
+        .and_then(|()| out.flush());
+    if native {
+        return Ok("Copied.");
     }
     match terminal {
         Ok(()) => Ok("Copied through the terminal (it may need to allow that)."),
@@ -331,6 +332,8 @@ fn osc52(text: &str) -> String {
     format!("\x1b]52;c;{data}\x07")
 }
 
+/// Saves the clipboard's picture as a PNG in the data folder's `tmp`. Blocking: run it on a
+/// worker thread. Clipboard access fails over remote sessions: that is a notice, never a crash.
 fn clipboard_to_temp() -> std::result::Result<PathBuf, String> {
     let mut clipboard = arboard::Clipboard::new().map_err(|_| {
         "Cannot reach the clipboard here: attach the file with Ctrl+O instead.".to_string()

@@ -105,6 +105,14 @@ pub(crate) enum PageEdit {
         key: KeyChord,
         note: String,
     },
+    /// `key` is free for `action` in `ctx` but would stop something else (`note` says what): Enter
+    /// binds it anyway, Esc cancels.
+    CaptureOverlap {
+        ctx: Context,
+        action: Action,
+        key: KeyChord,
+        note: String,
+    },
     /// Choosing which of the action's keys to delete: `index` into `Keymap::keys_in`.
     Pick {
         ctx: Context,
@@ -143,6 +151,9 @@ pub(crate) fn capture_line(edit: Option<&PageEdit>) -> Option<String> {
         )),
         PageEdit::AddOverlap { note, .. } => {
             Some(format!("{note}. Enter adds it anyway, Esc cancels"))
+        }
+        PageEdit::CaptureOverlap { note, .. } => {
+            Some(format!("{note}. Enter binds it anyway, Esc cancels"))
         }
         PageEdit::Pick { action, .. } => Some(format!(
             "Left/Right choose a key of {}, Enter or d deletes it, Esc cancels",

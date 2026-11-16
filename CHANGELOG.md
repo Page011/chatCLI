@@ -77,7 +77,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Cached downloads carry the Windows Mark of the Web (Office opens them in Protected View). Linux and macOS: the data folder is mode 0700.
 - `chatcli doctor` and `chatcli search` never upgrade the store. A pasted network path is text and is never probed.
 - Teams: an edit keeps the @mentions of the message, and `@Al` no longer matches inside `@Alex Example`.
-- Footer: a y/n question is bold, the footer keeps whole items (never `P...`), the newline hint is `Ctrl+J`, and the chat list and message box show `?` help and `Ctrl+Up` select.
+- Footer: a y/n question is bold, the footer keeps whole items (never `P...`), the newline hint is `Shift+Enter` where the terminal reports it (else `Ctrl+J`), and the chat list and message box show the help key and the message box `Shift+Up` select.
 - A skipped WhatsApp contact sync is logged as an error instead of "nothing failed".
 
 ## [0.1.0] - 2026-11-16

@@ -333,8 +333,8 @@ If your terminal uses `Shift+Up` for its own scrollback, rebind it (see [Key bin
 
 - **Paste** inserts at the cursor and never sends. Line breaks stay, control characters are dropped, tabs become four spaces. Enter sends the whole multi-line message. Windows Terminal and the classic console have no bracketed paste, so Windows delivers a paste as key presses: chatcli treats several key presses that arrive together as a paste (line breaks stay in the message box, nothing is sent), and ignores such a burst when no text box is open. A terminal that does neither would still send each pasted line: test with a three-line paste before trusting it.
 - **Too long:** over the limit (Teams 80 KB of escaped HTML, WhatsApp 60000 characters) the message is not sent and the text stays.
-- **Emoji:** type `:thu` and `Enter` or `Tab` inserts one (`Up` / `Down` choose, `Esc` closes). It does not open inside `10:30` or `https://x`. `Ctrl+E` opens a picker with categories, search (type) and your last 30 emoji. Click or the wheel work in it.
-- **Mentions:** in a group chat type `@` and a letter or two, then `Up` / `Down` and `Enter` or `Tab`. `Backspace` right after a name removes it whole. Chats where you were mentioned show `@` after the unread count, and those messages are bold. Not offered in one-to-one chats.
+- **Emoji:** type `:thu` and `Enter` inserts one (`Up` / `Down` choose, `Esc` closes). It does not open inside `10:30` or `https://x`. `Ctrl+E` opens a picker with categories, search (type) and your last 30 emoji. Click or the wheel work in it.
+- **Mentions:** in a group chat type `@` and a letter or two, then `Up` / `Down` and `Enter`. `Backspace` right after a name removes it whole. Chats where you were mentioned show `@` after the unread count, and those messages are bold. Not offered in one-to-one chats.
 - **Replies** show the quoted message dimmed above the reply. An edited message shows `(edited)`, a deleted one `[message deleted]`. Reactions show as counts under a message, yours in bold.
 - **Links** are underlined. `u` asks `Open <host>? y/n` (the real host, whatever the link text says); several links get a `1`-`9` choice first. Only `http` and `https` open.
 
@@ -472,7 +472,7 @@ Roles: `text` (messages, chat titles, your draft), `dim` (times, previews, separ
 
 ### Media
 
-Nothing downloads until you press `o` or `v` on a message. `o` fetches the attachment into the media cache and opens it in the default app. `v` shows a thumbnail under the message.
+Nothing downloads until you press `o` on a message, or the key you bound to `view_image`. `o` fetches the attachment into the media cache and opens it in the default app. `view_image` (no default key) shows a thumbnail under the message.
 
 - The cache is `media\<network>\` in the data folder, files named by a hash, never by the sender's file name. It is capped by `cache_max_mb` and `retention_days` (oldest files go first, checked at start and after each download). A file over `max_file_mb` is not downloaded: you get a notice that names the setting. `chatcli media clear` empties it.
 - **Cached files are not encrypted on disk.** Use full-disk encryption.
@@ -551,7 +551,7 @@ On macOS they are in the Keychain (Keychain Access, search for `chatcli`). On Li
 
 **`chatcli is already running`.** Only one chatcli can run at a time, because two would fight over the Teams subscription and the relay connection. Close the other window. If you have none open, check Task Manager for `chatcli.exe` (on Linux or macOS: `pgrep -a chatcli`).
 
-**`chatcli is running: quit it ...`.** `teams login`, `teams logout`, `relay setup`, `relay url` and `media clear` change what the running client uses, so they refuse to run beside it. Quit chatcli (`q` or `Ctrl+C`), run the command, start chatcli again.
+**`chatcli is running: quit it ...`.** `teams login`, `teams logout`, `relay setup`, `relay url` and `media clear` change what the running client uses, so they refuse to run beside it. Quit chatcli (`Ctrl+C` or `:quit`), run the command, start chatcli again.
 
 **`Stored relay secrets exist. Use --rotate ...`.** `chatcli relay setup` was run a second time. Nothing was changed, and your relay still works. Use `--rotate` only when you want new secrets, then redo both `wrangler secret put` steps. To change only the URL, use `chatcli relay url <url>`.
 

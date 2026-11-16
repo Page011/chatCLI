@@ -170,7 +170,7 @@ impl App {
             .find(|m| &m.id == id)
     }
 
-    /// Ctrl+Up (vim `v`): select the newest message of the open chat. From the chat list this
+    /// `select_messages` (Shift+Up from the message box): select the newest message of the open chat. From the chat list this
     /// also opens the chat, like Enter. An empty chat stays as it was, with a notice.
     pub(super) fn enter_select(&mut self, n: Network) -> Out {
         let ids = self.selectable_ids(n);
@@ -325,9 +325,15 @@ impl App {
     /// selected. Places in other chats and messages that went away are dropped on the way.
     pub(super) fn jump_back(&mut self, n: Network) {
         let ids = self.selectable_ids(n);
-        let open = self.ns(n).open.clone();
-        while let Some((chat, id)) = self.ns_mut(n).jumps.pop() {
-            if open.as_ref() == Some(&chat) && ids.contains(&id) {
+        let Some(open) = self.ns(n).open.clone() else {
+            return;
+        };
+        // This chat's places, newest first; a message that went away is dropped, other chats'
+        // places stay for when that chat is open again.
+        let jumps = &mut self.ns_mut(n).jumps;
+        while let Some(i) = jumps.iter().rposition(|(chat, _)| *chat == open) {
+            let (_, id) = jumps.remove(i);
+            if ids.contains(&id) {
                 self.ns_mut(n).sel_msg = Some(id);
                 self.ensure_sel_visible(n);
                 return;
@@ -1109,6 +1115,24 @@ mod tests {
                 "{text}"
             );
         }
+    }
+
+    #[test]
+    fn ctrl_o_in_one_chat_keeps_the_places_of_another() {
+        let mut app = app_with(ChatKind::Direct, three());
+        ctrl_up(&mut app);
+        // A place in some other chat, then one in this chat.
+        app.ns_mut(Network::Teams)
+            .jumps
+            .extend([("other".into(), "x1".into()), ("a".into(), "m1".into())]);
+        app.handle_key(key_with(KeyCode::Char('o'), KeyModifiers::CONTROL));
+        assert_eq!(sel(&app), Some("m1"));
+        app.handle_key(key_with(KeyCode::Char('o'), KeyModifiers::CONTROL));
+        assert_eq!(
+            app.ns(Network::Teams).jumps,
+            [("other".to_string(), "x1".to_string())],
+            "the other chat's place is still there"
+        );
     }
 
     #[test]

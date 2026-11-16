@@ -271,7 +271,7 @@ fn history(net: Network, chat: &ChatSummary) -> Vec<ChatMessage> {
                 id: format!("{}-lab0", chat.id),
                 sender: "Alex Example".to_string(),
                 sender_id: String::new(),
-                preview: "Try it: Ctrl+Up selects a message".to_string(),
+                preview: "Try it: Enter selects a message".to_string(),
             }),
             ..ChatMessage::blank(net)
         });

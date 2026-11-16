@@ -1674,15 +1674,18 @@ impl App {
         let n = self.active;
         let ns = self.ns(n);
         let eligible = ns.focus == Focus::Composer && !ns.panel() && !self.overlay_open();
-        let before = ns
-            .composer()
-            .filter(|_| eligible)
-            .map(|c| c.before_cursor().to_string());
-        let Some(before) = before else {
+        let texts = ns.composer().filter(|_| eligible).map(|c| {
+            let before = c.before_cursor().to_string();
+            let rest = c.text()[before.len()..].trim().is_empty();
+            (before, rest)
+        });
+        let Some((before, nothing_after)) = texts else {
             self.popup = None;
             return Vec::new();
         };
-        if let Some(query) = colon_query(&before) {
+        // Commands only when `:word` is the whole draft: choosing one drops the draft, so text
+        // after the cursor (a message being edited at its start) must never be at stake.
+        if let Some(query) = colon_query(&before).filter(|_| nothing_after) {
             return self.refresh_command_popup(query);
         }
         let Some(query) = emoji::shortcode_query(&before).map(str::to_string) else {
@@ -4899,6 +4902,29 @@ mod tests {
         assert!(app.settings_page().is_some());
         assert_eq!(app.active().draft(), "", "the command is not a draft");
         assert!(app.popup().is_none());
+    }
+
+    #[test]
+    fn no_commands_when_text_follows_the_cursor() {
+        // `:) see you`, the cursor just after the colon: choosing a command would drop the rest.
+        let mut app = typing_app();
+        type_text(&mut app, ":) see you");
+        app.handle_key(key(KeyCode::Home));
+        app.handle_key(key(KeyCode::Right));
+        assert!(app
+            .popup()
+            .is_none_or(|p| p.items.iter().all(|i| i.command.is_none())));
+        let out = app.handle_key(key(KeyCode::Enter));
+        assert_eq!(sent_text(&out).as_deref(), Some(":) see you"));
+        // `:he` typed in front of a message.
+        let mut app = typing_app();
+        type_text(&mut app, "hello");
+        app.handle_key(key(KeyCode::Home));
+        type_text(&mut app, ":he");
+        assert!(app
+            .popup()
+            .is_none_or(|p| p.items.iter().all(|i| i.command.is_none())));
+        assert!(app.help_open().is_none());
     }
 
     #[test]

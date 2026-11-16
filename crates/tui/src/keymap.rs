@@ -663,6 +663,16 @@ pub(crate) fn common_applies(action: Action, ctx: Context) -> bool {
     }
 }
 
+/// True when every context `action` works in is a box you type in (the cursor and delete keys):
+/// a `[keys.common]` key that types a character would then do nothing anywhere.
+pub(crate) fn only_where_you_type(action: Action) -> bool {
+    let mut places = Context::ALL
+        .into_iter()
+        .filter(|c| *c != Context::Common && common_applies(action, *c))
+        .peekable();
+    places.peek().is_some() && places.all(Context::types_text)
+}
+
 /// The keys chatcli itself gives `action` in `ctx` (no user bindings).
 pub(crate) fn default_keys(ctx: Context, action: Action) -> Vec<KeyChord> {
     rows()
@@ -784,9 +794,16 @@ impl Keymap {
             .collect()
     }
 
-    /// The two-key sequences in `ctx` that start with `first`, as display text. A single-key
-    /// binding on `first` replaces them.
+    /// The two-key sequences live in `ctx` that start with `first` (its own and the `common` ones
+    /// that work there), as display text. A single-key binding on `first` in `ctx` replaces them.
     pub(crate) fn sequences_from(&self, ctx: Context, first: KeyChord) -> Vec<String> {
+        self.seqs_from(ctx, first)
+            .map(|s| format!("{} {}", s.1.display(), s.2.display()))
+            .collect()
+    }
+
+    /// The two-key sequences `ctx`'s own table starts with `first` (not the `common` ones).
+    pub(crate) fn own_sequences_from(&self, ctx: Context, first: KeyChord) -> Vec<String> {
         self.seq
             .iter()
             .filter(|s| s.0 == ctx && s.1 == first)
@@ -1063,6 +1080,20 @@ impl Keymap {
                         "would stop typing in this box: bind a Ctrl or Alt key instead, or put it in [keys.common], which skips the boxes you type in. Skipping this binding.".to_string(),
                     ));
                     continue;
+                }
+                if ctx == Context::Common
+                    && action != Action::Unbound
+                    && chord.prints()
+                    && only_where_you_type(action)
+                {
+                    problems.push(problem(
+                        Severity::Warning,
+                        key,
+                        format!(
+                            "\"{}\" works only in the boxes you type in, where this key types text: it does nothing. Use a Ctrl or Alt key.",
+                            action.name()
+                        ),
+                    ));
                 }
                 if let Some(same) = ambiguous(&chord) {
                     problems.push(problem(
