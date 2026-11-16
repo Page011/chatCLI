@@ -22,7 +22,7 @@ cargo run -p chatcli -- --demo
 
 ## Build and check
 
-You need Rust stable (see `rust-toolchain.toml`) and, on Windows, the Visual Studio C++ Build Tools. chatcli targets Windows 10 and 11.
+You need Rust stable (see `rust-toolchain.toml`) and a C compiler: on Windows the Visual Studio C++ Build Tools, on macOS the Xcode command line tools, on Linux `gcc` or `clang`. chatcli targets Windows 10 and 11; Linux and macOS are experimental. With Nix, `nix develop` gives a shell with the toolchain, clippy, rustfmt and Bun.
 
 ```
 cargo build --workspace
@@ -57,7 +57,7 @@ Screens are checked against stored snapshots in `crates/tui`. If you change the 
 UPDATE_SNAPSHOTS=1 cargo test -p chatcli-tui
 ```
 
-On Windows `cmd`, run `set UPDATE_SNAPSHOTS=1`, then the test, then `set UPDATE_SNAPSHOTS=`.
+That line is for Linux and macOS shells. On Windows `cmd`, run `set UPDATE_SNAPSHOTS=1`, then the test, then `set UPDATE_SNAPSHOTS=`. In PowerShell, run `$env:UPDATE_SNAPSHOTS = '1'`, then the test, then `Remove-Item Env:UPDATE_SNAPSHOTS`.
 
 ## Pull requests
 
