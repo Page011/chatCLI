@@ -155,10 +155,8 @@ pub(crate) fn capture_line(edit: Option<&PageEdit>) -> Option<String> {
         PageEdit::CaptureOverlap { note, .. } => {
             Some(format!("{note}. Enter binds it anyway, Esc cancels"))
         }
-        PageEdit::Pick { action, .. } => Some(format!(
-            "Left/Right choose a key of {}, Enter or d deletes it, Esc cancels",
-            action.label()
-        )),
+        // Short enough for 40 columns: the row being edited already names the action.
+        PageEdit::Pick { .. } => Some("Left/Right pick, d delete, Esc cancel".to_string()),
     }
 }
 

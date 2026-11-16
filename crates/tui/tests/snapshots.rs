@@ -1674,10 +1674,14 @@ fn attachment_chips_and_their_states() {
         let jobs = app.take_open_files();
         assert_eq!(jobs.len(), 1);
         app.open_done(&jobs[0], Ok(()));
-        // m4: the link has expired.
-        press(&mut app, KeyCode::Esc);
+        // m4: the link has expired. i leaves selection for the message box (select_media starts there).
+        press(&mut app, KeyCode::Char('i'));
         select_media(&mut app, "m4");
-        press(&mut app, KeyCode::Char('o'));
+        let out = press_out(&mut app, KeyCode::Char('o'));
+        assert!(
+            matches!(&out[..], [(_, Command::FetchMedia { .. })]),
+            "o on m4 asks for it: {out:?}"
+        );
         app.handle_event(Event::MediaFailed {
             network: Network::Teams,
             chat_id: "alex".into(),
@@ -3001,6 +3005,19 @@ fn key_pick() {
         assert!(got.contains("F5, F6, r *"), "{got}");
         app
     });
+    // More keys than the 40-column value fits: the chosen last key is still on screen.
+    at_sizes("key_pick_far", &[(40, 12)], || {
+        let mut app = keys_app_three_keys();
+        for k in [KeyCode::F(7), KeyCode::F(8), KeyCode::F(9)] {
+            press(&mut app, KeyCode::Char('a'));
+            press(&mut app, k);
+        }
+        press(&mut app, KeyCode::Char('d'));
+        press(&mut app, KeyCode::Left);
+        let got = render(&mut app, 40, 12);
+        assert!(got.contains("…") && got.contains(", r"), "{got}");
+        app
+    });
 }
 
 fn no_colour(mut app: App) -> App {
@@ -3235,7 +3252,11 @@ fn commands_ui_survives_every_terminal_size() {
         ("popup", || {
             let mut app = online_in(new_app());
             press(&mut app, KeyCode::Char('i'));
-            type_str(&mut app, "/");
+            type_str(&mut app, ":");
+            assert!(
+                render(&mut app, 80, 24).contains("Commands"),
+                "the commands list"
+            );
             app
         }),
     ];

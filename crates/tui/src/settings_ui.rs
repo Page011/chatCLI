@@ -290,11 +290,15 @@ fn pick_spans(
     let keys = app.keys();
     let plain = if custom { bold() } else { Style::new() };
     let mut parts: Vec<(String, Style)> = Vec::new();
+    let mut chosen = None;
     for (i, k) in keys.keys_in(ctx, action).iter().enumerate() {
         if i > 0 {
             parts.push((", ".to_string(), plain));
         }
         let style = if i == index { t.selected } else { plain };
+        if i == index {
+            chosen = Some(parts.len());
+        }
         parts.push((k.display(), style));
     }
     for s in keys.sequences_in(ctx, action) {
@@ -303,6 +307,21 @@ fn pick_spans(
     }
     if custom {
         parts.push((" *".to_string(), plain));
+    }
+    // Keys before the chosen one give way (a leading `…`) so the chosen key is always on screen.
+    if let Some(c) = chosen {
+        let width = |ps: &[(String, Style)]| ps.iter().map(|p| sw(&p.0)).sum::<usize>();
+        let mut start = 0;
+        while start < c && width(&parts[start..=c]) + usize::from(start > 0) > w {
+            start += 1;
+        }
+        if start > 0 {
+            parts.drain(..start);
+            if parts.first().is_some_and(|p| p.0 == ", ") {
+                parts.remove(0);
+            }
+            parts.insert(0, ("…".to_string(), plain));
+        }
     }
     let mut out = Vec::new();
     let mut left = w;

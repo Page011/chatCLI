@@ -27,7 +27,7 @@
 │                │║Hide                z                                                           ║
 │                │║ask the network for a fresh chat list                                           ║
 └────────────────┘╚════════════════════════════════════════════════════════════════════════════════╝
-Left/Right choose a key of Refresh, Enter or d deletes it, Esc cancels
+Left/Right pick, d delete, Esc cancel
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -42,4 +42,4 @@ row 20 cols 39-42: fg=Reset bg=Reset BOLD
 row 20 cols 43-44: fg=Reset bg=Reset BOLD | REVERSED
 row 20 cols 45-49: fg=Reset bg=Reset BOLD
 row 27 cols 19-55: fg=Reset bg=Reset DIM
-row 29 cols 0-69: fg=Reset bg=Reset BOLD
+row 29 cols 0-36: fg=Reset bg=Reset BOLD

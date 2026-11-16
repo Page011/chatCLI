@@ -1715,6 +1715,24 @@ mod tests {
         assert!(app.popup().is_none());
     }
 
+    #[test]
+    fn members_arriving_do_not_reopen_a_list_closed_with_esc() {
+        let mut app = app_with(ChatKind::Group, three());
+        typed(&mut app, ":he");
+        assert!(app.popup().is_some());
+        press(&mut app, KeyCode::Esc);
+        assert!(app.popup().is_none());
+        app.handle_event(Event::Members {
+            network: Network::Teams,
+            chat_id: "a".into(),
+            members: Vec::new(),
+            error: None,
+        });
+        assert!(app.popup().is_none(), "closed until the draft is edited");
+        typed(&mut app, "l");
+        assert!(app.popup().is_some(), "an edit brings it back");
+    }
+
     /// The cached member list answers the first `@` at once, before the backend does.
     #[test]
     fn the_stored_member_list_fills_the_mention_list_at_once() {

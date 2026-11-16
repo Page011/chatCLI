@@ -947,22 +947,35 @@ impl Keymap {
     /// Ctrl+C quits and Esc backs out there whatever they were bound to, and the problem says so.
     pub fn build(user: &KeySettings) -> (Keymap, Vec<SettingsProblem>) {
         let (mut map, mut problems) = Keymap::layer(user);
-        let missing = map.missing_exits();
+        // Putting Ctrl+C back can take a context's only back key, and Esc its only quit key: repair
+        // until nothing is missing. Once a context has both, nothing takes them again, so this ends
+        // within a few rounds.
+        let mut repaired: Vec<(Action, Context)> = Vec::new();
+        for _ in 0..4 {
+            let missing = map.missing_exits();
+            if missing.is_empty() {
+                break;
+            }
+            for (action, ctx) in missing {
+                let key = if action == Action::Quit { CTRL_C } else { ESC };
+                map.single.retain(|(c, k, _)| !(*c == ctx && *k == key));
+                map.single.push((ctx, key, action));
+                if !repaired.contains(&(action, ctx)) {
+                    repaired.push((action, ctx));
+                }
+            }
+        }
         for (action, key, what) in [
             (Action::Quit, CTRL_C, "quits chatcli"),
             (Action::Back, ESC, "backs out"),
         ] {
-            let ctxs: Vec<Context> = missing
+            let ctxs: Vec<Context> = repaired
                 .iter()
                 .filter(|m| m.0 == action)
                 .map(|m| m.1)
                 .collect();
             if ctxs.is_empty() {
                 continue;
-            }
-            for ctx in &ctxs {
-                map.single.retain(|(c, k, _)| !(c == ctx && *k == key));
-                map.single.push((*ctx, key, action));
             }
             let names: Vec<String> = ctxs
                 .iter()
@@ -1909,6 +1922,30 @@ mod tests {
         // One that does not is enough on its own.
         let (_, problems) = build(&[("common", "ctrl+c", "unbound"), ("common", "f10", "quit")]);
         assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    #[test]
+    fn putting_one_way_out_back_never_takes_the_other() {
+        // The popup's only back key is Ctrl+C and nothing quits there: Ctrl+C goes back to
+        // quitting, so Esc must come back as back too.
+        let (map, problems) = build(&[
+            ("common", "ctrl+c", "unbound"),
+            ("common", "esc", "unbound"),
+            ("popup", "ctrl+c", "back"),
+        ]);
+        assert!(map.missing_exits().is_empty(), "{problems:?}");
+        assert_eq!(map.lookup(Context::Popup, k("ctrl+c")), Some(Action::Quit));
+        assert_eq!(map.lookup(Context::Popup, k("esc")), Some(Action::Back));
+        // The other way round: Esc is the help's only quit key.
+        let (map, problems) = build(&[
+            ("common", "ctrl+c", "unbound"),
+            ("common", "esc", "unbound"),
+            ("help", "esc", "quit"),
+        ]);
+        assert!(map.missing_exits().is_empty(), "{problems:?}");
+        assert_eq!(map.lookup(Context::Help, k("esc")), Some(Action::Back));
+        assert_eq!(map.lookup(Context::Help, k("ctrl+c")), Some(Action::Quit));
+        assert!(problems.iter().any(|p| p.message.contains("[keys.help]")));
     }
 
     #[test]

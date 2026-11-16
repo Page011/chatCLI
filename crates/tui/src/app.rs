@@ -298,6 +298,9 @@ pub struct App {
     /// Set by anything that edits or moves in the message box during one key press: the popup
     /// is then recomputed from the text before the cursor. A key that did neither closes it.
     popup_alive: bool,
+    /// The last key closed the suggestion list (Esc, or any key that is not an edit): an event
+    /// (members arriving) must not open it again until the draft is edited.
+    popup_closed: bool,
     /// The emoji picker, modal while open.
     picker: Option<Picker>,
     /// Recent emoji, newest first (at most `emoji::RECENT_MAX`).
@@ -502,6 +505,7 @@ impl App {
             help: None,
             popup: None,
             popup_alive: false,
+            popup_closed: false,
             picker: None,
             recents: Vec::new(),
             store: None,
@@ -1186,7 +1190,11 @@ impl App {
                 error,
             } => {
                 self.members_arrived(network, chat_id, members, error);
-                out.extend(self.refresh_popup());
+                // The `@name` list fills in as members arrive, but a list the user closed stays
+                // closed until they edit the draft again.
+                if !self.popup_closed {
+                    out.extend(self.refresh_popup());
+                }
             }
             Event::MediaReady {
                 network,
@@ -1279,6 +1287,7 @@ impl App {
         let was_empty = self.active().draft().is_empty();
         let mut out = self.dispatch_key(key);
         out.extend(self.composing_after(net, chat, was_empty));
+        self.popup_closed = !self.popup_alive;
         if self.popup_alive {
             out.extend(self.refresh_popup());
         } else {

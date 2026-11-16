@@ -87,12 +87,23 @@ fn default_binds(ctx: Context, k: KeyChord) -> bool {
     Keymap::default().find(ctx, k).is_some()
 }
 
-/// `old` stops doing anything in this table: a user entry for it goes, and a key chatcli
-/// binds here, in this table or through `[keys.common]`, is written as unbound, so dropping the
-/// entry never brings an older binding back (`r` resets to the defaults).
-fn unbind(t: &mut BTreeMap<String, String>, ctx: Context, old: KeyChord) -> Result<(), String> {
+/// `old` stops doing anything in this table: a user entry for it goes, and a key that something
+/// else would run here once the entry is gone (chatcli's own key for this table, or a
+/// `[keys.common]` key, built in or the user's) is written as unbound, so dropping the entry never
+/// brings an older binding back (`r` resets to the defaults).
+fn unbind(
+    t: &mut BTreeMap<String, String>,
+    user: &KeySettings,
+    ctx: Context,
+    old: KeyChord,
+) -> Result<(), String> {
     t.retain(|key, _| parse_key(key).ok() != Some(old));
-    if default_binds(ctx, old) || Keymap::default().common_for(ctx, old).is_some() {
+    let common = || {
+        let mut without = user.clone();
+        without.bindings.insert(ctx.name().to_string(), t.clone());
+        Keymap::layer(&without).0.common_for(ctx, old).is_some()
+    };
+    if default_binds(ctx, old) || common() {
         t.insert(spelled(old)?, Action::Unbound.name().to_string());
     }
     Ok(())
@@ -188,7 +199,7 @@ fn rebind(
     let mut t = table_of(user, ctx);
     let old = keys.keys_in(ctx, action).first().copied();
     if let Some(old) = old {
-        unbind(&mut t, ctx, old)?;
+        unbind(&mut t, user, ctx, old)?;
     }
     assign(&mut t, k, action)?;
     if let (Some(other), Some(old)) = (give, old) {
@@ -224,7 +235,7 @@ pub(crate) fn swap(
 /// (`exit_lost`).
 pub(crate) fn remove_key(user: &KeySettings, ctx: Context, k: KeyChord) -> Done {
     let mut t = table_of(user, ctx);
-    unbind(&mut t, ctx, k)?;
+    unbind(&mut t, user, ctx, k)?;
     finish(user, ctx, t)
 }
 
@@ -528,6 +539,18 @@ mod tests {
         assert_eq!(
             keymap(&new).lookup(Context::Select, k("esc")),
             Some(Action::Back)
+        );
+    }
+
+    #[test]
+    fn deleting_a_key_that_took_over_the_users_common_one_leaves_it_doing_nothing() {
+        let u = user(&[("common", "f9", "search"), ("list", "f9", "refresh")]);
+        let (new, edits) = remove_key(&u, Context::List, k("f9")).unwrap();
+        assert_eq!(edits, vec![set("keys.list", "f9", "unbound")]);
+        assert_eq!(keymap(&new).lookup(Context::List, k("f9")), None);
+        assert_eq!(
+            keymap(&new).lookup(Context::Select, k("f9")),
+            Some(Action::Search)
         );
     }
 
