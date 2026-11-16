@@ -55,10 +55,12 @@ use chatcli_core::{log, Result};
 use crossterm::cursor::Show;
 use crossterm::event::{
     DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
-    EnableFocusChange, EnableMouseCapture, Event as TermEvent,
+    EnableFocusChange, EnableMouseCapture, Event as TermEvent, KeyboardEnhancementFlags,
+    PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
 use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+    disable_raw_mode, enable_raw_mode, supports_keyboard_enhancement, EnterAlternateScreen,
+    LeaveAlternateScreen,
 };
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::Rect;
@@ -111,8 +113,32 @@ pub fn decode_now(app: &mut App) {
     }
 }
 
+/// True while chatcli has the kitty keyboard protocol turned on, so it is turned off once.
+static KEYBOARD_PUSHED: AtomicBool = AtomicBool::new(false);
+
+/// Asks a Unix terminal to report modifiers on every key (the kitty keyboard protocol), so
+/// Shift+Enter and the like arrive as themselves. Only where the terminal says it can: others
+/// keep the plain keys. The Windows console reports them anyway. True when Shift+Enter works.
+fn enable_modified_keys() -> bool {
+    if cfg!(windows) {
+        return true;
+    }
+    let pushed = matches!(supports_keyboard_enhancement(), Ok(true))
+        && crossterm::execute!(
+            io::stdout(),
+            PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+        )
+        .is_ok();
+    KEYBOARD_PUSHED.store(pushed, Ordering::Relaxed);
+    pushed
+}
+
 /// Puts the terminal back as the shell expects it. Safe to call twice.
 fn restore_terminal() {
+    // Before leaving the alternate screen: the terminal keeps the flags per screen.
+    if KEYBOARD_PUSHED.swap(false, Ordering::Relaxed) {
+        let _ = crossterm::execute!(io::stdout(), PopKeyboardEnhancementFlags);
+    }
     let _ = disable_raw_mode();
     let _ = crossterm::execute!(
         io::stdout(),
@@ -143,6 +169,7 @@ impl TerminalGuard {
         let guard = TerminalGuard;
         crossterm::execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture, EnableBracketedPaste, EnableFocusChange)
             .map_err(|e| format!("Could not start the full-screen view ({e}): run chatcli in a normal terminal window."))?;
+        keymap::set_modified_enter(enable_modified_keys());
         // Restore before the panic message prints, or it lands in the alternate screen and is lost.
         // The hook stays installed after run() returns: the process is about to exit.
         // The UI future runs on the thread that called run(), so that thread's id marks it.

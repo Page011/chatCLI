@@ -1215,7 +1215,7 @@ fn help_lists_the_editing_popup_and_link_keys() {
     ] {
         assert!(got.contains(name), "{name} missing:\n{got}");
     }
-    assert!(got.contains("Ctrl+J, Alt+Enter, Shift+Enter"), "{got}");
+    assert!(got.contains("Shift+Enter, Ctrl+J, Alt+Enter"), "{got}");
     check("help_default_tall", 100, 140, &got);
 }
 

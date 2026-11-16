@@ -75,7 +75,7 @@
 ║Delete                         Delete forward    delete the character under the cursor            ║
 ║Ctrl+W, Ctrl+Backspace         Delete word back  delete the word before the cursor                ║
 ║Ctrl+U                         Clear line        clear the line the cursor is on                  ║
-║Ctrl+J, Alt+Enter, Shift+Enter Insert newline    add a line break instead of sending              ║
+║Shift+Enter, Ctrl+J, Alt+Enter Insert newline    add a line break instead of sending              ║
 ║Ctrl+E                         Emoji picker      open the emoji picker                            ║
 ║Ctrl+O                         Attach            choose a file to send: type or complete its path ║
 ║Ctrl+Shift+V, Alt+v            Paste image       attach the image on the clipboard                ║

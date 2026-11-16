@@ -483,6 +483,15 @@ impl KeyChord {
         (parse_key(&out).ok() == Some(self)).then_some(out)
     }
 
+    /// Shift+Enter or Ctrl+Enter: a Unix terminal without the kitty keyboard protocol sends
+    /// these as a plain Enter.
+    fn is_modified_enter(&self) -> bool {
+        self.code == KeyCode::Enter
+            && self
+                .mods
+                .intersects(KeyModifiers::SHIFT | KeyModifiers::CONTROL)
+    }
+
     /// A plain printable key or Backspace: what text boxes need for typing.
     pub(crate) fn types_text(&self) -> bool {
         let no_mods = !self
@@ -490,6 +499,24 @@ impl KeyChord {
             .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
         no_mods && matches!(self.code, KeyCode::Char(_) | KeyCode::Backspace)
     }
+}
+
+/// True once the terminal reports Shift and Ctrl on Enter: the Windows console always does, a
+/// Unix terminal only after chatcli turns on the kitty keyboard protocol. Off in tests.
+static MODIFIED_ENTER: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Called once the terminal is set up: whether Shift+Enter reaches chatcli.
+pub fn set_modified_enter(on: bool) {
+    MODIFIED_ENTER.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The key a footer hint shows: the first one the terminal can send, else the first.
+fn hint_key(chords: &[KeyChord], modified_enter: bool) -> Option<KeyChord> {
+    chords
+        .iter()
+        .find(|k| modified_enter || !k.is_modified_enter())
+        .or(chords.first())
+        .copied()
 }
 
 /// Reads a key string from `settings.toml`: `a`, `G`, `enter`, `esc`, `tab`, `up`, `pgup`,
@@ -651,12 +678,12 @@ const EDIT_KEYS: &[(&str, Action)] = &[
     ("ctrl+w", Action::DeleteWordBack),
     ("ctrl+backspace", Action::DeleteWordBack),
     ("ctrl+u", Action::ClearLine),
-    // Ctrl+J first: the footer shows the first key, and Ctrl+J reaches chatcli in every terminal.
-    // Windows Terminal keeps Alt+Enter for fullscreen; Shift+Enter needs a terminal that
-    // reports the Shift.
+    // Shift+Enter first: the footer shows it where the terminal reports the Shift (the Windows
+    // console, or a terminal with the kitty keyboard protocol), else Ctrl+J, which reaches
+    // chatcli in every terminal. Windows Terminal keeps Alt+Enter for fullscreen.
+    ("shift+enter", Action::InsertNewline),
     ("ctrl+j", Action::InsertNewline),
     ("alt+enter", Action::InsertNewline),
-    ("shift+enter", Action::InsertNewline),
     ("ctrl+e", Action::EmojiPicker),
     ("ctrl+o", Action::Attach),
     // Windows Terminal keeps Ctrl+Shift+V for its own paste (which cannot paste a picture), so
@@ -934,6 +961,13 @@ impl Keymap {
 
     /// Keys of `action` in `ctx` (then `Global`), as display text, in priority order.
     pub fn keys_for(&self, ctx: Context, action: Action) -> Vec<String> {
+        self.chords_for(ctx, action)
+            .iter()
+            .map(KeyChord::display)
+            .collect()
+    }
+
+    fn chords_for(&self, ctx: Context, action: Action) -> Vec<KeyChord> {
         let own = self
             .single
             .iter()
@@ -941,15 +975,21 @@ impl Keymap {
         let global = self.single.iter().filter(|(c, _, a)| {
             !ctx.modal() && ctx != Context::Global && *c == Context::Global && *a == action
         });
-        own.chain(global).map(|(_, k, _)| k.display()).collect()
+        own.chain(global).map(|(_, k, _)| *k).collect()
     }
 
-    /// Footer text for a group of actions: the first key of each, joined with `/`
-    /// (`Up/Down`). Unbound actions are left out; `None` when none is bound.
+    /// Footer text for a group of actions: the first key of each that this terminal can send,
+    /// joined with `/` (`Up/Down`). Unbound actions are left out; `None` when none is bound.
     pub fn hint(&self, ctx: Context, actions: &[Action]) -> Option<String> {
         let keys: Vec<String> = actions
             .iter()
-            .filter_map(|&a| self.keys_for(ctx, a).into_iter().next())
+            .filter_map(|&a| {
+                hint_key(
+                    &self.chords_for(ctx, a),
+                    MODIFIED_ENTER.load(std::sync::atomic::Ordering::Relaxed),
+                )
+                .map(|k| k.display())
+            })
             .collect();
         (!keys.is_empty()).then(|| keys.join("/"))
     }
@@ -1225,6 +1265,28 @@ mod tests {
 
     fn ev(code: KeyCode, mods: KeyModifiers) -> KeyChord {
         KeyChord::new(code, mods)
+    }
+
+    #[test]
+    fn the_newline_hint_is_shift_enter_only_where_the_terminal_sends_it() {
+        let map = Keymap::build(Preset::Default, &KeySettings::default()).0;
+        let chords = map.chords_for(Context::Composer, Action::InsertNewline);
+        assert_eq!(chords, vec![k("shift+enter"), k("ctrl+j"), k("alt+enter")]);
+        assert_eq!(hint_key(&chords, true), Some(k("shift+enter")));
+        assert_eq!(
+            hint_key(&chords, false),
+            Some(k("ctrl+j")),
+            "a terminal without the protocol sends Shift+Enter as Enter"
+        );
+        assert_eq!(hint_key(&[k("ctrl+enter")], false), Some(k("ctrl+enter")));
+        assert_eq!(hint_key(&[k("alt+enter")], false), Some(k("alt+enter")));
+        assert_eq!(hint_key(&[], true), None);
+        // Tests never turn the protocol on, so the footer reads as in a plain terminal.
+        assert_eq!(
+            map.hint(Context::Composer, &[Action::InsertNewline])
+                .as_deref(),
+            Some("Ctrl+J")
+        );
     }
 
     /// `[keys]` as the settings loader would hand it over: (context, key, action) and a line
@@ -1547,7 +1609,8 @@ mod tests {
             (Preset::Vim, Context::Insert),
         ] {
             let map = Keymap::build(preset, &KeySettings::default()).0;
-            assert_eq!(map.keys_for(ctx, Action::InsertNewline)[0], "Ctrl+J");
+            let chords = map.chords_for(ctx, Action::InsertNewline);
+            assert_eq!(hint_key(&chords, false), Some(k("ctrl+j")));
         }
     }
 

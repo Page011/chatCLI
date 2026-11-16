@@ -291,7 +291,7 @@ Message box:
 | `Backspace` / `Delete` | Delete a character (an emoji goes whole) |
 | `Ctrl+W` or `Ctrl+Backspace` | Delete the word before the cursor |
 | `Ctrl+U` | Clear the line the cursor is on |
-| `Ctrl+J`, `Alt+Enter` or `Shift+Enter` | Add a line break. `Ctrl+J` works in every terminal (the footer shows it). Alt+Enter is Windows Terminal's fullscreen key and never reaches chatcli there; Shift+Enter needs a terminal that reports Shift |
+| `Shift+Enter`, `Ctrl+J` or `Alt+Enter` | Add a line break. Shift+Enter works on Windows and in terminals with the kitty keyboard protocol (kitty, foot, Ghostty, Alacritty and others), which chatcli turns on when the terminal offers it; elsewhere the terminal sends it as Enter. `Ctrl+J` works in every terminal. The footer shows Shift+Enter where it works, else Ctrl+J. Alt+Enter is Windows Terminal's fullscreen key and never reaches chatcli there |
 | `PgUp` / `PgDn` | Scroll messages. At the top, `PgUp` loads older ones |
 | `Ctrl+E` | Emoji picker |
 | `Ctrl+O` | Attach a file |
