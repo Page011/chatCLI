@@ -49,18 +49,12 @@ impl Popup {
 
     /// Up one item, wrapping from the first to the last.
     pub fn up(&mut self) {
-        let n = self.items.len();
-        if n > 0 {
-            self.selected = (self.selected + n - 1) % n;
-        }
+        self.selected = crate::list::step(self.selected, self.items.len(), -1);
     }
 
     /// Down one item, wrapping from the last to the first.
     pub fn down(&mut self) {
-        let n = self.items.len();
-        if n > 0 {
-            self.selected = (self.selected + 1) % n;
-        }
+        self.selected = crate::list::step(self.selected, self.items.len(), 1);
     }
 
     pub fn chosen(&self) -> Option<&PopupItem> {

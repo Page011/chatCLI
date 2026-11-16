@@ -5,6 +5,7 @@
 //! is one indexed read of at most `LIMIT` rows.
 
 use crate::input::TextInput;
+use crate::list;
 use chatcli_core::store::{SearchHit, Store};
 
 /// Hits shown at most. The store clamps to 200; a screen shows far fewer.
@@ -40,22 +41,12 @@ impl Search {
 
     /// Moves the selection by `delta` rows, kept inside the hits.
     pub fn step(&mut self, delta: isize) {
-        if self.hits.is_empty() {
-            return;
-        }
-        self.sel = (self.sel as isize)
-            .saturating_add(delta)
-            .clamp(0, self.hits.len() as isize - 1) as usize;
+        self.sel = list::page(self.sel, self.hits.len(), delta);
     }
 
     /// Scrolls so the selected row is inside a window of `rows` rows.
     pub fn keep_visible(&mut self, rows: usize) {
-        let rows = rows.max(1);
-        if self.sel < self.top {
-            self.top = self.sel;
-        } else if self.sel >= self.top + rows {
-            self.top = self.sel + 1 - rows;
-        }
+        self.top = list::keep_visible(self.top, self.sel, rows, self.hits.len());
     }
 
     pub fn chosen(&self) -> Option<&SearchHit> {

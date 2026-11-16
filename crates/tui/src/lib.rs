@@ -28,6 +28,7 @@ mod input;
 mod keymap;
 mod keys_edit;
 mod links;
+mod list;
 mod media_view;
 mod notify;
 mod older;

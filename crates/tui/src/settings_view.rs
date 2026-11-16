@@ -268,19 +268,6 @@ pub(crate) const MSG_DAYS: &str = "NOT A VALID NUMBER OF DAYS - use a whole numb
 pub(crate) const MSG_FILE: &str = "NOT A VALID SIZE - use a whole number from 1 to 2048";
 pub(crate) const MSG_WIDTH: &str = "NOT A VALID WIDTH - use auto, 16 to 120 columns, or 10% to 70%";
 
-/// First row to draw so that `row` is on screen: the old top when it already is.
-pub(crate) fn fit_top(top: usize, row: usize, shown: usize, total: usize) -> usize {
-    let shown = shown.max(1);
-    let top = top.min(total.saturating_sub(shown));
-    if row < top {
-        row
-    } else if row >= top + shown {
-        row + 1 - shown
-    } else {
-        top
-    }
-}
-
 /// Plain words for a theme role (the file's word is the role name itself).
 pub(crate) fn role_label(role: &str) -> &'static str {
     match role {
@@ -1285,15 +1272,6 @@ mod tests {
         assert_eq!(edit_start(&s, RowId::Role("dim")), "");
         s.theme.overrides.insert("dim".into(), "#aabbcc".into());
         assert_eq!(edit_start(&s, RowId::Role("dim")), "#aabbcc");
-    }
-
-    #[test]
-    fn fit_top_keeps_the_row_in_view() {
-        assert_eq!(fit_top(0, 3, 5, 20), 0);
-        assert_eq!(fit_top(0, 7, 5, 20), 3);
-        assert_eq!(fit_top(6, 2, 5, 20), 2);
-        assert_eq!(fit_top(18, 19, 5, 20), 15);
-        assert_eq!(fit_top(0, 0, 0, 0), 0);
     }
 
     #[test]

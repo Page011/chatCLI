@@ -166,7 +166,7 @@ impl App {
         let shown = crate::settings_ui::rows_shown(self.layout_in(self.size).body);
         if let Some(p) = self.settings_page.as_mut() {
             p.row = p.row.min(rows.saturating_sub(1));
-            p.top = settings_view::fit_top(p.top, p.row, shown, rows);
+            p.top = crate::list::keep_visible(p.top, p.row, shown, rows);
         }
     }
 

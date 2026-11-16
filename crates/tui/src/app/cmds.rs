@@ -117,12 +117,11 @@ impl App {
             .collect();
         let ns = self.active();
         if !query.is_empty() && !ns.panel() {
-            let needle = query.to_lowercase();
             items.extend(
                 ns.chats
                     .iter()
                     .filter(|c| ns.show_hidden || !c.flags.hidden)
-                    .filter(|c| c.title.to_lowercase().contains(&needle))
+                    .filter(|c| crate::list::matches(&c.title, query))
                     .map(|c| PalItem::Chat(c.id.clone())),
             );
         }

@@ -8,7 +8,8 @@ use ratatui::Frame;
 
 use crate::app::{App, NARROW};
 use crate::keymap::{Action, Context};
-use crate::settings_view::{fit_top, Kind, PageEdit, Row, RowId, Section, SettingsPage};
+use crate::list::keep_visible;
+use crate::settings_view::{Kind, PageEdit, Row, RowId, Section, SettingsPage};
 use crate::text::{fit, sw, truncate, wrap};
 use crate::theme::Theme;
 use crate::ui::{bold, centered_note, pane};
@@ -103,7 +104,7 @@ fn pane_title(page: &SettingsPage, rows: &[Row], g: &Geom) -> String {
     if page.section != Section::Keys {
         return page.section.title().to_string();
     }
-    let top = fit_top(page.top, page.row, g.list.height as usize, rows.len());
+    let top = keep_visible(page.top, page.row, g.list.height as usize, rows.len());
     match rows[..(top + 1).min(rows.len())]
         .iter()
         .rev()
@@ -120,7 +121,7 @@ fn draw_sections(f: &mut Frame, page: &SettingsPage, area: Rect, t: &Theme, focu
         .iter()
         .position(|s| *s == page.section)
         .unwrap_or(0);
-    let top = fit_top(0, idx, h, Section::ALL.len());
+    let top = keep_visible(0, idx, h, Section::ALL.len());
     for (k, s) in Section::ALL.iter().enumerate().skip(top).take(h) {
         let style = match (*s == page.section, focused) {
             (true, true) => t.selected,
@@ -154,7 +155,7 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
         .unwrap_or(0);
     let show_hint = g.left.is_some() && after_label >= want_w + 1 + longest_hint;
     let value_w = if show_hint { want_w } else { after_label };
-    let top = fit_top(page.top, page.row, h, rows.len());
+    let top = keep_visible(page.top, page.row, h, rows.len());
     // A problem line wraps over several screen rows: `used` counts the rows drawn.
     let mut used = 0usize;
     for (k, row) in rows.iter().enumerate().skip(top) {

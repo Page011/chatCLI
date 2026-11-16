@@ -230,10 +230,10 @@ impl NetState {
 
     /// Indexes into `chats` that pass the filter. Hidden chats only with `show_hidden`.
     pub fn visible(&self) -> Vec<usize> {
-        let needle = self.filter.text().to_lowercase();
+        let query = self.filter.text();
         (0..self.chats.len())
             .filter(|&i| self.show_hidden || !self.chats[i].flags.hidden)
-            .filter(|&i| needle.is_empty() || self.chats[i].title.to_lowercase().contains(&needle))
+            .filter(|&i| crate::list::matches(&self.chats[i].title, query))
             .collect()
     }
 
