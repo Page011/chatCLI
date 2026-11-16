@@ -152,8 +152,8 @@ pub(crate) struct Graphics {
     ready: HashMap<GfxKey, Protocol>,
     pending: HashSet<GfxKey>,
     failed: HashSet<GfxKey>,
-    /// What the last frame overlaid. When it changes the screen is cleared first, so a Sixel
-    /// image that went away leaves no pixels behind.
+    /// What the last frame overlaid. Where an image was and is not drawn again, its cells are
+    /// rewritten, so a Sixel image that moved or went away leaves no pixels behind.
     last: Vec<(GfxKey, Rect)>,
 }
 
@@ -222,13 +222,19 @@ impl Graphics {
             .collect()
     }
 
-    /// True when the overlay differs from the last frame's: the caller clears the screen first.
-    pub fn changed(&mut self, vis: &[VisibleImage]) -> bool {
+    /// Boxes where the last frame drew an image that this frame does not draw again in the same
+    /// place: the caller rewrites those cells. Only a removed or moved image can leave a ghost;
+    /// a new one draws over text.
+    pub fn stale(&mut self, vis: &[VisibleImage]) -> Vec<Rect> {
         let now = self.overlay(vis);
-        // Only a removed or moved image can leave a ghost; a new one draws over text.
-        let changed = self.last.iter().any(|e| !now.contains(e));
+        let out = self
+            .last
+            .iter()
+            .filter(|e| !now.contains(e))
+            .map(|(_, r)| *r)
+            .collect();
         self.last = now;
-        changed
+        out
     }
 
     /// Draws each ready image over its half-block thumbnail.
@@ -342,7 +348,7 @@ mod tests {
     }
 
     #[test]
-    fn the_overlay_is_drawn_only_when_ready_and_changes_clear_the_screen() {
+    fn the_overlay_is_drawn_only_when_ready_and_a_moved_image_leaves_its_box_stale() {
         let dir = temp("overlay");
         let path = png(&dir, "p.png");
         let mut g = Graphics::new(Picker::halfblocks());
@@ -351,8 +357,8 @@ mod tests {
             rect: Rect::new(2, 1, 6, 3),
         };
         assert!(
-            !g.changed(std::slice::from_ref(&v)),
-            "nothing ready, nothing drawn: no change"
+            g.stale(std::slice::from_ref(&v)).is_empty(),
+            "nothing ready, nothing drawn: nothing stale"
         );
         let jobs = g.wanted(std::slice::from_ref(&v));
         let (key, picker) = jobs[0].clone();
@@ -360,16 +366,26 @@ mod tests {
         assert!(proto.size().width <= 6 && proto.size().height <= 3);
         g.store(key, Ok(proto));
         assert!(
-            !g.changed(std::slice::from_ref(&v)),
-            "an image appeared: it draws over text, no clear"
+            g.stale(std::slice::from_ref(&v)).is_empty(),
+            "an image appeared: it draws over text, nothing to rewrite"
         );
         assert!(
-            !g.changed(std::slice::from_ref(&v)),
-            "the same frame again: no clear"
+            g.stale(std::slice::from_ref(&v)).is_empty(),
+            "the same frame again: nothing to rewrite"
         );
-        assert!(
-            g.changed(&[]),
-            "it scrolled away: clear, or Sixel leaves ghosts"
+        let moved = VisibleImage {
+            path: path.clone(),
+            rect: Rect::new(2, 2, 6, 3),
+        };
+        assert_eq!(
+            g.stale(std::slice::from_ref(&moved)),
+            vec![v.rect],
+            "it scrolled one row: its old box is rewritten"
+        );
+        assert_eq!(
+            g.stale(&[]),
+            vec![moved.rect],
+            "it scrolled away: its box is rewritten, or Sixel leaves ghosts"
         );
 
         let mut term = Terminal::new(TestBackend::new(20, 8)).unwrap();

@@ -60,6 +60,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- No more screen flashes when switching tabs or chats or scrolling: a picture that moves or goes away now has only its own cells redrawn instead of the whole screen being cleared, and every frame is sent as one synchronized update (terminals without support ignore it).
 - Running `relay setup` twice no longer silently breaks live Teams with a 401.
 - A Teams subscription that needs reauthorization is renewed with one request, never reauthorize plus renew.
 - Teams catch-up sees messages that were edited or deleted while chatcli was off.
