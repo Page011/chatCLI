@@ -40,7 +40,7 @@ Last section, followed by link references.
 [1.0.0]: https://example.invalid/releases/tag/v1.0.0
 MD
 
-out=$(scripts/release-notes.sh v1.2.0 "$tmp/c.md")
+out=$(bash scripts/release-notes.sh v1.2.0 "$tmp/c.md")
 check "middle section, v prefix, stops at the next heading" "$out" "### Added
 
 - Thing one.
@@ -49,21 +49,21 @@ check "middle section, v prefix, stops at the next heading" "$out" "### Added
 
 - Thing two."
 
-out=$(scripts/release-notes.sh 1.0.0 "$tmp/c.md")
+out=$(bash scripts/release-notes.sh 1.0.0 "$tmp/c.md")
 check "last section loses the link references" "$out" "Last section, followed by link references."
 
-out=$(scripts/release-notes.sh 1.1.0 "$tmp/c.md")
+out=$(bash scripts/release-notes.sh 1.1.0 "$tmp/c.md")
 check "no-heading body" "$out" "- Older."
 
-scripts/release-notes.sh v9.9.9 "$tmp/c.md" >/dev/null 2>"$tmp/err"; code=$?
+bash scripts/release-notes.sh v9.9.9 "$tmp/c.md" >/dev/null 2>"$tmp/err"; code=$?
 check "missing version exits 1" "$code" "1"
 check "missing version says what to do" "$(grep -c "add '## \[9.9.9\]" "$tmp/err")" "1"
 
 printf '## [2.0.0] - 2030-02-01\n\n## [1.9.0] - 2030-01-01\n\n- x\n' > "$tmp/e.md"
-scripts/release-notes.sh 2.0.0 "$tmp/e.md" >/dev/null 2>&1; check "empty section exits 1" "$?" "1"
+bash scripts/release-notes.sh 2.0.0 "$tmp/e.md" >/dev/null 2>&1; check "empty section exits 1" "$?" "1"
 
 # The existing 0.1.0 section must extract whole (the issue's own test case).
-out=$(scripts/release-notes.sh v0.1.0 CHANGELOG.md)
+out=$(bash scripts/release-notes.sh v0.1.0 CHANGELOG.md)
 check "real 0.1.0 starts with its intro" "$(printf '%s' "$out" | head -n 1)" "First release. Early: it works day to day, with rough edges."
 check "real 0.1.0 has no link reference" "$(printf '%s' "$out" | grep -c '^\[.*\]: ')" "0"
 check "real 0.1.0 ends with its last bullet" "$(printf '%s' "$out" | tail -n 1)" "- The executable is not code-signed."
