@@ -18,7 +18,7 @@ Use obvious fake data (`Alex Example`, `Sam Sample`, `example.invalid`). Securit
 cargo run -p chatcli -- --demo
 ```
 
-`--demo` shows the full screen on fake data. No Teams or WhatsApp account and no network is needed. Press `Ctrl+C` to leave. Every feature you add must work in `--demo`: give the demo backend (`crates/tui/src/demo.rs`) a sample of it and a test in `crates/tui/tests/demo.rs`. `--demo --keys vim` shows the vim preset.
+`--demo` shows the full screen on fake data. No Teams or WhatsApp account and no network is needed. Press `Ctrl+C` to leave. Every feature you add must work in `--demo`: give the demo backend (`crates/tui/src/demo.rs`) a sample of it and a test in `crates/tui/tests/demo.rs`.
 
 ## Build and check
 

@@ -7,7 +7,7 @@ TOUR 1/26 PAUSED                                   Space resume  n next  Esc end
 ║     Sam Sample: thanks   ║│                                                  │
 ║  1  Sam Sample        Sun║│                                                  │
 ║     You: see you tomorrow║│     Select a chat and press Enter to open it.    │
-║     Release Planning… Fri║│    Type / for commands: /help /settings /keys    │
+║     Release Planning… Fri║│    Press : for commands: help, settings, keys    │
 ║     Jordan Placeholder: …║│                                                  │
 ║     田中太郎 (T… 05/11/26║│                                                  │
 ║     了解しました         ║│                                                  │

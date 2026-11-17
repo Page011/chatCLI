@@ -8,9 +8,8 @@ use chatcli_core::settings::{
     TIME_FORMATS,
 };
 
-use crate::keymap::{
-    actions_for, parse_key, preset_keys, Action, Context, KeyChord, Keymap, Preset,
-};
+use crate::input::TextInput;
+use crate::keymap::{actions_for, default_keys, parse_key, Action, Context, KeyChord, Keymap};
 use crate::theme::{parse_colour, ROLES, THEMES};
 
 /// A page of the settings screen, opened by `/settings`, `/theme`, `/keys`, `/layout`,
@@ -71,12 +70,16 @@ pub(crate) struct SettingsPage {
     pub edit: Option<PageEdit>,
     /// Red line for the selected row: a range error or a failed save.
     pub error: Option<String>,
+    /// The Keys page shows only the actions that match this (`filter_key_rows`).
+    pub filter: TextInput,
+    /// Keys go to `filter` (after `/`) until Enter or Esc.
+    pub filtering: bool,
 }
 
 /// A value being typed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PageEdit {
-    Text(String),
+    Text(TextInput),
     /// Waiting for the key that will run `action` in `ctx`. The key is read before the keymap.
     Capture {
         ctx: Context,
@@ -89,6 +92,40 @@ pub(crate) enum PageEdit {
         key: KeyChord,
         other: Action,
     },
+    /// Waiting for a key to add to `action` in `ctx`, keeping its other keys.
+    Add {
+        ctx: Context,
+        action: Action,
+    },
+    /// `key` is free in `ctx` but overlaps a binding live at the same time (`note` says which):
+    /// Enter adds it anyway, Esc cancels.
+    AddOverlap {
+        ctx: Context,
+        action: Action,
+        key: KeyChord,
+        note: String,
+    },
+    /// `key` is free for `action` in `ctx` but would stop something else (`note` says what): Enter
+    /// binds it anyway, Esc cancels.
+    CaptureOverlap {
+        ctx: Context,
+        action: Action,
+        key: KeyChord,
+        note: String,
+    },
+    /// Choosing which of the action's keys to delete: `index` into `Keymap::keys_in`.
+    Pick {
+        ctx: Context,
+        action: Action,
+        index: usize,
+    },
+}
+
+impl PageEdit {
+    /// True while the page reads raw key presses for a key binding (not typed text).
+    pub(crate) fn is_key_edit(&self) -> bool {
+        !matches!(self, PageEdit::Text(_))
+    }
 }
 
 /// The footer line while a key is being captured or a swap is asked, else None.
@@ -96,7 +133,7 @@ pub(crate) fn capture_line(edit: Option<&PageEdit>) -> Option<String> {
     match edit? {
         PageEdit::Text(_) => None,
         PageEdit::Capture { action, .. } => Some(format!(
-            "Press the new key for {} (Esc cancels, Backspace removes)",
+            "Press the new key for {} (any key is taken, Esc too)",
             action.label()
         )),
         PageEdit::Conflict {
@@ -108,6 +145,18 @@ pub(crate) fn capture_line(edit: Option<&PageEdit>) -> Option<String> {
             other.label(),
             action.label()
         )),
+        PageEdit::Add { action, .. } => Some(format!(
+            "Press a key to add to {} (any key is taken, Esc too)",
+            action.label()
+        )),
+        PageEdit::AddOverlap { note, .. } => {
+            Some(format!("{note}. Enter adds it anyway, Esc cancels"))
+        }
+        PageEdit::CaptureOverlap { note, .. } => {
+            Some(format!("{note}. Enter binds it anyway, Esc cancels"))
+        }
+        // Short enough for 40 columns: the row being edited already names the action.
+        PageEdit::Pick { .. } => Some("Left/Right pick, d delete, Esc cancel".to_string()),
     }
 }
 
@@ -120,6 +169,8 @@ impl SettingsPage {
             top: 0,
             edit: None,
             error: None,
+            filter: TextInput::default(),
+            filtering: false,
         }
     }
 }
@@ -150,8 +201,6 @@ pub(crate) enum RowId {
     Info(&'static str),
     /// A read-only settings.toml problem (About), by position.
     Problem(usize),
-    /// Keys page: the key preset (default or vim).
-    KeyPreset,
     /// Keys page: a context's name, not selectable.
     KeyHeading(Context),
     /// Keys page: one action in one context. Enter captures its key.
@@ -229,19 +278,6 @@ pub(crate) const MSG_CACHE: &str = "NOT A VALID SIZE - use a whole number from 1
 pub(crate) const MSG_DAYS: &str = "NOT A VALID NUMBER OF DAYS - use a whole number from 1 to 3650";
 pub(crate) const MSG_FILE: &str = "NOT A VALID SIZE - use a whole number from 1 to 2048";
 pub(crate) const MSG_WIDTH: &str = "NOT A VALID WIDTH - use auto, 16 to 120 columns, or 10% to 70%";
-
-/// First row to draw so that `row` is on screen: the old top when it already is.
-pub(crate) fn fit_top(top: usize, row: usize, shown: usize, total: usize) -> usize {
-    let shown = shown.max(1);
-    let top = top.min(total.saturating_sub(shown));
-    if row < top {
-        row
-    } else if row >= top + shown {
-        row + 1 - shown
-    } else {
-        top
-    }
-}
 
 /// Plain words for a theme role (the file's word is the role name itself).
 pub(crate) fn role_label(role: &str) -> &'static str {
@@ -327,12 +363,12 @@ pub(crate) fn edit_start(s: &Settings, id: RowId) -> String {
     }
 }
 
-/// The user's `[keys.<ctx>]` names `action`, or unbinds one of its preset keys.
-fn key_is_custom(s: &Settings, preset: Preset, ctx: Context, action: Action) -> bool {
+/// The user's `[keys.<ctx>]` names `action`, or unbinds one of its built-in keys.
+fn key_is_custom(s: &Settings, ctx: Context, action: Action) -> bool {
     let Some(table) = s.keys.bindings.get(ctx.name()) else {
         return false;
     };
-    let own = preset_keys(preset, ctx, action);
+    let own = default_keys(ctx, action);
     table.iter().any(|(k, v)| {
         v == action.name()
             || (v == Action::Unbound.name() && parse_key(k).is_ok_and(|c| own.contains(&c)))
@@ -358,17 +394,22 @@ fn key_value(keys: &Keymap, ctx: Context, action: Action, custom: bool) -> Strin
     value
 }
 
-/// The Keys page: the preset, then every context of that preset with its actions, then Reset all.
+/// The Keys page: a legend, then every context with its actions, then Reset all.
 fn key_rows(out: &mut Vec<Row>, s: &Settings, keys: &Keymap) {
-    let preset = keys.preset();
     out.push(row(
-        RowId::KeyPreset,
-        "Key preset",
-        preset.name().to_string(),
-        "default or vim; * = changed by you",
-        preset != Preset::Default,
+        RowId::Info("keys"),
+        "",
+        "* marks a key you changed".to_string(),
+        "",
+        false,
     ));
-    for ctx in preset.contexts() {
+    for ctx in Context::ALL {
+        // A context whose keys all come from `common` (the sign-in panel, the filter, the
+        // popups) has no rows of its own: no heading either.
+        let actions = actions_for(ctx, &s.keys);
+        if actions.is_empty() {
+            continue;
+        }
         out.push(row(
             RowId::KeyHeading(ctx),
             ctx.title(),
@@ -376,8 +417,8 @@ fn key_rows(out: &mut Vec<Row>, s: &Settings, keys: &Keymap) {
             "",
             false,
         ));
-        for a in actions_for(preset, ctx, &s.keys) {
-            let custom = key_is_custom(s, preset, ctx, a);
+        for a in actions {
+            let custom = key_is_custom(s, ctx, a);
             out.push(row(
                 RowId::KeyAction(ctx, a),
                 &a.label(),
@@ -394,6 +435,47 @@ fn key_rows(out: &mut Vec<Row>, s: &Settings, keys: &Keymap) {
         "Enter removes every key you set, after y/n",
         false,
     ));
+}
+
+/// The Keys page cut down to the actions that match `query` (ignoring case) in their label, their
+/// `settings.toml` name, their keys or the context's title. A heading stays only above a
+/// match; the legend becomes the filter line, and Reset all goes. An empty query changes nothing.
+pub(crate) fn filter_key_rows(rows: Vec<Row>, query: &str) -> Vec<Row> {
+    use crate::list::matches;
+    if query.is_empty() {
+        return rows;
+    }
+    let hit = |r: &Row| match r.id {
+        RowId::KeyAction(ctx, a) => [r.label.as_str(), a.name(), r.value.as_str(), ctx.title()]
+            .iter()
+            .any(|t| matches(t, query)),
+        _ => false,
+    };
+    let found = rows.iter().filter(|r| hit(r)).count();
+    let mut out = Vec::new();
+    let mut heading: Option<Row> = None;
+    for r in rows {
+        match r.id {
+            RowId::Info("keys") => out.push(row(
+                RowId::Info("filter"),
+                "",
+                match found {
+                    0 => format!("No keys match \"{query}\" - Esc clears"),
+                    _ => format!("Keys matching \"{query}\" - Esc clears"),
+                },
+                "",
+                false,
+            )),
+            RowId::KeyHeading(_) => heading = Some(r),
+            RowId::KeyAction(..) if hit(&r) => {
+                out.extend(heading.take());
+                out.push(r);
+            }
+            RowId::KeyAction(..) | RowId::ResetAllKeys => {}
+            _ => out.push(r),
+        }
+    }
+    out
 }
 
 /// The rows of `section`. `keys` is the live keymap (the Keys page). `about` and `problems` feed the About page and the header above every
@@ -688,21 +770,8 @@ pub(crate) fn change(s: &Settings, id: RowId, c: Change) -> Done {
         RowId::Info(_) | RowId::Problem(_) | RowId::KeyHeading(_) => {
             Err("this line is read-only".to_string())
         }
-        RowId::KeyAction(..) => Err("press Enter, then the new key".to_string()),
+        RowId::KeyAction(..) => Err("Enter replaces a key, a adds one, d deletes one".to_string()),
         RowId::ResetAllKeys => Err("press Enter to reset every key".to_string()),
-        RowId::KeyPreset => {
-            let cur = Preset::from_name(&s.keys.preset).unwrap_or(Preset::Default);
-            let name = match &c {
-                Change::Reset => Preset::Default,
-                Change::Text(t) => {
-                    Preset::from_name(t).ok_or_else(|| "use default or vim".to_string())?
-                }
-                _ => cur.other(),
-            }
-            .name();
-            n.keys.preset = name.to_string();
-            one(n, mk("keys", "preset", reset, SettingValue::str(name)))
-        }
         RowId::ThemeName => {
             let name = match &c {
                 Change::Reset => d.theme.name.clone(),
@@ -978,7 +1047,7 @@ mod tests {
     #[test]
     fn every_selectable_row_survives_every_change() {
         let ids = all_ids();
-        assert_eq!(ids.len(), 19 + ROLES.len());
+        assert_eq!(ids.len(), 18 + ROLES.len());
         for id in ids {
             for c in [Change::Prev, Change::Next, Change::Toggle, Change::Reset] {
                 let (_, edits) = run(&Settings::default(), id, c.clone());
@@ -1250,15 +1319,6 @@ mod tests {
     }
 
     #[test]
-    fn fit_top_keeps_the_row_in_view() {
-        assert_eq!(fit_top(0, 3, 5, 20), 0);
-        assert_eq!(fit_top(0, 7, 5, 20), 3);
-        assert_eq!(fit_top(6, 2, 5, 20), 2);
-        assert_eq!(fit_top(18, 19, 5, 20), 15);
-        assert_eq!(fit_top(0, 0, 0, 0), 0);
-    }
-
-    #[test]
     fn sections_step_and_wrap() {
         assert_eq!(Section::Appearance.step(-1), Section::About);
         assert_eq!(Section::About.step(1), Section::Appearance);
@@ -1271,7 +1331,7 @@ mod tests {
         let t = s.keys.bindings.entry("list".into()).or_default();
         t.insert("f5".into(), "refresh".into());
         t.insert("p".into(), "unbound".into());
-        let keys = Keymap::build(Preset::Default, &s.keys).0;
+        let keys = Keymap::build(&s.keys).0;
         let r = rows(Section::Keys, &s, &keys, &[], &[]);
         let find = |a: Action| {
             r.iter()
@@ -1287,29 +1347,13 @@ mod tests {
     }
 
     #[test]
-    fn the_preset_row_cycles_default_and_vim_and_resets() {
-        let s = Settings::default();
-        let (n, e) = run(&s, RowId::KeyPreset, Change::Next);
-        assert_eq!(n.keys.preset, "vim");
-        assert_eq!(
-            e,
-            vec![SettingEdit::set("keys", "preset", SettingValue::str("vim"))]
-        );
-        let (n, _) = run(&n, RowId::KeyPreset, Change::Prev);
-        assert_eq!(n.keys.preset, "default");
-        let (_, e) = run(&n, RowId::KeyPreset, Change::Reset);
-        assert_eq!(e, vec![SettingEdit::remove("keys", "preset")]);
-        assert_eq!(
-            err(&s, RowId::KeyPreset, Change::Text("emacs".into())),
-            "use default or vim"
-        );
-    }
-
-    #[test]
     fn key_rows_are_changed_by_capture_not_by_change() {
         let s = Settings::default();
         let id = RowId::KeyAction(Context::List, Action::Refresh);
-        assert_eq!(err(&s, id, Change::Next), "press Enter, then the new key");
+        assert_eq!(
+            err(&s, id, Change::Next),
+            "Enter replaces a key, a adds one, d deletes one"
+        );
         assert!(change(&s, RowId::KeyHeading(Context::List), Change::Next).is_err());
         assert!(change(&s, RowId::ResetAllKeys, Change::Next).is_err());
     }
@@ -1322,7 +1366,7 @@ mod tests {
         };
         assert_eq!(
             capture_line(Some(&c)).as_deref(),
-            Some("Press the new key for Refresh (Esc cancels, Backspace removes)")
+            Some("Press the new key for Refresh (any key is taken, Esc too)")
         );
         let c = PageEdit::Conflict {
             ctx: Context::List,
@@ -1334,7 +1378,10 @@ mod tests {
             capture_line(Some(&c)).as_deref(),
             Some("Ctrl+N is already Pin. Enter: Pin gets Refresh's old key (or none), Esc cancels")
         );
-        assert_eq!(capture_line(Some(&PageEdit::Text(String::new()))), None);
+        assert_eq!(
+            capture_line(Some(&PageEdit::Text(TextInput::default()))),
+            None
+        );
         assert_eq!(capture_line(None), None);
     }
 }

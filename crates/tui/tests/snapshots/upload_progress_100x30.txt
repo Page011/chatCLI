@@ -27,7 +27,7 @@
 │                            │║>                                                                   ║
 └────────────────────────────┘╚════════════════════════════════════════════════════════════════════╝
 SENDING 45% (1.3 MB of 2.9 MB)
-Enter send  / commands  F1 help  Esc back to list  Ctrl+Up select  Ctrl+J newline  Ctrl+E emoji
+Enter send  : commands  F1 help  Esc back  Ctrl+J newline  Ctrl+E emoji  Ctrl+O attach
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -79,4 +79,4 @@ row 13 cols 75-88: fg=DarkGray bg=Reset NONE
 row 25 cols 31-39: fg=Reset bg=Reset BOLD
 row 26 cols 31-32: fg=Reset bg=Reset BOLD
 row 28 cols 0-29: fg=Reset bg=Reset BOLD
-row 29 cols 0-94: fg=Reset bg=Reset DIM
+row 29 cols 0-85: fg=Reset bg=Reset DIM

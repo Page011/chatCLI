@@ -27,7 +27,7 @@
 │                            │╔ Message ════════════════════════════════ Riley Sample is typing... ╗
 │                            │║>                                                                   ║
 └────────────────────────────┘╚════════════════════════════════════════════════════════════════════╝
-Enter send  / commands  F1 help  Esc back to list  Ctrl+Up select  Ctrl+J newline  Ctrl+E emoji
+Enter send  : commands  F1 help  Esc back  Ctrl+J newline  Ctrl+E emoji  Ctrl+O attach
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 10-14: fg=Reset bg=Reset BOLD
@@ -58,4 +58,4 @@ row 24 cols 31-98: fg=Reset bg=Reset DIM
 row 26 cols 31-39: fg=Reset bg=Reset BOLD
 row 26 cols 72-98: fg=Cyan bg=Reset NONE
 row 27 cols 31-32: fg=Reset bg=Reset BOLD
-row 29 cols 0-94: fg=Reset bg=Reset DIM
+row 29 cols 0-85: fg=Reset bg=Reset DIM

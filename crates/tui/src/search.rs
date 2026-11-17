@@ -4,6 +4,8 @@
 //! only keeps what the overlay shows. A query runs when its text changes, on the UI thread: it
 //! is one indexed read of at most `LIMIT` rows.
 
+use crate::input::TextInput;
+use crate::list;
 use chatcli_core::store::{SearchHit, Store};
 
 /// Hits shown at most. The store clamps to 200; a screen shows far fewer.
@@ -11,7 +13,7 @@ pub const LIMIT: u32 = 50;
 
 #[derive(Debug, Clone, Default)]
 pub struct Search {
-    pub query: String,
+    pub query: TextInput,
     pub hits: Vec<SearchHit>,
     pub sel: usize,
     /// First hit shown.
@@ -25,7 +27,7 @@ impl Search {
     pub fn run(&mut self, store: &Store) {
         self.sel = 0;
         self.top = 0;
-        match store.search(&self.query, None, LIMIT) {
+        match store.search(self.query.text(), None, LIMIT) {
             Ok(hits) => {
                 self.hits = hits;
                 self.error = None;
@@ -39,22 +41,12 @@ impl Search {
 
     /// Moves the selection by `delta` rows, kept inside the hits.
     pub fn step(&mut self, delta: isize) {
-        if self.hits.is_empty() {
-            return;
-        }
-        self.sel = (self.sel as isize)
-            .saturating_add(delta)
-            .clamp(0, self.hits.len() as isize - 1) as usize;
+        self.sel = list::page(self.sel, self.hits.len(), delta);
     }
 
     /// Scrolls so the selected row is inside a window of `rows` rows.
     pub fn keep_visible(&mut self, rows: usize) {
-        let rows = rows.max(1);
-        if self.sel < self.top {
-            self.top = self.sel;
-        } else if self.sel >= self.top + rows {
-            self.top = self.sel + 1 - rows;
-        }
+        self.top = list::keep_visible(self.top, self.sel, rows, self.hits.len());
     }
 
     pub fn chosen(&self) -> Option<&SearchHit> {
@@ -112,7 +104,7 @@ mod tests {
         let store = store_with(&["plain words"]);
         let mut s = Search::default();
         for q in ["", "   ", "\"", "*", "NEAR(", "a\"b", "-x", "()"] {
-            s.query = q.to_string();
+            s.query = q.into();
             s.run(&store);
             assert!(s.error.is_none(), "{q:?}: {:?}", s.error);
             assert!(s.hits.is_empty(), "{q:?}");

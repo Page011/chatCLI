@@ -15,7 +15,7 @@
 ║09:10 You           two at once                 ║
 ╚════════════════════════════════════════════════╝
 ┌ Message ───────────────────────────────────────┐
-│Esc to go back and type                         │
+│i to type                                       │
 └────────────────────────────────────────────────┘
 Up/Down move  r reply  e react  u link  o open
 --- styled runs (everything else is default style) ---
@@ -54,7 +54,7 @@ row 13 cols 7-18: fg=Reset bg=Reset BOLD
 row 13 cols 21-43: fg=Reset bg=Reset BOLD
 row 14 cols 1-5: fg=DarkGray bg=Reset NONE
 row 14 cols 7-18: fg=Cyan bg=Reset BOLD
-row 17 cols 1-23: fg=Reset bg=Reset DIM
+row 17 cols 1-9: fg=Reset bg=Reset DIM
 row 19 cols 0-11: fg=Reset bg=Reset BOLD
 row 19 cols 12-13: fg=Reset bg=Reset DIM
 row 19 cols 14-20: fg=Reset bg=Reset BOLD

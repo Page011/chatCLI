@@ -1,4 +1,4 @@
- chatcli  Teams 101 LIVE   WhatsApp SIGN-IN NEEDED                                       Ctrl+C quit
+ chatcli  Teams 101 LIVE   WhatsApp CONNECTING                                           Ctrl+C quit
 ┌ Chats ─────────────────────┐┌ Alex Example ──────────────────────────────────────────────────────┐
 │     Alex Example      09:15││                         ---- 05/11/26 ----                         │
 │     Alex Example: is the b…││14:20 Alex Example  Can you review the draft before Friday?         │
@@ -11,28 +11,28 @@
 │     田中太郎 (Tar… 05/11/26││                           ---- Today ----                          │
 │     了解しました           ││09:10 Alex Example  is the build done? 🚀 今日はどうですか          │
 │     Jordan Placeh… 09/10/26││09:15 You           yes, shipped                                    │
-│     You: thanks            ││09:30 You           on it, will confirm shortly [sending]           │
-│                            ││09:30 You           this one will fail                              │
-│                            ││                    NOT SENT - demo: this chat refuses messages     │
-│                            ││                                                                    │
-│                            ││                                                                    │
-│                            ││                                                                    │
-│                            ││                                                                    │
-│                            ││                                                                    │
-│                            ││                                                                    │
-│                            ││                                                                    │
-│                            ││                                                                    │
-│                            ││                                                                    │
+│     You: thanks            ││┌ Commands ────────────────────────────────────────────────────────┐│
+│                            │││:settings       theme, layout, keys and more                      ││
+│                            │││:search         search every stored message                       ││
+│                            │││🦭  :seal:                                                        ││
+│                            │││💺  :seat:                                                        ││
+│                            │││7️⃣  :seven:                                                       ││
+│                            │││🤳  :selfie:                                                      ││
+│                            │││㊙️  :secret:                                                      ││
+│                            │││🇷🇸  :serbia:                                                      ││
+│                            │││🇸🇳  :senegal:                                                     ││
+│                            │││🌱  :seedling:                                                    ││
+│                            ││└──────────────────────────────────────────────────────────────────┘│
 │                            │└────────────────────────────────────────────────────────────────────┘
 │                            │╔ Message ═══════════════════════════════════════════════════════════╗
-│                            │║> typing a draft                                                    ║
+│                            │║> :se                                                               ║
 └────────────────────────────┘╚════════════════════════════════════════════════════════════════════╝
--- INSERT --  Enter send  F1 help  Esc normal mode  Ctrl+Up select  Ctrl+J newline  Ctrl+E emoji
+Enter run  Up/Down choose  Esc close
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
 row 0 cols 27-34: fg=Reset bg=Reset BOLD
-row 0 cols 36-49: fg=Yellow bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
 row 0 cols 89-99: fg=Reset bg=Reset DIM
 row 2 cols 1-28: fg=Reset bg=Reset BOLD | UNDERLINED
 row 2 cols 56-73: fg=DarkGray bg=Reset NONE
@@ -66,14 +66,16 @@ row 12 cols 20-28: fg=DarkGray bg=Reset NONE
 row 12 cols 31-35: fg=DarkGray bg=Reset NONE
 row 12 cols 37-48: fg=Cyan bg=Reset BOLD
 row 13 cols 1-16: fg=DarkGray bg=Reset NONE
-row 13 cols 31-35: fg=DarkGray bg=Reset NONE
-row 13 cols 37-48: fg=Cyan bg=Reset BOLD
-row 13 cols 78-87: fg=DarkGray bg=Reset NONE
-row 14 cols 31-35: fg=DarkGray bg=Reset NONE
-row 14 cols 37-48: fg=Cyan bg=Reset BOLD
-row 14 cols 51-68: fg=Red bg=Reset NONE
-row 15 cols 51-93: fg=Red bg=Reset BOLD
+row 14 cols 32-97: fg=Reset bg=Reset BOLD | REVERSED
+row 15 cols 48-74: fg=DarkGray bg=Reset NONE
+row 16 cols 36-41: fg=DarkGray bg=Reset NONE
+row 17 cols 36-41: fg=DarkGray bg=Reset NONE
+row 18 cols 36-42: fg=DarkGray bg=Reset NONE
+row 19 cols 36-43: fg=DarkGray bg=Reset NONE
+row 20 cols 36-43: fg=DarkGray bg=Reset NONE
+row 21 cols 36-43: fg=DarkGray bg=Reset NONE
+row 22 cols 36-44: fg=DarkGray bg=Reset NONE
+row 23 cols 36-45: fg=DarkGray bg=Reset NONE
 row 26 cols 31-39: fg=Reset bg=Reset BOLD
 row 27 cols 31-32: fg=Reset bg=Reset BOLD
-row 29 cols 0-11: fg=Reset bg=Reset BOLD
-row 29 cols 14-95: fg=Reset bg=Reset DIM
+row 29 cols 0-35: fg=Reset bg=Reset DIM

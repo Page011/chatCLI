@@ -17,7 +17,7 @@
 ║> one                                           ║
 ║  two                                           ║
 ╚════════════════════════════════════════════════╝
-Enter send  F1 help  Esc back to list
+Enter send  F1 help  Esc back  Ctrl+J newline
 --- styled runs (everything else is default style) ---
 row 0 cols 0-15: fg=Reset bg=Reset BOLD | REVERSED
 row 0 cols 18-25: fg=Reset bg=Reset BOLD
@@ -36,5 +36,5 @@ row 13 cols 7-18: fg=Cyan bg=Reset BOLD
 row 15 cols 1-9: fg=Reset bg=Reset BOLD
 row 16 cols 1-2: fg=Reset bg=Reset BOLD
 row 17 cols 1-2: fg=Reset bg=Reset BOLD
-row 19 cols 0-36: fg=Reset bg=Reset DIM
+row 19 cols 0-44: fg=Reset bg=Reset DIM
 cursor: 6,17

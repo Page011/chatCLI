@@ -19,9 +19,9 @@
 ║                          ║│                    refuses messages              │
 ║                          ║└──────────────────────────────────────────────────┘
 ║                          ║┌ Message ─────────────────────────────────────────┐
-║                          ║│Enter on a chat to type                           │
+║                          ║│i to type                                         │
 ╚══════════════════════════╝└──────────────────────────────────────────────────┘
-Up/Down chat  Enter type  / commands  ? help  Tab network  r refresh  q quit
+Up/Down chat  Enter open  i type  / filter  : commands  ? help  Tab network
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -65,5 +65,5 @@ row 16 cols 35-46: fg=Reset bg=Reset BOLD
 row 16 cols 49-66: fg=Reset bg=Reset BOLD
 row 17 cols 49-74: fg=Reset bg=Reset BOLD
 row 18 cols 49-64: fg=Reset bg=Reset BOLD
-row 21 cols 29-51: fg=Reset bg=Reset DIM
-row 23 cols 0-75: fg=Reset bg=Reset DIM
+row 21 cols 29-37: fg=Reset bg=Reset DIM
+row 23 cols 0-74: fg=Reset bg=Reset DIM

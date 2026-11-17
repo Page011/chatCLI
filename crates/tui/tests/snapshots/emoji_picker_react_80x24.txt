@@ -19,7 +19,7 @@
 ║                          ║│                                                  │
 ║                          ║└──────────────────────────────────────────────────┘
 ║                          ║┌ Message ─────────────────────────────────────────┐
-║                          ║│Enter on a chat to type                           │
+║                          ║│i to type                                         │
 ╚══════════════════════════╝└──────────────────────────────────────────────────┘
 Type to search  Enter choose  PgUp/PgDn category  Esc close
 --- styled runs (everything else is default style) ---
@@ -57,6 +57,6 @@ row 12 cols 18-22: fg=DarkGray bg=Reset NONE
 row 13 cols 1-16: fg=DarkGray bg=Reset NONE
 row 13 cols 57-61: fg=DarkGray bg=Reset NONE
 row 16 cols 25-48: fg=Reset bg=Reset DIM
-row 21 cols 29-51: fg=Reset bg=Reset DIM
+row 21 cols 29-37: fg=Reset bg=Reset DIM
 row 23 cols 0-58: fg=Reset bg=Reset DIM
 cursor: 26,7

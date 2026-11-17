@@ -1,5 +1,6 @@
 //! A small list that opens above the message box while you type and completes what you typed.
-//! The emoji `:shortcode:` popup and the `@mention` popup share it, so nothing here knows about
+//! The emoji `:shortcode:` popup (with the commands first when the box starts with `:word`) and
+//! the `@mention` popup share it, so nothing here knows about
 //! either. Pure: the keys move `selected`, `ui` draws it.
 
 use chatcli_core::model::PersonRef;
@@ -15,6 +16,9 @@ pub struct PopupItem {
     pub insert: String,
     /// Set for a mention: the person the inserted `@name` stands for.
     pub person: Option<PersonRef>,
+    /// Set for a command (`:help` at the start of the message box): choosing it runs the
+    /// command instead of inserting anything.
+    pub command: Option<crate::commands::CmdId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,18 +53,12 @@ impl Popup {
 
     /// Up one item, wrapping from the first to the last.
     pub fn up(&mut self) {
-        let n = self.items.len();
-        if n > 0 {
-            self.selected = (self.selected + n - 1) % n;
-        }
+        self.selected = crate::list::step(self.selected, self.items.len(), -1);
     }
 
     /// Down one item, wrapping from the last to the first.
     pub fn down(&mut self) {
-        let n = self.items.len();
-        if n > 0 {
-            self.selected = (self.selected + 1) % n;
-        }
+        self.selected = crate::list::step(self.selected, self.items.len(), 1);
     }
 
     pub fn chosen(&self) -> Option<&PopupItem> {
@@ -78,6 +76,7 @@ mod tests {
             detail: String::new(),
             insert: s.into(),
             person: None,
+            command: None,
         }
     }
 

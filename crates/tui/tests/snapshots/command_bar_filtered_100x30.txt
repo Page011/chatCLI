@@ -1,9 +1,9 @@
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                                           Ctrl+C quit
           ╔ Commands ════════════════════════════════════════════════════════════════════╗
-          ║/se                                                                           ║
+          ║:se                                                                           ║
           ║Commands                                                                      ║
-          ║/settings        theme, layout, keys and more                                 ║
-          ║/search          search every stored message                                  ║
+          ║:settings        theme, layout, keys and more                                 ║
+          ║:search          search every stored message                                  ║
           ║Chats                                                                         ║
           ║Release Planning for the Autumn Quarter Kickoff                               ║
           ║                                                                              ║

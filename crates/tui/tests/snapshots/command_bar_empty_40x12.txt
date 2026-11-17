@@ -1,13 +1,13 @@
  Teams 103 LIVE   WhatsApp CONN…
 ╔ Commands ════════════════════════════╗
-║/type a command or chat name          ║
+║:type a command or chat name          ║
 ║Commands                              ║
-║/help            keys and commands    ║
-║/settings        theme, layout, keys …║
-║/keys            change key bindings  ║
-║/theme           colours              ║
-║/layout          sidebar, density, ti…║
-║/notifications   desktop notifications║
+║:help            keys and commands    ║
+║:settings        theme, layout, keys …║
+║:keys            change key bindings  ║
+║:theme           colours              ║
+║:layout          sidebar, density, ti…║
+║:notifications   desktop notifications║
 ╚══════════════════════════════════════╝
 Up/Down choose  Esc close  Enter run
 --- styled runs (everything else is default style) ---

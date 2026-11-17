@@ -25,9 +25,9 @@
 ║                            ║│                                                                    │
 ║                            ║└────────────────────────────────────────────────────────────────────┘
 ║                            ║┌ Message ───────────────────────────────────────────────────────────┐
-║                            ║│Enter on a chat to type                                             │
+║                            ║│i to type                                                           │
 ╚════════════════════════════╝└────────────────────────────────────────────────────────────────────┘
-Up/Down chat  Enter type  / commands  ? help  Tab network  r refresh  q quit
+Up/Down chat  Enter open  i type  / filter  : commands  ? help  Tab network  r refresh  Ctrl+C quit
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED

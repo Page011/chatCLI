@@ -7,7 +7,7 @@
 ║                    introduction and  ║
 ╚══════════════════════════════════════╝
 ┌ Message ─────────────────────────────┐
-│Esc to go back and type               │
+│i to type                             │
 └──────────────────────────────────────┘
 Up/Down move  r reply  e react  u link
 --- styled runs (everything else is default style) ---
@@ -22,7 +22,7 @@ row 3 cols 1-38: fg=Reset bg=Reset BOLD | REVERSED
 row 4 cols 1-38: fg=Reset bg=Reset BOLD | REVERSED
 row 5 cols 1-27: fg=Reset bg=Reset BOLD | REVERSED
 row 6 cols 1-36: fg=Reset bg=Reset BOLD | REVERSED
-row 9 cols 1-23: fg=Reset bg=Reset DIM
+row 9 cols 1-9: fg=Reset bg=Reset DIM
 row 11 cols 0-11: fg=Reset bg=Reset BOLD
 row 11 cols 12-13: fg=Reset bg=Reset DIM
 row 11 cols 14-20: fg=Reset bg=Reset BOLD

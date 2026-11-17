@@ -15,7 +15,7 @@
                   ║                                                              ║
                   ║                         Enter to link                        ║
                   ║                     Tab switches network                     ║
-                  ║          Type / for commands: /help /settings /keys          ║
+                  ║          Press : for commands: help, settings, keys          ║
                   ╚══════════════════════════════════════════════════════════════╝
 
 
@@ -27,7 +27,7 @@
 
 
 
-Enter sign in  / commands  ? help  Tab network  q quit
+Enter sign in  : commands  ? help  Tab network  Ctrl+C quit
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 10-14: fg=Reset bg=Reset BOLD
@@ -39,4 +39,4 @@ row 12 cols 39-61: fg=Reset bg=Reset BOLD
 row 13 cols 22-78: fg=Red bg=Reset NONE
 row 16 cols 40-59: fg=Reset bg=Reset DIM
 row 17 cols 29-70: fg=Reset bg=Reset DIM
-row 29 cols 0-53: fg=Reset bg=Reset DIM
+row 29 cols 0-58: fg=Reset bg=Reset DIM

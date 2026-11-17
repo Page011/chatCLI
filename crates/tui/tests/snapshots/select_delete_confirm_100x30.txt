@@ -25,7 +25,7 @@
 │                            │║                                                                    ║
 │                            │╚════════════════════════════════════════════════════════════════════╝
 │                            │┌ Message ───────────────────────────────────────────────────────────┐
-│                            ││Esc to go back and type                                             │
+│                            ││i to type                                                           │
 └────────────────────────────┘└────────────────────────────────────────────────────────────────────┘
 Delete for everyone? y/n
 --- styled runs (everything else is default style) ---
@@ -78,6 +78,6 @@ row 13 cols 1-16: fg=DarkGray bg=Reset NONE
 row 13 cols 31-35: fg=DarkGray bg=Reset NONE
 row 13 cols 37-48: fg=Reset bg=Reset BOLD
 row 13 cols 51-96: fg=DarkGray bg=Reset NONE
-row 27 cols 31-53: fg=Reset bg=Reset DIM
+row 27 cols 31-39: fg=Reset bg=Reset DIM
 row 29 cols 0-6: fg=Red bg=Reset BOLD
 row 29 cols 7-23: fg=Reset bg=Reset BOLD

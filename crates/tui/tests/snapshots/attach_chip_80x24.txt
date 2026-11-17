@@ -21,7 +21,7 @@
 │                          │║[photo.png 1 B]  Esc remove                       ║
 │                          │║> look at this                                    ║
 └──────────────────────────┘╚══════════════════════════════════════════════════╝
-Enter send  F1 help  Esc remove file  Ctrl+Up select  Ctrl+J newline
+Enter send  F1 help  Esc remove file  Ctrl+J newline  Ctrl+E emoji
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -70,4 +70,4 @@ row 19 cols 29-37: fg=Reset bg=Reset BOLD
 row 20 cols 29-43: fg=Reset bg=Reset BOLD
 row 20 cols 44-55: fg=Reset bg=Reset DIM
 row 21 cols 29-30: fg=Reset bg=Reset BOLD
-row 23 cols 0-67: fg=Reset bg=Reset DIM
+row 23 cols 0-65: fg=Reset bg=Reset DIM

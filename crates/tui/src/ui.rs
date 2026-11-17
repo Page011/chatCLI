@@ -16,14 +16,14 @@ use crate::app::{App, Focus, NetState, Prompt, NARROW};
 use crate::chats;
 use crate::composer::{self, Composer};
 use crate::emoji::{PickerFor, CATEGORIES};
-use crate::keymap::{Action, Context, Keymap, Mode};
+use crate::keymap::{Action, Context, Keymap};
 use crate::links::find_links;
 use crate::media_view::{
     human_size, kind_label, percent, strip_markers, Fetch, MediaKey, MediaState, View,
 };
 use crate::older::Older;
 use crate::settings_view::RowId;
-use crate::text::{clean_line, fit, sw, tail, truncate, wrap, wrap_pieces, Clock, Fmt, Piece};
+use crate::text::{clean_line, fit, sw, truncate, wrap, wrap_pieces, Clock, Fmt, Piece};
 use crate::theme::Theme;
 use std::path::PathBuf;
 
@@ -60,13 +60,11 @@ fn height_for_body(body: usize) -> usize {
 /// two wrapped rows, so the action half of "what failed: what to do" is not cut off; mid-size
 /// ones share one row; short ones show the key hints or the problem, never both.
 pub(crate) fn footer_height(app: &App, area: Rect) -> u16 {
-    let base = match area.height {
+    match area.height {
         20.. => 1 + problem_lines(app, area.width as usize).len() as u16,
         14..=19 => 1 + u16::from(status_part(app).is_some() || notice_part(app).is_some()),
         _ => 1,
-    };
-    // The `:` command box is one more row, directly above the rest of the footer.
-    base + u16::from(app.command_text().is_some())
+    }
 }
 
 pub(crate) struct Layout {
@@ -205,7 +203,7 @@ pub(crate) fn tabs(app: &App, width: u16) -> Vec<Tab> {
     let short = width < NARROW;
     let mut x = if short { 0 } else { BRAND.len() as u16 };
     let mut out = Vec::new();
-    for net in Network::ALL {
+    for net in app.tab_order() {
         let ns = app.ns(net);
         let active = net == app.active().network;
         let unread = ns.unread();
@@ -258,8 +256,19 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
         f.render_widget(Paragraph::new(Line::from(t.spans)), r);
         end = t.x + t.w;
     }
-    let quit = "Ctrl+C quit";
-    if area.width >= end + 2 + quit.len() as u16 {
+    // The key that quits from where the focus is now: the one that works everywhere if it
+    // reaches this context, else one of the context's own.
+    let here = app.keys().keys_for(app.context(), Action::Quit);
+    let everywhere = app.keys().keys_for(Context::Common, Action::Quit);
+    let Some(key) = everywhere
+        .iter()
+        .find(|k| here.contains(k))
+        .or(here.first())
+    else {
+        return;
+    };
+    let quit = format!("{key} quit");
+    if area.width >= end + 2 + quit.chars().count() as u16 {
         f.render_widget(
             Paragraph::new(Span::styled(quit, t.hint)).alignment(Alignment::Right),
             area,
@@ -356,7 +365,6 @@ fn hints(app: &App) -> Vec<(String, bool)> {
     let ns = app.active();
     let keys = app.keys();
     let ctx = app.context();
-    let vim = app.mode().is_some();
     if let Some(tour) = app.tour_bar() {
         return vec![(tour.hint.to_string(), true)];
     }
@@ -365,17 +373,10 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             keys,
             ctx,
             &[
-                (&[CloseHelp], "close"),
-                (&[ListUp, ListDown], "scroll"),
-                (&[ScrollUp, ScrollDown], "page"),
+                (&[Back], "close"),
+                (&[Up, Down], "scroll"),
+                (&[PageUp, PageDown], "page"),
             ],
-        );
-    }
-    if app.command_text().is_some() {
-        return join_hints(
-            keys,
-            ctx,
-            &[(&[FilterAccept], "run"), (&[FilterCancel], "cancel")],
         );
     }
     if let Some(prompt) = app.prompt() {
@@ -386,9 +387,9 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             keys,
             ctx,
             &[
-                (&[PopupUp, PopupDown], "choose"),
-                (&[PopupClose], "close"),
-                (&[PopupAccept], "run"),
+                (&[Up, Down], "choose"),
+                (&[Back], "close"),
+                (&[Accept], "run"),
                 (&[], "Type to filter"),
             ],
         );
@@ -397,6 +398,14 @@ fn hints(app: &App) -> Vec<(String, bool)> {
         if let Some(line) = crate::settings_view::capture_line(page.edit.as_ref()) {
             return vec![(line, true)];
         }
+        if page.filtering {
+            return vec![
+                (format!("/{}", page.filter.text()), true),
+                ("Up/Down move".to_string(), true),
+                ("Enter keep".to_string(), true),
+                ("Esc clear".to_string(), true),
+            ];
+        }
         let row = app.current_row().map(|r| r.id);
         let items: &[&str] = if page.edit.is_some() {
             &["Enter save", "Esc cancel", "Type a value"]
@@ -404,8 +413,11 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             &[
                 "Up/Down move",
                 "Esc close",
-                "Enter set key",
+                "Enter replace",
+                "a add",
+                "d delete",
                 "r reset",
+                "/ filter",
                 "Tab sections",
             ]
         } else if page.in_rows && row == Some(RowId::ResetAllKeys) {
@@ -435,9 +447,9 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             ctx,
             &[
                 (&[], "Type to search"),
-                (&[PopupUp, PopupDown], "choose"),
-                (&[PopupAccept], "open chat"),
-                (&[PopupClose], "close"),
+                (&[Up, Down], "choose"),
+                (&[Accept], "open chat"),
+                (&[Back], "close"),
             ],
         );
     }
@@ -448,9 +460,9 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             &[
                 (&[], "Type a path"),
                 (&[], "Tab complete"),
-                (&[PopupUp, PopupDown], "choose"),
-                (&[PopupAccept], "attach"),
-                (&[PopupClose], "cancel"),
+                (&[Up, Down], "choose"),
+                (&[Accept], "attach"),
+                (&[Back], "cancel"),
             ],
         );
     }
@@ -460,15 +472,15 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             ctx,
             &[
                 (&[], "Type to search"),
-                (&[PopupAccept], "choose"),
-                (&[ScrollUp, ScrollDown], "category"),
-                (&[PopupClose], "close"),
+                (&[Accept], "choose"),
+                (&[PageUp, PageDown], "category"),
+                (&[Back], "close"),
             ],
         );
     }
     if let Some(p) = app.popup() {
         // The commands list runs the chosen command; the emoji and mention lists insert.
-        let accept = if p.title == crate::commands::COMMANDS_TITLE {
+        let accept = if p.chosen().is_some_and(|i| i.command.is_some()) {
             "run"
         } else {
             "insert"
@@ -477,34 +489,26 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             keys,
             Context::Popup,
             &[
-                (&[PopupAccept], accept),
-                (&[PopupUp, PopupDown], "choose"),
-                (&[PopupClose], "close"),
+                (&[Accept], accept),
+                (&[Up, Down], "choose"),
+                (&[Back], "close"),
             ],
         );
     }
-    // The selected chat is already on screen as a preview: Enter moves to its message box.
-    // On a narrow terminal the list hides the pane, so nothing is previewed yet: Enter opens.
-    // "type", not "reply": reply is the quote-reply key in selection mode.
-    let verb = if ns.open.is_some() && ns.open == ns.selected && app.convo_visible(ns.network) {
-        "type"
-    } else {
-        "open"
-    };
-    let chat: &[Action] = if vim {
-        &[ListDown, ListUp]
-    } else {
-        &[ListUp, ListDown]
-    };
+    // Enter goes into the chat (its newest message selected); the compose key goes straight to
+    // its message box. "type", not "reply": reply is the quote-reply key in selection.
+    let verb = "open";
+    let chat: &[Action] = &[Up, Down];
     if !ns.panel() && ns.focus == Focus::List && !ns.filter.is_empty() {
         return join_hints(
             keys,
             ctx,
             &[
-                (&[ClearFilter], "clear filter"),
+                (&[Back], "clear filter"),
                 (&[NextNetwork], "network"),
                 (chat, "chat"),
-                (&[OpenChat], verb),
+                (&[Accept], verb),
+                (&[Compose], "type"),
                 (&[FilterStart], "filter"),
                 (&[Quit], "quit"),
             ],
@@ -516,7 +520,7 @@ fn hints(app: &App) -> Vec<(String, bool)> {
                 keys,
                 ctx,
                 &[
-                    (&[SignIn], "sign in"),
+                    (&[Accept], "sign in"),
                     (&[CommandBar], "commands"),
                     (&[Help], "help"),
                     (&[NextNetwork], "network"),
@@ -537,24 +541,14 @@ fn hints(app: &App) -> Vec<(String, bool)> {
         };
     }
     match ns.focus {
-        Focus::List if vim => join_hints(
-            keys,
-            ctx,
-            &[
-                (chat, "chat"),
-                (&[EnterInsert], "insert"),
-                (&[CommandBar], "commands"),
-                (&[CommandBox], "command"),
-                (&[Help], "help"),
-                (&[Quit], "quit"),
-            ],
-        ),
         Focus::List => join_hints(
             keys,
             ctx,
             &[
                 (chat, "chat"),
-                (&[OpenChat], verb),
+                (&[Accept], verb),
+                (&[Compose], "type"),
+                (&[FilterStart], "filter"),
                 (&[CommandBar], "commands"),
                 (&[Help], "help"),
                 (&[NextNetwork], "network"),
@@ -568,8 +562,8 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             &[
                 (&[], "Type to filter"),
                 (chat, "chat"),
-                (&[FilterAccept], "keep filter"),
-                (&[FilterCancel], "clear"),
+                (&[Accept], "keep filter"),
+                (&[Back], "clear"),
             ],
         ),
         Focus::Select => select_items(app),
@@ -579,33 +573,28 @@ fn hints(app: &App) -> Vec<(String, bool)> {
                 ctx,
                 &[
                     (&[Send], "send"),
-                    (&[], "/ commands"),
+                    (&[], ": commands"),
                     (&[Help], "help"),
                     (
-                        if vim {
-                            &[LeaveInsert]
-                        } else {
-                            &[LeaveComposer]
-                        },
-                        match (ns.target(), ns.attachment(), vim) {
-                            (Some(Target::Reply(_)), _, _) => "cancel reply",
-                            (Some(Target::Edit { .. }), _, _) => "cancel edit",
-                            (None, Some(_), _) => "remove file",
-                            (None, None, true) => "normal mode",
-                            (None, None, false) => "back to list",
+                        &[Back],
+                        match (ns.target(), ns.attachment()) {
+                            (Some(Target::Reply(_)), _) => "cancel reply",
+                            (Some(Target::Edit { .. }), _) => "cancel edit",
+                            (None, Some(_)) => "remove file",
+                            (None, None) => "back",
                         },
                     ),
                     (&[SelectMessages], "select"),
                     (&[InsertNewline], "newline"),
                     (&[EmojiPicker], "emoji"),
                     (&[Attach], "attach"),
-                    (&[ScrollUp, ScrollDown], "scroll"),
+                    (&[PageUp, PageDown], "scroll"),
                     (&[NextNetwork], "network"),
                 ],
             );
             // The pointer is for an empty box: once you type, the keys matter more.
             if !ns.draft().is_empty() {
-                items.retain(|(t, _)| t != "/ commands");
+                items.retain(|(t, _)| t != ": commands");
             }
             items
         }
@@ -632,7 +621,7 @@ fn select_items(app: &App) -> Vec<(String, bool)> {
             .iter()
             .any(|a| a.kind == chatcli_core::model::MediaKind::Image);
     let head: [(&[Action], &str, bool); 4] = [
-        (&[SelectUp, SelectDown], "move", true),
+        (&[Up, Down], "move", true),
         (&[Reply], "reply", ns.caps.reply),
         (&[React], "react", ns.caps.react),
         (&[OpenLink], "link", has_link),
@@ -645,9 +634,11 @@ fn select_items(app: &App) -> Vec<(String, bool)> {
     items.extend([
         (&[Edit][..], "edit", ns.caps.edit && own),
         (&[Delete][..], "delete", ns.caps.delete && own),
-        (&[LeaveSelect][..], "back", true),
+        (&[Back][..], "back", true),
         (&[CommandBar][..], "commands", true),
+        (&[Compose][..], "type", true),
         (&[Help][..], "help", true),
+        (&[Copy][..], "copy", true),
     ]);
     items
         .iter()
@@ -765,7 +756,7 @@ fn link_line(prompt: &Prompt, keys: &Keymap, ctx: Context) -> String {
             let yn = keys
                 .hint(ctx, &[Action::ConfirmYes, Action::ConfirmNo])
                 .unwrap_or_else(|| "y/n".to_string());
-            format!("Reset every key to the preset? {yn}")
+            format!("Reset every key to its default? {yn}")
         }
         Prompt::SendFile {
             name,
@@ -797,23 +788,13 @@ fn link_line(prompt: &Prompt, keys: &Keymap, ctx: Context) -> String {
     }
 }
 
-/// `-- NORMAL --` / `-- INSERT --` and the held sequence key, at the left of the footer. Only
-/// with the vim preset; text, never colour alone.
+/// The first key of a two-key sequence while it waits for the second, at the left of the
+/// footer: text, never colour alone.
 fn mode_spans(app: &App) -> Vec<Span<'static>> {
-    let Some(mode) = app.mode() else {
-        return Vec::new();
-    };
-    let label = match mode {
-        Mode::Normal => "-- NORMAL --",
-        Mode::Insert => "-- INSERT --",
-        Mode::Select => "-- SELECT --",
-    };
-    let mut spans = vec![Span::styled(label, bold())];
-    if let Some(held) = app.pending_text() {
-        spans.push(Span::styled(format!(" {held}"), bold()));
+    match app.pending_text() {
+        Some(held) => vec![Span::styled(held, bold()), Span::raw("  ")],
+        None => Vec::new(),
     }
-    spans.push(Span::raw("  "));
-    spans
 }
 
 fn clip_spans(spans: Vec<Span<'static>>, width: usize) -> Line<'static> {
@@ -862,7 +843,7 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect, screen_height: u16) {
     let mut hint_spans = mode.clone();
     hint_spans.extend(hint_spans_of(app, w.saturating_sub(mode_w)));
     let hint_line = Line::from(hint_spans);
-    let mut rows: Vec<Line<'static>> = match screen_height {
+    let rows: Vec<Line<'static>> = match screen_height {
         20.. => {
             let mut rows = problem_lines(app, w);
             rows.push(hint_line);
@@ -882,7 +863,7 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect, screen_height: u16) {
             }
         }
         // One row: a problem outranks the key hints, which return once it is gone.
-        // The vim mode label stays: it is the one thing that must always be visible.
+        // A held sequence key stays: it is the one thing that must always be visible.
         // A link waiting for y/n outranks the problem: it is modal and its keys must be visible.
         _ => match status_part(app)
             .or(notice_part(app))
@@ -896,16 +877,6 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect, screen_height: u16) {
             None => vec![hint_line],
         },
     };
-    if let Some(cmd) = app.command_text() {
-        // Same drawing as the filter box: a prefix, the text, the cursor at its end.
-        let shown = tail(cmd, w.saturating_sub(2));
-        let x = area.x + (1 + sw(&shown)).min(w.saturating_sub(1)) as u16;
-        rows.insert(
-            0,
-            Line::from(vec![Span::styled(":", bold()), Span::raw(shown)]),
-        );
-        f.set_cursor_position((x, area.y));
-    }
     f.render_widget(Paragraph::new(rows), area);
 }
 
@@ -949,9 +920,9 @@ pub(crate) fn help_rows(app: &App) -> Vec<HelpRow> {
             _ => None,
         };
         rows.push(HelpRow::Entry {
-            keys: format!("/{}", c.name),
+            keys: format!(":{}", c.name),
             name: action
-                .and_then(|a| app.keys().keys_for(Context::Global, a).into_iter().next())
+                .and_then(|a| app.keys().keys_for(Context::Common, a).into_iter().next())
                 .unwrap_or_default(),
             doc: c.doc,
         });
@@ -1002,15 +973,11 @@ fn draw_help(f: &mut Frame, app: &App, area: Rect, body: Rect) {
     let inner = b.inner(Margin::new(1, 1));
     let w = inner.width as usize;
     let user = app.keys().user_bindings();
-    let header = format!(
-        "{} preset, {}",
-        app.keys().preset().name(),
-        if user == 0 {
-            "no user bindings".to_string()
-        } else {
-            format!("{user} user bindings")
-        }
-    );
+    let header = if user == 0 {
+        "No user bindings".to_string()
+    } else {
+        format!("{user} user bindings")
+    };
     f.render_widget(
         Paragraph::new(Span::styled(truncate(&header, w), t.hint)),
         Rect::new(inner.x, inner.y, inner.width, 1),
@@ -1114,6 +1081,17 @@ pub(crate) fn centered_note(f: &mut Frame, area: Rect, text: &str, t: &Theme) {
     );
 }
 
+/// The prompt in front of a box opened by `action`: its key when that is one character (`:` for
+/// the command bar, `/` for the filter, or whatever they are bound to), else `fallback`.
+fn prompt_for(app: &App, action: Action, fallback: &'static str) -> String {
+    app.keys()
+        .keys_for(Context::Common, action)
+        .into_iter()
+        .chain(app.keys().keys_for(Context::List, action))
+        .find(|k| k.chars().count() == 1)
+        .unwrap_or_else(|| fallback.to_string())
+}
+
 fn draw_sidebar(f: &mut Frame, app: &App, lay: &Layout) {
     let t = app.theme();
     let look = app.look();
@@ -1128,16 +1106,16 @@ fn draw_sidebar(f: &mut Frame, app: &App, lay: &Layout) {
     };
     f.render_widget(pane(title, focused), lay.sidebar);
     if let Some(r) = lay.filter_row {
+        let (shown, col) = ns.filter.view(r.width.saturating_sub(1) as usize);
         f.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled("/", bold()),
-                Span::raw(ns.filter.clone()),
+                Span::styled(prompt_for(app, Action::FilterStart, "/"), bold()),
+                Span::raw(shown),
             ])),
             r,
         );
-        if ns.focus == Focus::Filter && app.help_open().is_none() && app.command_text().is_none() {
-            let x = r.x + (1 + sw(&ns.filter)).min(r.width.saturating_sub(1) as usize) as u16;
-            f.set_cursor_position((x, r.y));
+        if ns.focus == Focus::Filter && app.help_open().is_none() {
+            f.set_cursor_position((r.x + 1 + col as u16, r.y));
         }
     }
     let list = lay.list;
@@ -1736,14 +1714,7 @@ fn composer_extras(app: &App, ns: &NetState, width: usize) -> Vec<Line<'static>>
     if let Some(target) = ns.target() {
         let esc = app
             .keys()
-            .hint(
-                app.context(),
-                &[
-                    Action::LeaveComposer,
-                    Action::LeaveInsert,
-                    Action::CancelReply,
-                ],
-            )
+            .hint(app.context(), &[Action::Back, Action::CancelReply])
             .unwrap_or_else(|| "Esc".to_string());
         let tail = format!("  {esc} cancel");
         let room = width.saturating_sub(sw(&tail));
@@ -1774,7 +1745,7 @@ fn composer_extras(app: &App, ns: &NetState, width: usize) -> Vec<Line<'static>>
     if let Some(p) = ns.attachment() {
         let esc = app
             .keys()
-            .hint(app.context(), &[Action::LeaveComposer, Action::LeaveInsert])
+            .hint(app.context(), &[Action::Back])
             .unwrap_or_else(|| "Esc".to_string());
         let tail = format!("  {esc} remove");
         let room = width.saturating_sub(sw(&tail));
@@ -1799,16 +1770,15 @@ fn draw_attach(f: &mut Frame, app: &App, lay: &Layout) {
         return;
     }
     let w = inner.width as usize;
-    let shown = tail(&clean_line(&a.input), w.saturating_sub(2));
+    let (shown, col) = a.input.view(w.saturating_sub(2));
     f.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled("> ", bold()),
-            Span::raw(shown.clone()),
+            Span::raw(shown),
         ])),
         Rect::new(inner.x, inner.y, inner.width, 1),
     );
-    let x = (2 + sw(&shown)).min(w.saturating_sub(1)) as u16;
-    f.set_cursor_position((inner.x + x, inner.y));
+    f.set_cursor_position((inner.x + 2 + col as u16, inner.y));
     if lay.composer.width < 12 {
         return;
     }
@@ -1907,16 +1877,16 @@ fn draw_composer(f: &mut Frame, app: &App, lay: &Layout) {
     }
     let draft = ns.draft();
     if draft.is_empty() && !focused {
-        // Focus is on the list: Enter there opens the selected chat and letters are commands,
-        // so the placeholder must not invite typing. While selecting, the way back is Esc.
-        let note = if ns.focus == Focus::Select {
-            let back = app
-                .keys()
-                .hint(Context::Select, &[Action::LeaveSelect])
-                .unwrap_or_else(|| "Esc".to_string());
-            format!("{back} to go back and type")
+        // Focus is on the list or a message: letters are commands there, so the placeholder
+        // names the key that comes here.
+        let ctx = if ns.focus == Focus::Select {
+            Context::Select
         } else {
-            "Enter on a chat to type".to_string()
+            Context::List
+        };
+        let note = match app.keys().hint(ctx, &[Action::Compose]) {
+            Some(key) => format!("{key} to type"),
+            None => "Bind compose to type".to_string(),
         };
         f.render_widget(Paragraph::new(Span::styled(note, t.hint)), inner);
         return;
@@ -2113,23 +2083,24 @@ fn draw_picker(f: &mut Frame, app: &App, body: Rect) {
     f.render_widget(
         Paragraph::new(Line::from(category_spans(
             p.cat,
-            !p.query.trim().is_empty(),
+            !p.query.text().trim().is_empty(),
             g.cats.width as usize,
             t,
         ))),
         g.cats,
     );
+    let (shown, col) = p.query.view(g.search.width.saturating_sub(1) as usize);
     let query_line = if p.query.is_empty() {
         Line::from(vec![
             Span::styled("/", bold()),
             Span::styled("type to search", t.hint),
         ])
     } else {
-        Line::from(vec![Span::styled("/", bold()), Span::raw(p.query.clone())])
+        Line::from(vec![Span::styled("/", bold()), Span::raw(shown)])
     };
     f.render_widget(Paragraph::new(query_line), g.search);
     if items.is_empty() {
-        let note = if p.query.trim().is_empty() {
+        let note = if p.query.text().trim().is_empty() {
             "No recent emoji yet"
         } else {
             "No emoji match"
@@ -2170,8 +2141,7 @@ fn draw_picker(f: &mut Frame, app: &App, body: Rect) {
         )),
         g.status,
     );
-    let x = g.search.x + (1 + sw(&p.query)).min(g.search.width.saturating_sub(1) as usize) as u16;
-    f.set_cursor_position((x, g.search.y));
+    f.set_cursor_position((g.search.x + 1 + col as u16, g.search.y));
 }
 
 // ---- sign-in panel and QR ----
@@ -2428,21 +2398,18 @@ fn draw_palette(f: &mut Frame, app: &App, body: Rect) {
         return;
     };
     f.render_widget(pane("Commands", true), g.outer);
-    let shown = tail(
-        &clean_line(&p.query),
-        (g.query.width as usize).saturating_sub(2),
-    );
+    let (shown, col) = p.query.view(g.query.width.saturating_sub(1) as usize);
+    let prompt = prompt_for(app, Action::CommandBar, ":");
     let query_line = if p.query.is_empty() {
         Line::from(vec![
-            Span::styled("/", bold()),
+            Span::styled(prompt, bold()),
             Span::styled("type a command or chat name", t.dim),
         ])
     } else {
-        Line::from(vec![Span::styled("/", bold()), Span::raw(shown.clone())])
+        Line::from(vec![Span::styled(prompt, bold()), Span::raw(shown)])
     };
     f.render_widget(Paragraph::new(query_line), g.query);
-    let x = g.query.x + (1 + sw(&shown)).min(g.query.width.saturating_sub(1) as usize) as u16;
-    f.set_cursor_position((x, g.query.y));
+    f.set_cursor_position((g.query.x + 1 + col as u16, g.query.y));
     let items = app.palette_items();
     if items.is_empty() {
         f.render_widget(
@@ -2478,7 +2445,7 @@ fn draw_palette(f: &mut Frame, app: &App, body: Rect) {
                 // A dimmed command says why, instead of its doc.
                 let doc = reason.unwrap_or_else(|| doc.to_string());
                 vec![
-                    Span::styled(fit(&format!("/{name}"), PALETTE_NAME_W), name_style),
+                    Span::styled(fit(&format!(":{name}"), PALETTE_NAME_W), name_style),
                     Span::raw(" "),
                     Span::styled(doc, doc_style),
                 ]
@@ -2556,27 +2523,17 @@ fn draw_search(f: &mut Frame, app: &App, body: Rect) {
         return;
     };
     f.render_widget(pane("Search", true), g.outer);
+    let (shown, col) = s.query.view(g.query.width.saturating_sub(1) as usize);
     let query_line = if s.query.is_empty() {
         Line::from(vec![
             Span::styled("/", bold()),
             Span::styled("type to search every chat", t.hint),
         ])
     } else {
-        Line::from(vec![
-            Span::styled("/", bold()),
-            Span::raw(tail(
-                &clean_line(&s.query),
-                (g.query.width as usize).saturating_sub(2),
-            )),
-        ])
+        Line::from(vec![Span::styled("/", bold()), Span::raw(shown)])
     };
     f.render_widget(Paragraph::new(query_line), g.query);
-    let shown = tail(
-        &clean_line(&s.query),
-        (g.query.width as usize).saturating_sub(2),
-    );
-    let x = g.query.x + (1 + sw(&shown)).min(g.query.width.saturating_sub(1) as usize) as u16;
-    f.set_cursor_position((x, g.query.y));
+    f.set_cursor_position((g.query.x + 1 + col as u16, g.query.y));
     let look = app.look();
     let w = g.list.width as usize;
     // Narrow: the network is one letter and the time goes, so the matched text keeps the room.
@@ -2632,7 +2589,7 @@ fn draw_search(f: &mut Frame, app: &App, body: Rect) {
             row,
         );
     }
-    let (status, style) = match (&s.error, s.query.trim().is_empty(), s.hits.len()) {
+    let (status, style) = match (&s.error, s.query.text().trim().is_empty(), s.hits.len()) {
         (Some(e), _, _) => (e.clone(), t.error),
         (None, true, _) => ("Type to search".to_string(), t.hint),
         (None, false, 0) => ("No messages match".to_string(), t.hint),

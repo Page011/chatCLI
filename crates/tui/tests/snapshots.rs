@@ -42,13 +42,6 @@ fn new_app() -> App {
     })
 }
 
-/// An app with the vim preset (as `preset = "vim"` or `--keys vim` would give).
-fn new_vim_app() -> App {
-    let mut s = Settings::default();
-    s.keys.preset = "vim".into();
-    new_app_with(s)
-}
-
 fn new_app_with(settings: Settings) -> App {
     App::with_settings(
         Clock {
@@ -56,7 +49,6 @@ fn new_app_with(settings: Settings) -> App {
             tz: Some(zone()),
         },
         &settings,
-        None,
     )
 }
 
@@ -196,7 +188,7 @@ fn open_chat_in(mut app: App) -> App {
         Status::NeedsLogin { reason: None },
     ));
     app.handle_event(Event::Chats(Network::Teams, teams_chats()));
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('i'));
     app.handle_event(Event::Messages {
         network: Network::Teams,
         chat_id: "alex".into(),
@@ -494,6 +486,8 @@ fn whatsapp_not_live_phone_offline() {
 fn narrow_layout_list_and_open_conversation() {
     let mut app = open_chat_app();
     let list = render(&mut app, 50, 20);
+    // Esc: the message box to selection, then selection to the chat list.
+    press(&mut app, KeyCode::Esc);
     press(&mut app, KeyCode::Esc);
     let list_again = render(&mut app, 50, 20);
     assert_eq!(list_again.lines().next(), list.lines().next());
@@ -612,84 +606,14 @@ fn press_mod(app: &mut App, code: KeyCode, mods: KeyModifiers) {
     });
 }
 
-/// Vim Normal mode: `-- NORMAL --` at the left of the footer, the chat list in focus.
 #[test]
-fn vim_normal_mode() {
-    both_sizes("vim_normal", || {
-        let mut app = online_in(new_vim_app());
-        press(&mut app, KeyCode::Char('j'));
-        press(&mut app, KeyCode::Char('k'));
-        app
-    });
-}
-
-/// Vim Insert mode: the message box has focus and the footer says so.
-#[test]
-fn vim_insert_mode() {
-    both_sizes("vim_insert", || open_chat_in(new_vim_app()));
-}
-
-/// A held `g` shows in the footer next to the mode.
-#[test]
-fn vim_pending_g_is_echoed() {
-    both_sizes("vim_pending_g", || {
-        let mut app = online_in(new_vim_app());
-        press(&mut app, KeyCode::Char('g'));
-        app
-    });
-}
-
-/// The `:` box above the footer, with some text typed.
-#[test]
-fn vim_command_box() {
-    both_sizes("vim_command_box", || {
-        let mut app = online_in(new_vim_app());
-        press(&mut app, KeyCode::Char(':'));
-        type_str(&mut app, "keys default");
-        app
-    });
-}
-
-fn error_app_in(mut app: App) -> App {
-    app.handle_event(Event::Status(
-        Network::Teams,
-        Status::Error {
-            message: "Teams refused the saved sign-in: run chatcli teams login.".into(),
-        },
-    ));
-    app.handle_event(Event::Chats(Network::Teams, teams_chats()));
-    app
-}
-
-/// The mode label must stay visible when a problem takes the only footer row.
-#[test]
-fn vim_mode_label_survives_a_one_row_footer() {
-    let mut app = error_app_in(new_vim_app());
-    let got = render(&mut app, 40, 12);
-    let footer = got.lines().nth(11).unwrap();
-    assert!(footer.starts_with("-- NORMAL --"), "{got}");
-    check("vim_tiny", 40, 12, &got);
-}
-
-#[test]
-fn help_overlay_default_preset() {
+fn help_overlay() {
     for (w, h) in [(80, 24), (40, 12)] {
         let mut app = online_in(new_app());
         press(&mut app, KeyCode::Char('?'));
         let got = render(&mut app, w, h);
-        assert!(got.contains("default preset, no user bindings"), "{got}");
+        assert!(got.contains("No user bindings"), "{got}");
         check("help_default", w, h, &got);
-    }
-}
-
-#[test]
-fn help_overlay_vim_preset() {
-    for (w, h) in [(80, 24), (40, 12)] {
-        let mut app = online_in(new_vim_app());
-        press(&mut app, KeyCode::Char('?'));
-        let got = render(&mut app, w, h);
-        assert!(got.contains("vim preset, no user bindings"), "{got}");
-        check("help_vim", w, h, &got);
     }
 }
 
@@ -705,7 +629,7 @@ fn help_overlay_scrolls() {
     }
     let end = render(&mut app, 40, 12);
     assert_ne!(top, end);
-    assert!(end.contains("Close help"), "{end}");
+    assert!(end.contains("This help"), "{end}");
     check("help_default_end", 40, 12, &end);
 }
 
@@ -720,7 +644,7 @@ fn help_too_small_says_so() {
         "{got}"
     );
     // The close key still works there.
-    press(&mut app, KeyCode::Char('?'));
+    press(&mut app, KeyCode::Esc);
     let got = render(&mut app, 32, 9);
     assert!(!got.contains("too small for help"), "{got}");
 }
@@ -730,30 +654,22 @@ fn help_too_small_says_so() {
 fn rebinding_changes_help_and_footer() {
     let mut s = Settings::default();
     s.keys.bindings.entry("list".into()).or_default().extend([
-        ("ctrl+n".to_string(), "list_down".to_string()),
-        ("ctrl+p".to_string(), "list_up".to_string()),
-        ("q".to_string(), "unbound".to_string()),
+        ("ctrl+n".to_string(), "down".to_string()),
+        ("ctrl+p".to_string(), "up".to_string()),
         ("ctrl+q".to_string(), "quit".to_string()),
     ]);
     let mut app = online_in(new_app_with(s));
     let list = render(&mut app, 100, 30);
     let footer = list.lines().nth(29).unwrap();
     assert!(
-        footer.contains("Ctrl+P/Ctrl+N chat") && footer.contains("Ctrl+Q quit"),
-        "{footer}"
-    );
-    assert!(
-        !footer.contains("Up/Down") && !footer.contains(" q quit"),
+        footer.contains("Ctrl+P/Ctrl+N chat") && !footer.contains("Up/Down"),
         "{footer}"
     );
     press(&mut app, KeyCode::Char('?'));
-    let help = render(&mut app, 100, 40);
-    assert!(help.contains("Ctrl+N, Down"), "{help}");
-    assert!(help.contains("default preset, 4 user bindings"), "{help}");
-    // The unbound `q` quits no more, Ctrl+Q does.
+    let help = render(&mut app, 100, 60);
+    assert!(help.contains("Ctrl+N"), "{help}");
+    assert!(help.contains("3 user bindings"), "{help}");
     press(&mut app, KeyCode::Esc);
-    press(&mut app, KeyCode::Char('q'));
-    assert!(!app.should_quit());
     press_mod(&mut app, KeyCode::Char('q'), KeyModifiers::CONTROL);
     assert!(app.should_quit());
 }
@@ -804,7 +720,7 @@ fn render_cursor(app: &mut App, w: u16, h: u16) -> String {
 /// Teams, Alex Example open with the message box focused and an empty draft.
 fn typing_app() -> App {
     let mut app = online_in(new_app());
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('i'));
     app
 }
 
@@ -812,9 +728,23 @@ fn alt_enter(app: &mut App) {
     press_mod(app, KeyCode::Enter, KeyModifiers::ALT);
 }
 
-/// Alex Example open in the pane, focus back on the list (what `u` reads).
+/// A `[keys]` table with one binding.
+fn one_binding(ctx: &str, key: &str, action: &str) -> Settings {
+    let mut s = Settings::default();
+    s.keys
+        .bindings
+        .entry(ctx.into())
+        .or_default()
+        .insert(key.into(), action.into());
+    s
+}
+
+/// Alex Example open in the pane, focus back on the list (what `u` reads: `open_link` has no
+/// default key in the chat list, so u is bound here).
 fn chat_open_list_focus() -> App {
-    let mut app = typing_app();
+    // Enter goes into the chat (message selection), Esc back to the list.
+    let mut app = online_in(new_app_with(one_binding("list", "u", "open_link")));
+    press(&mut app, KeyCode::Enter);
     press(&mut app, KeyCode::Esc);
     app
 }
@@ -1005,6 +935,7 @@ fn emoji_picker_search_and_empty_results() {
 #[test]
 fn emoji_picker_for_reactions_has_its_own_title() {
     let mut app = typing_app();
+    press(&mut app, KeyCode::Esc);
     press(&mut app, KeyCode::Esc);
     app.open_reaction_picker("alex", "m4");
     let got = render_cursor(&mut app, 80, 24);
@@ -1209,13 +1140,13 @@ fn help_lists_the_editing_popup_and_link_keys() {
         "Clear line",
         "Insert newline",
         "Emoji picker",
-        "Popup accept",
+        "Accept",
         "Open link",
         "Confirm yes",
     ] {
         assert!(got.contains(name), "{name} missing:\n{got}");
     }
-    assert!(got.contains("Ctrl+J, Alt+Enter, Shift+Enter"), "{got}");
+    assert!(got.contains("Shift+Enter, Ctrl+J, Alt+Enter"), "{got}");
     check("help_default_tall", 100, 140, &got);
 }
 
@@ -1332,7 +1263,7 @@ fn rich_in(mut app: App, caps: bool) -> App {
             caps: Capabilities::all(),
         });
     }
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('i'));
     app.handle_event(Event::Messages {
         network: Network::Teams,
         chat_id: "alex".into(),
@@ -1341,8 +1272,9 @@ fn rich_in(mut app: App, caps: bool) -> App {
     app
 }
 
-fn ctrl_up(app: &mut App) {
-    press_mod(app, KeyCode::Up, KeyModifiers::CONTROL);
+/// From the message box into message selection: Esc.
+fn to_selection(app: &mut App) {
+    press(app, KeyCode::Esc);
 }
 
 /// Selection on `id`: from the newest, Up past the messages that can be selected (the deleted
@@ -1353,7 +1285,7 @@ fn select_msg(app: &mut App, id: &str) {
         .iter()
         .position(|m| *m == id)
         .expect("a selectable id");
-    ctrl_up(app);
+    to_selection(app);
     for _ in 0..order.len() - 1 - at {
         press(app, KeyCode::Up);
     }
@@ -1368,7 +1300,7 @@ fn conversation_shows_quotes_reactions_edited_deleted_and_mentions() {
 fn select_newest_message() {
     both_sizes("select_newest", || {
         let mut app = rich_app(true);
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         app
     });
 }
@@ -1398,15 +1330,6 @@ fn select_before_capabilities_dims_everything() {
     select_msg(&mut app, "m2");
     let got = render(&mut app, 100, 30);
     check("select_no_caps", 100, 30, &got);
-}
-
-#[test]
-fn select_in_the_vim_preset_says_select() {
-    let mut app = rich_in(new_vim_app(), true);
-    ctrl_up(&mut app);
-    let got = render(&mut app, 100, 30);
-    assert!(got.contains("-- SELECT --"), "{got}");
-    check("select_vim", 100, 30, &got);
 }
 
 #[test]
@@ -1443,7 +1366,7 @@ fn edit_line_above_the_message_box() {
     both_sizes_cursor_app("edit_target", || {
         let mut app = rich_app(true);
         select_msg(&mut app, "m4");
-        press(&mut app, KeyCode::Char('E'));
+        press(&mut app, KeyCode::Char('c'));
         app
     });
 }
@@ -1480,7 +1403,7 @@ fn both_sizes_cursor_app(name: &str, mut build: impl FnMut() -> App) {
 fn group_app() -> App {
     let mut app = online_in(new_app());
     press(&mut app, KeyCode::Down);
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('i'));
     app.handle_event(Event::Messages {
         network: Network::Teams,
         chat_id: "proj".into(),
@@ -1560,7 +1483,7 @@ fn message_actions_never_panic_at_any_size() {
         let _ = render_cursor(&mut app, w, h);
         press(&mut app, KeyCode::Esc);
         select_msg(&mut app, "m4");
-        press(&mut app, KeyCode::Char('E'));
+        press(&mut app, KeyCode::Char('c'));
         let _ = render_cursor(&mut app, w, h);
         press(&mut app, KeyCode::Esc);
         select_msg(&mut app, "m4");
@@ -1704,7 +1627,7 @@ fn open_media_in(mut app: App, depth: Depth) -> App {
         caps: Capabilities::all(),
     });
     app.handle_event(Event::Chats(Network::Teams, teams_chats()));
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('i'));
     app
 }
 
@@ -1712,7 +1635,7 @@ fn open_media_in(mut app: App, depth: Depth) -> App {
 fn select_media(app: &mut App, id: &str) {
     let order = ["m1", "m2", "m3", "m4", "m5", "m6"];
     let at = order.iter().position(|m| *m == id).expect("an id");
-    ctrl_up(app);
+    to_selection(app);
     for _ in 0..order.len() - 1 - at {
         press(app, KeyCode::Up);
     }
@@ -1751,10 +1674,14 @@ fn attachment_chips_and_their_states() {
         let jobs = app.take_open_files();
         assert_eq!(jobs.len(), 1);
         app.open_done(&jobs[0], Ok(()));
-        // m4: the link has expired.
-        press(&mut app, KeyCode::Esc);
+        // m4: the link has expired. i leaves selection for the message box (select_media starts there).
+        press(&mut app, KeyCode::Char('i'));
         select_media(&mut app, "m4");
-        press(&mut app, KeyCode::Char('o'));
+        let out = press_out(&mut app, KeyCode::Char('o'));
+        assert!(
+            matches!(&out[..], [(_, Command::FetchMedia { .. })]),
+            "o on m4 asks for it: {out:?}"
+        );
         app.handle_event(Event::MediaFailed {
             network: Network::Teams,
             chat_id: "alex".into(),
@@ -1763,8 +1690,8 @@ fn attachment_chips_and_their_states() {
             reason: "MEDIA EXPIRED".into(),
             fallback_url: None,
         });
-        // m2: still downloading.
-        press(&mut app, KeyCode::Esc);
+        // m2: still downloading. i leaves selection for the message box.
+        press(&mut app, KeyCode::Char('i'));
         select_media(&mut app, "m2");
         let out = press_out(&mut app, KeyCode::Char('o'));
         assert!(matches!(out[0].1, Command::FetchMedia { .. }));
@@ -1844,8 +1771,9 @@ fn thumbnail_clips_when_scrolled_partly_out() {
         press(&mut a, KeyCode::Char('v'));
         media_ready(&mut a, "m2", &png);
         decode_now(&mut a);
-        // Leave selection: while a message is selected a resize keeps it in view.
-        press(&mut a, KeyCode::Esc);
+        // Leave selection (for the message box): while a message is selected a resize keeps it
+        // in view.
+        press(&mut a, KeyCode::Char('i'));
         a.resize(80, 16);
         for _ in 0..steps {
             a.handle_mouse(MouseEvent {
@@ -2050,26 +1978,6 @@ fn upload_progress_on_the_message_and_in_the_footer() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// Vim preset: the chip, the path prompt and `o` / `v` all work from Insert and Select.
-#[test]
-fn vim_preset_has_the_attachment_keys() {
-    let dir = attach_dir("vim_preset_has_the_attac");
-    let mut app = open_media_in(new_vim_app(), Depth::True);
-    app.set_attach_dir(dir.clone());
-    app.handle_event(Event::Messages {
-        network: Network::Teams,
-        chat_id: "alex".into(),
-        messages: media_history(),
-    });
-    ctrl_o(&mut app);
-    type_str(&mut app, "notes.txt");
-    press(&mut app, KeyCode::Enter);
-    let got = render(&mut app, 100, 30);
-    assert!(got.contains("[notes.txt 1 B]"), "{got}");
-    check("attach_chip_vim", 100, 30, &got);
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
 // ---------------------------------------------------------------------------------------------
 // Everyday stage: themes (22), layout (23), older history (29, 30), unread (31), pin, mute and
 // hide (32), search (33), typing (52).
@@ -2108,7 +2016,7 @@ fn themed(settings: Settings) -> App {
             detail: Some("phone is offline".into()),
         },
     ));
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('i'));
     type_str(&mut app, "this one will fail");
     press(&mut app, KeyCode::Enter);
     app.handle_event(Event::MessageFailed {
@@ -2117,6 +2025,7 @@ fn themed(settings: Settings) -> App {
         client_id: format!("local-{}-1", ts(2026, 11, 16, 9, 30)),
         error: "demo: this chat refuses messages".into(),
     });
+    press(&mut app, KeyCode::Esc);
     press(&mut app, KeyCode::Esc);
     app
 }
@@ -2340,7 +2249,7 @@ fn pinned_muted_and_hidden_chats() {
     both_sizes("chat_flags", flagged_app);
     both_sizes("chat_flags_hidden_shown", || {
         let mut app = flagged_app();
-        press(&mut app, KeyCode::Char('H'));
+        press(&mut app, KeyCode::Char('Z'));
         app
     });
     // The tab total leaves the muted 100 and the hidden chat out: 2 (Alex) + 1 (Sam).
@@ -2349,6 +2258,13 @@ fn pinned_muted_and_hidden_chats() {
 }
 
 // ---- unread ----
+
+/// `:readall`, which asks y/n.
+fn readall(app: &mut App) {
+    press(app, KeyCode::Char(':'));
+    type_str(app, "readall");
+    press(app, KeyCode::Enter);
+}
 
 #[test]
 fn jump_to_the_next_unread_chat_and_mark_all_read() {
@@ -2359,11 +2275,11 @@ fn jump_to_the_next_unread_chat_and_mark_all_read() {
     });
     both_sizes("mark_all_read_prompt", || {
         let mut app = online_in(new_app());
-        press(&mut app, KeyCode::Char('M'));
+        readall(&mut app);
         app
     });
     let mut app = online_in(new_app());
-    press(&mut app, KeyCode::Char('M'));
+    readall(&mut app);
     press(&mut app, KeyCode::Char('y'));
     let got = render(&mut app, 100, 30);
     assert!(!got.contains("Teams 3"), "the tab total is gone: {got}");
@@ -2374,7 +2290,7 @@ fn jump_to_the_next_unread_chat_and_mark_all_read() {
 
 fn many_messages_app() -> App {
     let mut app = online_in(new_app());
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('i'));
     let msgs: Vec<ChatMessage> = (0..40)
         .map(|i| {
             msg(
@@ -2627,7 +2543,7 @@ fn wa_typing_app() -> App {
 fn someone_typing_shows_on_the_sidebar_row_and_above_the_message_box() {
     both_sizes("typing", || {
         let mut app = wa_typing_app();
-        press(&mut app, KeyCode::Enter);
+        press(&mut app, KeyCode::Char('i'));
         app.handle_event(Event::Typing {
             network: Network::WhatsApp,
             chat_id: "riley".into(),
@@ -2689,12 +2605,12 @@ fn everyday_screens_never_panic_at_any_size() {
         }),
         ("flags", || {
             let mut app = flagged_app();
-            press(&mut app, KeyCode::Char('H'));
+            press(&mut app, KeyCode::Char('Z'));
             app
         }),
         ("mark all read prompt", || {
             let mut app = online_in(new_app());
-            press(&mut app, KeyCode::Char('M'));
+            readall(&mut app);
             app
         }),
         ("loading older", || {
@@ -2704,7 +2620,7 @@ fn everyday_screens_never_panic_at_any_size() {
         }),
         ("typing", || {
             let mut app = wa_typing_app();
-            press(&mut app, KeyCode::Enter);
+            press(&mut app, KeyCode::Char('i'));
             app.handle_event(Event::Typing {
                 network: Network::WhatsApp,
                 chat_id: "riley".into(),
@@ -2761,10 +2677,10 @@ fn at_sizes(name: &str, sizes: &[(u16, u16)], mut build: impl FnMut() -> App) {
     }
 }
 
-/// Teams online with chats, the `/` bar open with `text` typed.
+/// Teams online with chats, the `:` bar open with `text` typed.
 fn bar_app(text: &str) -> App {
     let mut app = online_in(new_app());
-    press(&mut app, KeyCode::Char('/'));
+    press(&mut app, KeyCode::Char(':'));
     type_str(&mut app, text);
     app
 }
@@ -2804,41 +2720,42 @@ fn command_bar_no_match() {
 fn command_bar_scrolls_with_the_selection() {
     let mut app = bar_app("");
     app.resize(40, 12);
-    for _ in 0..12 {
+    for _ in 0..13 {
         press(&mut app, KeyCode::Down);
     }
     let got = render(&mut app, 40, 12);
     // The last command is chosen and on screen.
-    assert!(got.contains("/quit"), "{got}");
+    assert!(got.contains(":quit"), "{got}");
     check("command_bar_scrolled", 40, 12, &got);
+}
+
+/// The bar's prompt is its key: `:` by default, the user's own one-character key when rebound.
+#[test]
+fn command_bar_prompt_is_its_key() {
+    let got = render(&mut bar_app(""), 80, 24);
+    assert!(got.contains(":type a command or chat name"), "{got}");
+    let mut app = online_in(new_app_with(one_binding("common", ";", "command_bar")));
+    press(&mut app, KeyCode::Char(';'));
+    let got = render(&mut app, 80, 24);
+    assert!(got.contains(";type a command or chat name"), "{got}");
 }
 
 #[test]
 fn command_bar_dims_what_cannot_run() {
-    // Signed in: /signin cannot run and is drawn dim.
+    // Signed in: :signin cannot run and is drawn dim.
     let mut app = bar_app("sign");
     let got = render(&mut app, 80, 24);
-    assert!(got.contains("/signin"), "{got}");
+    assert!(got.contains(":signin"), "{got}");
     assert!(got.contains("DIM"), "{got}");
 }
 
 #[test]
-fn composer_slash_popup() {
-    at_sizes("composer_slash_popup", &[(100, 30), (80, 24)], || {
+/// `:se` at the start of the message box: the matching commands, then the matching emoji.
+fn composer_colon_popup() {
+    at_sizes("composer_colon_popup", &[(100, 30), (80, 24)], || {
         let mut app = online_in(new_app());
-        press(&mut app, KeyCode::Enter);
-        type_str(&mut app, "/s");
-        app
-    });
-}
-
-#[test]
-fn unknown_command_notice() {
-    at_sizes("unknown_command", &[(80, 24)], || {
-        let mut app = online_in(new_app());
-        press(&mut app, KeyCode::Enter);
-        type_str(&mut app, "/foo");
-        press(&mut app, KeyCode::Enter);
+        press(&mut app, KeyCode::Char('i'));
+        type_str(&mut app, ":se");
         app
     });
 }
@@ -2847,7 +2764,7 @@ fn unknown_command_notice() {
 fn signout_prompt() {
     at_sizes("signout_prompt", &[(80, 24)], || {
         let mut app = online_in(new_app());
-        press(&mut app, KeyCode::Char('/'));
+        press(&mut app, KeyCode::Char(':'));
         type_str(&mut app, "signout");
         press(&mut app, KeyCode::Enter);
         app
@@ -2888,7 +2805,7 @@ fn demo_sign_in_panel() {
     ));
     let got = render(&mut real, 80, 24);
     assert!(got.contains("opens browser"), "{got}");
-    assert!(got.contains("Type / for commands"), "{got}");
+    assert!(got.contains("Press : for commands"), "{got}");
 }
 
 #[test]
@@ -2897,7 +2814,7 @@ fn empty_pane_points_at_commands() {
         online_in(new_app())
     });
     let got = render(&mut online_in(new_app()), 100, 30);
-    assert!(got.contains("Type / for commands"), "{got}");
+    assert!(got.contains("Press : for commands"), "{got}");
 }
 
 /// The footer tells a new user how to find commands and help, in every screen that has one.
@@ -2913,23 +2830,22 @@ fn footers_point_at_commands_and_help() {
     };
     let select = || {
         let mut app = open_chat_app();
-        press_mod(&mut app, KeyCode::Up, KeyModifiers::CONTROL);
+        to_selection(&mut app);
         app
     };
-    let screens: [(&str, App, &str); 5] = [
-        ("list", online_in(new_app()), "? help"),
-        ("composer", typing_app(), "F1 help"),
-        ("panel", panel(), "? help"),
+    let screens: [(&str, App, &str, &str); 4] = [
+        ("list", online_in(new_app()), ": commands", "? help"),
+        ("composer", typing_app(), ": commands", "F1 help"),
+        ("panel", panel(), ": commands", "? help"),
         // 80 columns keep the way out (Esc back) and the bar; help follows on wider screens.
-        ("select", select(), "Esc back"),
-        ("vim list", online_in(new_vim_app()), "? help"),
+        ("select", select(), ": commands", "Esc back"),
     ];
-    for (what, mut app, help) in screens {
+    for (what, mut app, commands, help) in screens {
         let got = render(&mut app, 80, 24);
         // The screen is the first 24 lines of the dump: the footer is the last two.
         let screen: Vec<&str> = got.lines().take(24).collect();
         let footer = screen[22..].join(" ");
-        assert!(footer.contains("/ commands"), "{what}:\n{got}");
+        assert!(footer.contains(commands), "{what}:\n{got}");
         assert!(footer.contains(help), "{what}:\n{got}");
     }
 }
@@ -2995,15 +2911,51 @@ fn settings_whatsapp() {
 /// tests below check the footer names `refresh`, so a reordered page fails loudly).
 fn keys_app() -> App {
     let mut app = settings_app(6, true);
-    for _ in 0..20 {
+    for _ in 0..*REFRESH_ROW_DOWNS.get_or_init(refresh_row_downs) {
         press(&mut app, KeyCode::Down);
     }
     app
 }
 
+/// How many Down presses take the keys page from its first row to the chat list's Refresh row:
+/// found once by trying, so adding or removing an action above it needs no recount.
+static REFRESH_ROW_DOWNS: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+
+fn refresh_row_downs() -> usize {
+    (0..200)
+        .find(|&n| {
+            let mut app = settings_app(6, true);
+            for _ in 0..n {
+                press(&mut app, KeyCode::Down);
+            }
+            press(&mut app, KeyCode::Enter);
+            render(&mut app, 100, 30).contains("Press the new key for Refresh ")
+        })
+        .expect("the Refresh row of the chat list")
+}
+
 #[test]
 fn settings_keys() {
     at_sizes("settings_keys", &[(100, 30), (80, 24), (40, 12)], keys_app);
+}
+
+/// `/` on the Keys page: the actions that match, under their context, while the filter is typed
+/// and after Enter keeps it.
+#[test]
+fn keys_filtered() {
+    at_sizes("keys_filtering", &[(80, 24)], || {
+        let mut app = settings_app(6, true);
+        press(&mut app, KeyCode::Char('/'));
+        type_str(&mut app, "ctrl+");
+        app
+    });
+    at_sizes("keys_filtered", &[(80, 24)], || {
+        let mut app = settings_app(6, true);
+        press(&mut app, KeyCode::Char('/'));
+        type_str(&mut app, "unread");
+        press(&mut app, KeyCode::Enter);
+        app
+    });
 }
 
 /// Waiting for the new key: the footer asks, Esc cancels.
@@ -3031,6 +2983,54 @@ fn key_conflict() {
     });
 }
 
+/// `a` then F5 and F6: Refresh has three keys.
+fn keys_app_three_keys() -> App {
+    let mut app = keys_app();
+    for k in [KeyCode::F(5), KeyCode::F(6)] {
+        press(&mut app, KeyCode::Char('a'));
+        press(&mut app, k);
+    }
+    app
+}
+
+/// `a`: waiting for a key to add.
+#[test]
+fn key_add() {
+    at_sizes("key_add", &[(100, 30), (80, 24)], || {
+        let mut app = keys_app();
+        press(&mut app, KeyCode::Char('a'));
+        let got = render(&mut app, 100, 30);
+        assert!(got.contains("Press a key to add to Refresh"), "{got}");
+        app
+    });
+}
+
+/// `d` then Right: the second of three keys is chosen, in the selection colour only.
+#[test]
+fn key_pick() {
+    at_sizes("key_pick", &[(100, 30), (80, 24), (40, 12)], || {
+        let mut app = keys_app_three_keys();
+        press(&mut app, KeyCode::Char('d'));
+        press(&mut app, KeyCode::Right);
+        let got = render(&mut app, 100, 30);
+        assert!(got.contains("F5, F6, r *"), "{got}");
+        app
+    });
+    // More keys than the 40-column value fits: the chosen last key is still on screen.
+    at_sizes("key_pick_far", &[(40, 12)], || {
+        let mut app = keys_app_three_keys();
+        for k in [KeyCode::F(7), KeyCode::F(8), KeyCode::F(9)] {
+            press(&mut app, KeyCode::Char('a'));
+            press(&mut app, k);
+        }
+        press(&mut app, KeyCode::Char('d'));
+        press(&mut app, KeyCode::Left);
+        let got = render(&mut app, 40, 12);
+        assert!(got.contains("…") && got.contains(", r"), "{got}");
+        app
+    });
+}
+
 fn no_colour(mut app: App) -> App {
     app.set_theme(Theme::from_settings(&Settings::default().theme, true).0);
     app
@@ -3054,6 +3054,12 @@ fn the_new_screens_under_no_colour_and_high_contrast() {
     at_sizes("command_bar_no_color", &[(80, 24)], || {
         no_colour(bar_app("se"))
     });
+    at_sizes("key_pick_no_color", &[(80, 24)], || {
+        let mut app = no_colour(keys_app_three_keys());
+        press(&mut app, KeyCode::Char('d'));
+        press(&mut app, KeyCode::Right);
+        app
+    });
     at_sizes("key_conflict_high_contrast", &[(80, 24)], || {
         let mut app = high_contrast(keys_app());
         press(&mut app, KeyCode::Enter);
@@ -3066,13 +3072,13 @@ fn the_new_screens_under_no_colour_and_high_contrast() {
 #[test]
 fn key_capture_refused() {
     at_sizes("key_capture_refused", &[(80, 24)], || {
-        // The first Everywhere row (quit): a plain key would stop typing everywhere.
+        // The first Everywhere row (quit), and a key settings.toml has no name for.
         let mut app = settings_app(6, true);
         press(&mut app, KeyCode::Down);
         press(&mut app, KeyCode::Enter);
-        press(&mut app, KeyCode::Char('x'));
+        press(&mut app, KeyCode::Null);
         let got = render(&mut app, 80, 24);
-        assert!(got.contains("x types text here"), "{got}");
+        assert!(got.contains("This key cannot be saved"), "{got}");
         app
     });
 }
@@ -3084,7 +3090,7 @@ fn keys_reset_all_prompt() {
         press(&mut app, KeyCode::Up);
         press(&mut app, KeyCode::Enter);
         let got = render(&mut app, 80, 24);
-        assert!(got.contains("Reset every key to the preset? y/n"), "{got}");
+        assert!(got.contains("Reset every key to its default? y/n"), "{got}");
         app
     });
 }
@@ -3097,21 +3103,9 @@ fn key_rebound_footer() {
         press(&mut app, KeyCode::Enter);
         press(&mut app, KeyCode::F(5));
         press(&mut app, KeyCode::Esc);
-        let got = render(&mut app, 80, 24);
+        // Refresh is far down the chat list's footer: a wide screen shows it.
+        let got = render(&mut app, 160, 24);
         assert!(got.contains("F5 refresh"), "{got}");
-        app
-    });
-}
-
-/// The vim preset from the page: the footer shows the mode at once.
-#[test]
-fn key_preset_row_switches_to_vim() {
-    at_sizes("key_preset_row_vim", &[(80, 24)], || {
-        let mut app = settings_app(6, true);
-        press(&mut app, KeyCode::Right);
-        press(&mut app, KeyCode::Esc);
-        let got = render(&mut app, 80, 24);
-        assert!(got.contains("-- NORMAL --"), "{got}");
         app
     });
 }
@@ -3129,7 +3123,7 @@ fn keys_ui_survives_every_terminal_size() {
                         press(&mut app, KeyCode::Char('p'));
                     }
                     2 => {
-                        press(&mut app, KeyCode::Char('x'));
+                        press(&mut app, KeyCode::Char('z'));
                     }
                     3 => {
                         press(&mut app, KeyCode::F(5));
@@ -3268,8 +3262,12 @@ fn commands_ui_survives_every_terminal_size() {
         }),
         ("popup", || {
             let mut app = online_in(new_app());
-            press(&mut app, KeyCode::Enter);
-            type_str(&mut app, "/");
+            press(&mut app, KeyCode::Char('i'));
+            type_str(&mut app, ":");
+            assert!(
+                render(&mut app, 80, 24).contains("Commands"),
+                "the commands list"
+            );
             app
         }),
     ];

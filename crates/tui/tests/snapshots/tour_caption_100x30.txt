@@ -9,7 +9,7 @@ TOUR 1/26 - Welcome to the chatcli demo: fake chats, nothing is sent.
 ║     You: see you tomorrow  ║│                                                                    │
 ║     Release Planning f… Fri║│                                                                    │
 ║     Jordan Placeholder: ag…║│              Select a chat and press Enter to open it.             │
-║     田中太郎 (Tar… 05/11/26║│             Type / for commands: /help /settings /keys             │
+║     田中太郎 (Tar… 05/11/26║│             Press : for commands: help, settings, keys             │
 ║     了解しました           ║│                                                                    │
 ║     Jordan Placeh… 09/10/26║│                                                                    │
 ║     You: thanks            ║│                                                                    │

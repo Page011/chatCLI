@@ -8,7 +8,7 @@
 ║     You: see you tomorrow  ║│                                                                    │
 ║     Release Planning f… Fri║│                                                                    │
 ║     Jordan Placeholder: ag…║│              Select a chat and press Enter to open it.             │
-║     田中太郎 (Tar… 05/11/26║│             Type / for commands: /help /settings /keys             │
+║     田中太郎 (Tar… 05/11/26║│             Press : for commands: help, settings, keys             │
 ║     了解しました           ║│                                                                    │
 ║     Jordan Placeh… 09/10/26║│                                                                    │
 ║     You: thanks            ║│                                                                    │
@@ -27,7 +27,7 @@
 ╚════════════════════════════╝└────────────────────────────────────────────────────────────────────┘
 settings.toml line 5: [theme] dim: "banana" is not a colour: use a name like red or dark_gray, a
 number 0-255, or #rrggbb. Using the theme's own value for "dim".
-Up/Down chat  Enter open  / commands  ? help  Tab network  r refresh  q quit
+Up/Down chat  Enter open  i type  / filter  : commands  ? help  Tab network  r refresh  Ctrl+C quit
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -71,4 +71,4 @@ row 22 cols 31-98: fg=Reset bg=Reset DIM
 row 25 cols 31-49: fg=Reset bg=Reset DIM
 row 27 cols 0-95: fg=Red bg=Reset NONE
 row 28 cols 0-63: fg=Red bg=Reset NONE
-row 29 cols 0-75: fg=Reset bg=Reset DIM
+row 29 cols 0-98: fg=Reset bg=Reset DIM

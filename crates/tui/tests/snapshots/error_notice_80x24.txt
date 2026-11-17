@@ -6,7 +6,7 @@
 ║     Sam Sample: thanks   ║│                                                  │
 ║  1  Sam Sample        Sun║│                                                  │
 ║     You: see you tomorrow║│     Select a chat and press Enter to open it.    │
-║     Release Planning… Fri║│    Type / for commands: /help /settings /keys    │
+║     Release Planning… Fri║│    Press : for commands: help, settings, keys    │
 ║     Jordan Placeholder: …║│                                                  │
 ║     田中太郎 (T… 05/11/26║│                                                  │
 ║     了解しました         ║│                                                  │
@@ -21,7 +21,7 @@
 ╚══════════════════════════╝└──────────────────────────────────────────────────┘
 ERROR: Teams refused the saved sign-in: run chatcli teams login.
 Could not reach the relay: connection refused. Check relay_url in config.json.
-Up/Down chat  Enter open  / commands  ? help  Tab network  r refresh  q quit
+Up/Down chat  Enter open  i type  / filter  : commands  ? help  Tab network
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-25: fg=Reset bg=Reset BOLD | REVERSED
@@ -61,4 +61,4 @@ row 16 cols 29-78: fg=Reset bg=Reset DIM
 row 19 cols 29-47: fg=Reset bg=Reset DIM
 row 21 cols 0-63: fg=Red bg=Reset BOLD
 row 22 cols 0-77: fg=Red bg=Reset NONE
-row 23 cols 0-75: fg=Reset bg=Reset DIM
+row 23 cols 0-74: fg=Reset bg=Reset DIM

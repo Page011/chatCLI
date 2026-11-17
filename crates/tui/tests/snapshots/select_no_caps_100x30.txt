@@ -25,9 +25,9 @@
 │                            │║                                                                    ║
 │                            │╚════════════════════════════════════════════════════════════════════╝
 │                            │┌ Message ───────────────────────────────────────────────────────────┐
-│                            ││Esc to go back and type                                             │
+│                            ││i to type                                                           │
 └────────────────────────────┘└────────────────────────────────────────────────────────────────────┘
-Up/Down move  r reply  e react  u link  E edit  d delete  Esc back  / commands  ? help
+Up/Down move  r reply  e react  u link  c edit  x delete  Esc back  : commands  i type  ? help
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -78,7 +78,7 @@ row 13 cols 1-16: fg=DarkGray bg=Reset NONE
 row 13 cols 31-35: fg=DarkGray bg=Reset NONE
 row 13 cols 37-48: fg=Reset bg=Reset BOLD
 row 13 cols 51-96: fg=DarkGray bg=Reset NONE
-row 27 cols 31-53: fg=Reset bg=Reset DIM
+row 27 cols 31-39: fg=Reset bg=Reset DIM
 row 29 cols 0-11: fg=Reset bg=Reset BOLD
 row 29 cols 12-57: fg=Reset bg=Reset DIM
 row 29 cols 58-65: fg=Reset bg=Reset BOLD
@@ -86,3 +86,5 @@ row 29 cols 66-67: fg=Reset bg=Reset DIM
 row 29 cols 68-77: fg=Reset bg=Reset BOLD
 row 29 cols 78-79: fg=Reset bg=Reset DIM
 row 29 cols 80-85: fg=Reset bg=Reset BOLD
+row 29 cols 86-87: fg=Reset bg=Reset DIM
+row 29 cols 88-93: fg=Reset bg=Reset BOLD

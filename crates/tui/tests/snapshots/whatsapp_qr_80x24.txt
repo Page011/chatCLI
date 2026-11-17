@@ -21,7 +21,7 @@
 
         Linked devices (Android: menu, iPhone: Settings) > Link a device
 
-/ commands  ? help  Tab network  q quit
+: commands  ? help  Tab network  Ctrl+C quit
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 10-18: fg=Reset bg=Reset BOLD
@@ -48,4 +48,4 @@ row 17 cols 22-58: fg=Black bg=White NONE
 row 18 cols 22-58: fg=Black bg=White NONE
 row 19 cols 22-58: fg=Black bg=White NONE
 row 20 cols 22-58: fg=Black bg=White NONE
-row 23 cols 0-38: fg=Reset bg=Reset DIM
+row 23 cols 0-43: fg=Reset bg=Reset DIM

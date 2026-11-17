@@ -21,7 +21,7 @@
 │                          │║  second line                                     ║
 │                          │║  third                                           ║
 └──────────────────────────┘╚══════════════════════════════════════════════════╝
-Enter send  F1 help  Esc back to list  Ctrl+Up select  Ctrl+J newline
+Enter send  F1 help  Esc back  Ctrl+J newline  Ctrl+E emoji  Ctrl+O attach
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -64,5 +64,5 @@ row 18 cols 29-37: fg=Reset bg=Reset BOLD
 row 19 cols 29-30: fg=Reset bg=Reset BOLD
 row 20 cols 29-30: fg=Reset bg=Reset BOLD
 row 21 cols 29-30: fg=Reset bg=Reset BOLD
-row 23 cols 0-68: fg=Reset bg=Reset DIM
+row 23 cols 0-73: fg=Reset bg=Reset DIM
 cursor: 36,21

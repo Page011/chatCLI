@@ -5,23 +5,23 @@
 │99+  Project Team    08:02││                    before Friday?                │
 │     Sam Sample: thanks   ││14:31 You           Will do.                      │
 │  1  Sam Sample        Sun││                ---- Yesterday ----               │
-│     You: see you tomorrow││16:05 Alex Example  Notes from the review: the    │
-│     Release Planning… Fri││                    summary page needs a shorter  │
-│     Jordan Placeholder: …││                    introduction, the figures need│
-│     田中太郎 (T… 05/11/26││                    captions, and the appendix can│
-│     了解しました         ││                    move to the end of the        │
-│     Jordan Plac… 09/10/26││                    document.                     │
-│     You: thanks          ││                  ---- Today ----                 │
-│                          ││09:10 Alex Example  is the build done? 🚀         │
-│                          ││                    今日はどうですか              │
-│                          ││09:15 You           yes, shipped                  │
-│                          ││                                                  │
+│     You: see you tomorrow││┌ Commands ──────────────────────────────────────┐│
+│     Release Planning… Fri│││:settings       theme, layout, keys and more    ││
+│     Jordan Placeholder: …│││:search         search every stored message     ││
+│     田中太郎 (T… 05/11/26│││🦭  :seal:                                      ││
+│     了解しました         │││💺  :seat:                                      ││
+│     Jordan Plac… 09/10/26│││7️⃣  :seven:                                     ││
+│     You: thanks          │││🤳  :selfie:                                    ││
+│                          │││㊙️  :secret:                                    ││
+│                          │││🇷🇸  :serbia:                                    ││
+│                          │││🇸🇳  :senegal:                                   ││
+│                          │││🌱  :seedling:                                  ││
+│                          ││└────────────────────────────────────────────────┘│
 │                          │└──────────────────────────────────────────────────┘
 │                          │╔ Message ═════════════════════════════════════════╗
-│                          │║> /foo                                            ║
+│                          │║> :se                                             ║
 └──────────────────────────┘╚══════════════════════════════════════════════════╝
-UNKNOWN COMMAND /foo - start with // to send as text
-Enter send  F1 help  Esc back to list  Ctrl+Up select  Ctrl+J newline
+Enter run  Up/Down choose  Esc close
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -44,23 +44,25 @@ row 6 cols 6-22: fg=Reset bg=Reset BOLD
 row 6 cols 23-26: fg=DarkGray bg=Reset NONE
 row 6 cols 45-63: fg=DarkGray bg=Reset NONE
 row 7 cols 1-26: fg=DarkGray bg=Reset NONE
-row 7 cols 29-33: fg=DarkGray bg=Reset NONE
-row 7 cols 35-46: fg=Reset bg=Reset BOLD
 row 8 cols 1-4: fg=Reset bg=Reset BOLD
 row 8 cols 23-26: fg=DarkGray bg=Reset NONE
+row 8 cols 30-77: fg=Reset bg=Reset BOLD | REVERSED
 row 9 cols 1-26: fg=DarkGray bg=Reset NONE
+row 9 cols 46-72: fg=DarkGray bg=Reset NONE
 row 10 cols 1-4: fg=Reset bg=Reset BOLD
 row 10 cols 18-26: fg=DarkGray bg=Reset NONE
+row 10 cols 34-39: fg=DarkGray bg=Reset NONE
 row 11 cols 1-17: fg=DarkGray bg=Reset NONE
+row 11 cols 34-39: fg=DarkGray bg=Reset NONE
 row 12 cols 1-4: fg=Reset bg=Reset BOLD
 row 12 cols 18-26: fg=DarkGray bg=Reset NONE
+row 12 cols 34-40: fg=DarkGray bg=Reset NONE
 row 13 cols 1-16: fg=DarkGray bg=Reset NONE
-row 13 cols 47-61: fg=DarkGray bg=Reset NONE
-row 14 cols 29-33: fg=DarkGray bg=Reset NONE
-row 14 cols 35-46: fg=Reset bg=Reset BOLD
-row 16 cols 29-33: fg=DarkGray bg=Reset NONE
-row 16 cols 35-46: fg=Cyan bg=Reset BOLD
-row 19 cols 29-37: fg=Reset bg=Reset BOLD
-row 20 cols 29-30: fg=Reset bg=Reset BOLD
-row 22 cols 0-51: fg=Red bg=Reset NONE
-row 23 cols 0-68: fg=Reset bg=Reset DIM
+row 13 cols 34-41: fg=DarkGray bg=Reset NONE
+row 14 cols 34-41: fg=DarkGray bg=Reset NONE
+row 15 cols 34-41: fg=DarkGray bg=Reset NONE
+row 16 cols 34-42: fg=DarkGray bg=Reset NONE
+row 17 cols 34-43: fg=DarkGray bg=Reset NONE
+row 20 cols 29-37: fg=Reset bg=Reset BOLD
+row 21 cols 29-30: fg=Reset bg=Reset BOLD
+row 23 cols 0-35: fg=Reset bg=Reset DIM

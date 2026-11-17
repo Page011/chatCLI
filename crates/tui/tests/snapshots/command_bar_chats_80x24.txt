@@ -1,6 +1,6 @@
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ╔ Commands ════════════════════════════════════════════════════════════════════╗
-║/sam                                                                          ║
+║:sam                                                                          ║
 ║Chats                                                                         ║
 ║Sam Sample                                                                    ║
 ║                                                                              ║

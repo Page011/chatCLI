@@ -144,6 +144,10 @@ impl Run {
     }
 }
 
+fn ctrl_c() -> KeyEvent {
+    KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)
+}
+
 #[tokio::test(start_paused = true)]
 async fn the_tour_plays_every_step_to_the_end() {
     let mut r = start(80, 24, "full");
@@ -258,7 +262,7 @@ async fn space_pauses_n_skips_and_esc_ends_with_the_app_usable() {
     r.app.handle_key(key(KeyCode::Esc));
     assert!(!r.app.tour_running());
     assert!(!r.screen().starts_with("TOUR "));
-    r.app.handle_key(key(KeyCode::Char('q')));
+    r.app.handle_key(ctrl_c());
     assert!(r.app.should_quit(), "the app ignores keys after the tour");
     let _ = std::fs::remove_dir_all(&r.dir);
 }
@@ -306,8 +310,8 @@ async fn esc_during_the_key_capture_step_leaves_nothing_listening() {
     r.app.handle_key(key(KeyCode::Esc));
     assert!(!r.app.tour_running());
     assert!(!r.screen().contains("Press the new key"));
-    // The next key is the demo's own: `q` quits, it does not rebind anything.
-    r.app.handle_key(key(KeyCode::Char('q')));
+    // The next key is the demo's own: Ctrl+C quits, it does not rebind anything.
+    r.app.handle_key(ctrl_c());
     assert!(r.app.should_quit());
     assert!(r
         .app

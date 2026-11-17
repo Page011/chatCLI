@@ -1,20 +1,21 @@
  Teams 103 LIVE   WhatsApp CONN…
-╔ Keys - Chat list ════════════════════╗
-║List up             Up, k             ║
-║List down           Down, j           ║
-║List top            Home              ║
-║List bottom         End               ║
-║Open chat           Enter             ║
-║Command bar         /                 ║
+╔ Keys - Everywhere ═══════════════════╗
+║Clear line          Ctrl+U            ║
+║Chat list                             ║
+║Accept              l, Right          ║
+║Compose             i                 ║
+║Top                 Home              ║
+║Bottom              End               ║
 ║Refresh             press a key       ║
 ║ask the network for a fresh chat list ║
 ╚══════════════════════════════════════╝
-Press the new key for Refresh (Esc canc…
+Press the new key for Refresh (any key …
 --- styled runs (everything else is default style) ---
 row 0 cols 0-15: fg=Reset bg=Reset BOLD | REVERSED
 row 0 cols 18-25: fg=Reset bg=Reset BOLD
 row 0 cols 27-31: fg=Reset bg=Reset BOLD | DIM
-row 1 cols 1-18: fg=Reset bg=Reset BOLD
+row 1 cols 1-19: fg=Reset bg=Reset BOLD
+row 3 cols 1-9: fg=Reset bg=Reset BOLD
 row 8 cols 1-38: fg=Reset bg=Reset BOLD | REVERSED
 row 9 cols 1-37: fg=Reset bg=Reset DIM
 row 11 cols 0-39: fg=Reset bg=Reset BOLD

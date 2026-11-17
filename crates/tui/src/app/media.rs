@@ -16,6 +16,7 @@ use chatcli_core::model::{
 
 use super::{too_long, App, Focus, Out, Prompt};
 use crate::attach::{self, Candidate};
+use crate::input::TextInput;
 use crate::keymap::Action;
 use crate::media_view::{self as mv, Depth, Fetch, MediaKey, Then, Thumb, View};
 use crate::text::{clean_line, truncate};
@@ -50,7 +51,7 @@ impl Pending {
 /// The path prompt: what is typed and the folder entries that match it.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct AttachPrompt {
-    pub input: String,
+    pub input: TextInput,
     pub cands: Vec<Candidate>,
     pub sel: usize,
 }
@@ -543,7 +544,7 @@ impl App {
         }
         let cands = attach::complete("", &self.attach_base());
         self.media.attach = Some(AttachPrompt {
-            input: String::new(),
+            input: TextInput::default(),
             cands,
             sel: 0,
         });
@@ -553,7 +554,7 @@ impl App {
     pub(super) fn attach_refresh(&mut self) {
         let base = self.attach_base();
         if let Some(a) = self.media.attach.as_mut() {
-            a.cands = attach::complete(&a.input, &base);
+            a.cands = attach::complete(a.input.text(), &base);
             a.sel = 0;
         }
     }
@@ -562,18 +563,11 @@ impl App {
     pub(super) fn attach_type(&mut self, text: &str) {
         if let Some(a) = self.media.attach.as_mut() {
             // A pasted path is often quoted (a dropped file): the quotes are not part of it.
-            a.input.push_str(if a.input.is_empty() {
+            a.input.insert_str(if a.input.is_empty() {
                 attach::unquote(text)
             } else {
                 text
             });
-        }
-        self.attach_refresh();
-    }
-
-    pub(super) fn attach_backspace(&mut self) {
-        if let Some(a) = self.media.attach.as_mut() {
-            a.input.pop();
         }
         self.attach_refresh();
     }
@@ -586,12 +580,12 @@ impl App {
         };
         // A network path is listed only now, on the user's Tab: typing or pasting one never
         // makes Windows contact that machine.
-        if a.cands.is_empty() && attach::is_network_path(&a.input) {
-            a.cands = attach::scan(&a.input, &base);
+        if a.cands.is_empty() && attach::is_network_path(a.input.text()) {
+            a.cands = attach::scan(a.input.text(), &base);
             a.sel = 0;
         }
         if let Some(c) = a.cands.get(a.sel).cloned() {
-            a.input = attach::apply(&a.input, &c);
+            a.input.set(&attach::apply(a.input.text(), &c));
             self.attach_refresh();
         }
     }
@@ -599,17 +593,17 @@ impl App {
     /// The popup keys inside the path prompt: Up and Down choose, Enter attaches, Esc cancels.
     pub(super) fn attach_action(&mut self, n: Network, action: Action) {
         match action {
-            Action::PopupUp | Action::PopupDown => {
+            Action::Up | Action::Down => {
                 if let Some(a) = self.media.attach.as_mut() {
                     let last = a.cands.len().saturating_sub(1);
-                    a.sel = if action == Action::PopupUp {
+                    a.sel = if action == Action::Up {
                         a.sel.saturating_sub(1)
                     } else {
                         (a.sel + 1).min(last)
                     };
                 }
             }
-            Action::PopupAccept => self.attach_accept(n),
+            Action::Accept => self.attach_accept(n),
             _ => self.media.attach = None,
         }
     }
@@ -620,7 +614,7 @@ impl App {
         let Some(a) = self.media.attach.as_ref() else {
             return;
         };
-        let mut input = a.input.clone();
+        let mut input = a.input.text().to_string();
         if input.trim().is_empty() {
             return;
         }
@@ -648,7 +642,7 @@ impl App {
                 input.push(sep);
             }
             if let Some(a) = self.media.attach.as_mut() {
-                a.input = input;
+                a.input.set(&input);
             }
             self.attach_refresh();
             return;
@@ -996,9 +990,9 @@ mod tests {
         app
     }
 
-    /// Select the newest message (Ctrl+Up).
+    /// Select the newest message (Esc from the message box).
     fn select(app: &mut App) {
-        app.handle_key(key(KeyCode::Up, KeyModifiers::CONTROL));
+        app.handle_key(key(KeyCode::Esc, KeyModifiers::NONE));
         assert_eq!(app.active().focus, Focus::Select);
     }
 
@@ -1494,9 +1488,18 @@ mod tests {
         ctrl(&mut app, 'o');
         typed(&mut app, "docs");
         press(&mut app, KeyCode::Enter);
-        assert!(app.attach_prompt().unwrap().input.starts_with("docs"));
+        assert!(app
+            .attach_prompt()
+            .unwrap()
+            .input
+            .text()
+            .starts_with("docs"));
         assert!(
-            app.attach_prompt().unwrap().input.ends_with(['/', '\\']),
+            app.attach_prompt()
+                .unwrap()
+                .input
+                .text()
+                .ends_with(['/', '\\']),
             "inside the folder now"
         );
         assert!(pending(&app).is_none(), "a folder is never attached");
@@ -1636,13 +1639,13 @@ mod tests {
         press(&mut app, KeyCode::Backspace);
         assert!(pending(&app).is_none());
         assert_eq!(app.active().draft(), "a");
-        // Esc removes it before it leaves the box.
+        // Esc removes it before it leaves the box for message selection.
         app.attach_or_notice(Network::Teams, "a", f, false);
         press(&mut app, KeyCode::Esc);
         assert!(pending(&app).is_none());
         assert_eq!(app.active().focus, Focus::Composer);
         press(&mut app, KeyCode::Esc);
-        assert_eq!(app.active().focus, Focus::List);
+        assert_eq!(app.active().focus, Focus::Select);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
