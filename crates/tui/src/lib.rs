@@ -61,8 +61,8 @@ use crossterm::event::{
     PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
 use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, supports_keyboard_enhancement, EnterAlternateScreen,
-    LeaveAlternateScreen,
+    disable_raw_mode, enable_raw_mode, supports_keyboard_enhancement, BeginSynchronizedUpdate,
+    EndSynchronizedUpdate, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::Rect;
@@ -204,6 +204,27 @@ impl Drop for TerminalGuard {
 
 /// Shortest sleep for a pending timer: caps wakeups at 10 a second.
 const MIN_WAKE_MS: i64 = 100;
+
+/// Marks the cells of `stale` boxes that no image covers now with a style no real cell has, so
+/// the next frame rewrites each of them (and the terminal drops the image pixels there).
+fn mark_stale(f: &mut ratatui::Frame, stale: &[Rect], images: &[ui::VisibleImage]) {
+    use ratatui::style::{Modifier, Style};
+    let area = f.area();
+    let marker = Style::new().add_modifier(Modifier::HIDDEN);
+    let buf = f.buffer_mut();
+    for r in stale {
+        let r = r.intersection(area);
+        for y in r.top()..r.bottom() {
+            for x in r.left()..r.right() {
+                let p = ratatui::layout::Position::new(x, y);
+                if images.iter().any(|v| v.rect.contains(p)) {
+                    continue;
+                }
+                buf[(x, y)].set_symbol(" ").set_style(marker);
+            }
+        }
+    }
+}
 
 fn deliver(app: &mut App, commands: &HashMap<Network, CommandTx>, out: Out) {
     for (net, cmd) in out {
@@ -464,7 +485,11 @@ pub async fn run(
             // when the set of images changed so no Sixel pixels are left behind.
             let visible = if graphics.is_some() {
                 let lay = app.layout_in(area);
-                ui::visible_images(&app, &lay)
+                let vis = ui::visible_images(&app, &lay);
+                // Photos for the avatars on screen, once per person (no graphics, no asking).
+                let asks = app.avatar_requests(&vis.people);
+                deliver(&mut app, &commands, asks);
+                vis.images
             } else {
                 Vec::new()
             };
@@ -479,16 +504,33 @@ pub async fn run(
                         move |r| Internal::Encoded(key, r),
                     );
                 }
-                if g.changed(&visible) {
-                    let _ = terminal.clear();
-                }
             }
-            if let Err(e) = terminal.draw(|f| {
+            let stale = graphics
+                .as_mut()
+                .map_or_else(Vec::new, |g| g.stale(&visible));
+            // The whole frame is one update: a terminal with synchronized output (Windows
+            // Terminal, Kitty, iTerm2, WezTerm) never shows a half-drawn screen; others ignore it.
+            let _ = crossterm::execute!(io::stdout(), BeginSynchronizedUpdate);
+            if !stale.is_empty() {
+                // Cells an image left behind: a frame with them marked first, so the real frame
+                // below differs there and every one of them is written again. Clearing the whole
+                // screen instead made every scroll and chat change flash.
+                let _ = terminal.draw(|f| {
+                    draw(f, &app);
+                    if let Some(g) = graphics.as_ref() {
+                        g.render(f, &visible);
+                    }
+                    mark_stale(f, &stale, &visible);
+                });
+            }
+            let drawn = terminal.draw(|f| {
                 draw(f, &app);
                 if let Some(g) = graphics.as_ref() {
                     g.render(f, &visible);
                 }
-            }) {
+            });
+            let _ = crossterm::execute!(io::stdout(), EndSynchronizedUpdate);
+            if let Err(e) = drawn {
                 log::error("tui", &format!("draw failed: {e}"));
                 result = Err(format!("Could not draw the screen ({e}): restart chatcli."));
                 break;
@@ -579,7 +621,7 @@ pub async fn run(
         // A steady stream of backend events (history sync, Teams catch-up) can win every
         // select! round and starve the sleep branch above, so a due timer is also checked here,
         // after whichever branch ran.
-        if app.next_deadline().is_some_and(|due| due <= now_ms()) {
+        if app.refill_due() || app.next_deadline().is_some_and(|due| due <= now_ms()) {
             app.tick(now_ms());
             out.extend(app.fire_timers());
             dirty = true;
@@ -654,6 +696,32 @@ pub async fn run(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn stale_cells_are_marked_except_under_a_current_image() {
+        use ratatui::backend::TestBackend;
+        use ratatui::layout::Rect;
+        use ratatui::style::Modifier;
+        let mut term = ratatui::Terminal::new(TestBackend::new(20, 8)).unwrap();
+        let now = [crate::ui::VisibleImage {
+            path: "a.png".into(),
+            rect: Rect::new(2, 2, 4, 2),
+        }];
+        // The image moved down one row: its old box was rows 1-2.
+        term.draw(|f| super::mark_stale(f, &[Rect::new(2, 1, 4, 2)], &now))
+            .unwrap();
+        let buf = term.backend().buffer();
+        let marked = |x, y| buf[(x, y)].modifier.contains(Modifier::HIDDEN);
+        assert!(marked(2, 1) && marked(5, 1), "the row the image left");
+        assert!(
+            !marked(2, 2) && !marked(5, 2),
+            "not under the image's new box"
+        );
+        assert!(
+            !marked(1, 1) && !marked(6, 1) && !marked(2, 0),
+            "nothing outside the old box"
+        );
+    }
+
     use super::{
         hook_restores_terminal, open_file_or_demo, remove_temp, spawn_work, validate_settings,
         Internal,

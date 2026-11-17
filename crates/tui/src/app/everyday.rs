@@ -5,9 +5,10 @@
 //! `App` stays pure: a toast is queued for the run loop to hand to the notifier, a request for
 //! the backend is returned as an `Out`, and the clock is the one `tick` sets.
 
-use chatcli_core::model::{ChatFlag, ChatMessage, Command, Event, Network};
+use chatcli_core::model::{ChatFlag, ChatMessage, Command, Event, Network, Status};
 use chatcli_core::runtime::Toast;
 use chatcli_core::store::SearchHit;
+use ratatui::layout::Position;
 
 use super::{App, Focus, Out, Prompt};
 use crate::chats;
@@ -38,6 +39,41 @@ impl App {
             theme: &self.theme,
             clock: &self.clock,
             fmt: self.fmt,
+            avatars: self.layout.avatars,
+        }
+    }
+
+    /// NO_COLOR is set.
+    pub(crate) fn no_colour(&self) -> bool {
+        self.no_colour
+    }
+
+    /// `[layout] photos`: profile photos drawn over the initials avatars.
+    pub(crate) fn photos(&self) -> bool {
+        self.layout.photos && !self.no_colour
+    }
+
+    /// FetchAvatars for on-screen people not asked yet this session: only with `[layout] photos`
+    /// on and the network Online. Marks each as asked, so nobody is asked twice (a None answer
+    /// stops the asking too).
+    pub fn avatar_requests(&mut self, people: &[String]) -> Out {
+        let net = self.active;
+        if !self.photos() || !matches!(self.ns(net).status, Status::Online { .. }) {
+            return Vec::new();
+        }
+        let ns = self.ns_mut(net);
+        let asked: Vec<String> = people
+            .iter()
+            .filter(|p| !ns.avatars.contains_key(*p))
+            .cloned()
+            .collect();
+        for p in &asked {
+            ns.avatars.insert(p.clone(), None);
+        }
+        if asked.is_empty() {
+            Vec::new()
+        } else {
+            vec![(net, Command::FetchAvatars { people: asked })]
         }
     }
 
@@ -459,6 +495,34 @@ impl App {
         Vec::new()
     }
 
+    /// A left click in the search box: a hit opens like Enter on it, outside the box closes it.
+    pub(super) fn search_click(&mut self, pos: Position) -> Out {
+        let Some(g) = ui::search_geometry(self.layout_in(self.size).body) else {
+            // Too small to draw: the note says Esc closes, a click does too.
+            self.search = None;
+            return Vec::new();
+        };
+        if !g.outer.contains(pos) {
+            self.search = None;
+        } else if g.list.contains(pos) {
+            let i = (pos.y - g.list.y) as usize + self.search.as_ref().map_or(0, |s| s.top);
+            if let Some(s) = self.search.as_mut().filter(|s| i < s.hits.len()) {
+                s.sel = i;
+                return self.search_open_hit();
+            }
+        }
+        Vec::new()
+    }
+
+    /// The wheel in the search box moves the choice a few hits, and the window follows.
+    pub(super) fn search_wheel(&mut self, up: bool) {
+        self.search_move(if up {
+            -super::WHEEL_LINES
+        } else {
+            super::WHEEL_LINES
+        });
+    }
+
     /// Enter on a hit: open its chat, like choosing it in the list. The conversation shows the
     /// chat as the backend gives it (jumping to a far-back hit is out of scope).
     fn search_open_hit(&mut self) -> Out {
@@ -673,7 +737,7 @@ mod tests {
         let toasts = app.take_toasts();
         assert_eq!(toasts.len(), 1);
         assert_eq!(toasts[0].title, "Sam Sample");
-        assert_eq!(toasts[0].body, "New message", "preview is off by default");
+        assert_eq!(toasts[0].body, "Sam Sample: secret plan", "full by default");
         assert!(toasts[0].sound);
         assert!(app.take_toasts().is_empty(), "taken once");
     }
@@ -934,10 +998,13 @@ mod tests {
         seen.sort_unstable();
         seen.dedup();
         assert_eq!(seen.len(), 90);
-        // Every message that was on screen stays on the same row. Only the two rows above them
-        // changed: the note, and the day separator that the older page's own separator replaces.
+        // Every message that was on screen stays on the same row. Only the rows above them
+        // changed: the note, the day separator that the older page's own separator replaces,
+        // and the name row of the oldest held message, which now continues the older page's
+        // run from the same person.
         let after = visible_text(&app);
-        assert_eq!(&after[2..], &loading[2..], "no jump");
+        assert_eq!(loading[2], "  Alex Example 02:46", "{loading:?}");
+        assert_eq!(&after[3..], &loading[3..], "no jump");
         assert_eq!(app.ns(Network::Teams).older["a"], Older::Idle);
 
         // Scroll to the top again: the second page is asked for from the new oldest message.
@@ -1519,6 +1586,52 @@ mod tests {
         assert!(app.search().is_some());
     }
 
+    fn mouse_at(kind: MouseEventKind, column: u16, row: u16) -> MouseEvent {
+        MouseEvent {
+            kind,
+            column,
+            row,
+            modifiers: KeyModifiers::NONE,
+        }
+    }
+
+    #[test]
+    fn a_clicked_hit_opens_like_enter_the_wheel_moves_and_outside_closes() {
+        let mut app = search_app();
+        ctrl_f(&mut app);
+        typed(&mut app, "budget");
+        let g = ui::search_geometry(app.layout_in(app.size).body).unwrap();
+        let left = MouseEventKind::Down(MouseButton::Left);
+        // The query row and the empty rows below the hits open nothing.
+        app.handle_mouse(mouse_at(left, g.list.x + 2, g.query.y));
+        app.handle_mouse(mouse_at(left, g.list.x + 2, g.list.y + 4));
+        assert!(app.search().is_some());
+        // Wheel: three hits down, clamped at the last of the four.
+        app.handle_mouse(mouse_at(MouseEventKind::ScrollDown, 10, 10));
+        assert_eq!(app.search().unwrap().sel, 3);
+        app.handle_mouse(mouse_at(MouseEventKind::ScrollUp, 10, 10));
+        assert_eq!(app.search().unwrap().sel, 0);
+        // The second hit is chat "b", as Down + Enter gives.
+        let out = app.handle_mouse(mouse_at(left, g.list.x + 2, g.list.y + 1));
+        assert!(app.search().is_none());
+        assert_eq!(app.active().open.as_deref(), Some("b"));
+        assert_eq!(app.active().focus, Focus::Composer);
+        assert_eq!(
+            out,
+            vec![(
+                Network::Teams,
+                Command::OpenChat {
+                    chat_id: "b".into()
+                }
+            )]
+        );
+
+        let mut app = search_app();
+        ctrl_f(&mut app);
+        app.handle_mouse(mouse_at(left, 10, 0));
+        assert!(app.search().is_none(), "outside the box");
+    }
+
     // ---- typing ----
 
     fn wa_app(settings: &Settings) -> App {
@@ -1634,7 +1747,9 @@ mod tests {
 
     #[test]
     fn with_send_typing_off_or_on_teams_nothing_is_sent() {
-        let mut app = wa_app(&Settings::default());
+        let mut s = Settings::default();
+        s.whatsapp.send_typing = false;
+        let mut app = wa_app(&s);
         press(&mut app, KeyCode::Enter);
         assert!(ch(&mut app, 'h').is_empty());
         let out = press(&mut app, KeyCode::Enter);

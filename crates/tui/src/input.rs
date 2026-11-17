@@ -189,6 +189,11 @@ impl TextInput {
         self.cursor = self.line_range().1;
     }
 
+    /// Puts the cursor before grapheme `at`, clamped to the end (a click in the message box).
+    pub(crate) fn set_cursor(&mut self, at: usize) {
+        self.cursor = at.min(self.count());
+    }
+
     /// Removes graphemes `from..to`; the cursor goes to `from`.
     pub(crate) fn remove(&mut self, from: usize, to: usize) {
         if from < to {

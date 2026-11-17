@@ -2,7 +2,7 @@
 ┌ Settings ──────┐╔ Teams ═════════════════════════════════════════════════════════════════════════╗
 │Appearance      │║File downloads      off            needs a new sign-in: /signout then /signin   ║
 │Layout          │║Sending files       off            needs a new sign-in: /signout then /signin   ║
-│Notifications   │║                                                                                ║
+│Notifications   │║Profile photos      off            needs a new sign-in: /signout then /signin   ║
 │Media           │║                                                                                ║
 │Teams           │║                                                                                ║
 │WhatsApp        │║                                                                                ║
@@ -38,6 +38,7 @@ row 1 cols 19-25: fg=Reset bg=Reset BOLD
 row 2 cols 19-53: fg=Reset bg=Reset BOLD | REVERSED
 row 2 cols 54-98: fg=Reset bg=Reset BOLD | DIM | REVERSED
 row 3 cols 54-98: fg=Reset bg=Reset DIM
+row 4 cols 54-98: fg=Reset bg=Reset DIM
 row 6 cols 1-16: fg=Reset bg=Reset BOLD
 row 27 cols 19-60: fg=Reset bg=Reset DIM
 row 29 cols 0-76: fg=Reset bg=Reset DIM

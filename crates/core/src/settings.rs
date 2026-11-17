@@ -24,12 +24,14 @@ const SECTIONS: [&str; 7] = [
     "teams",
     "whatsapp",
 ];
-const LAYOUT_KEYS: [&str; 5] = [
+const LAYOUT_KEYS: [&str; 7] = [
     "sidebar_width",
     "time_format",
     "date_order",
     "density",
     "show_previews",
+    "avatars",
+    "photos",
 ];
 const NOTIFICATION_KEYS: [&str; 3] = ["enabled", "preview", "sound"];
 const MEDIA_KEYS: [&str; 5] = [
@@ -39,8 +41,8 @@ const MEDIA_KEYS: [&str; 5] = [
     "inline_images",
     "image_protocol",
 ];
-const TEAMS_KEYS: [&str; 2] = ["files_read", "files_write"];
-const WHATSAPP_KEYS: [&str; 2] = ["send_read_receipts", "send_typing"];
+const TEAMS_KEYS: [&str; 3] = ["files_read", "files_write", "photos"];
+const WHATSAPP_KEYS: [&str; 3] = ["send_read_receipts", "send_typing", "download_images"];
 
 /// Accepted spellings of each choice setting, in cycling order. The parser and the writer both
 /// read these, so a name can never be written that would not load.
@@ -53,6 +55,11 @@ pub const DATE_ORDERS: [(&str, DateOrder); 3] = [
 ];
 pub const DENSITIES: [(&str, Density); 2] =
     [("cozy", Density::Cozy), ("compact", Density::Compact)];
+pub const AVATARS: [(&str, Avatars); 3] = [
+    ("groups", Avatars::Groups),
+    ("all", Avatars::All),
+    ("off", Avatars::Off),
+];
 pub const NOTIFY_PREVIEWS: [(&str, NotifyPreview); 3] = [
     ("off", NotifyPreview::Off),
     ("sender", NotifyPreview::Sender),
@@ -135,6 +142,16 @@ pub enum Density {
     Compact,
 }
 
+/// Where messages show an avatar with the sender's name above the text, Discord style.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Avatars {
+    /// Group chats only: a 1:1 chat keeps the one-line time-and-name layout.
+    #[default]
+    Groups,
+    All,
+    Off,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct LayoutSettings {
     /// None = today's width.
@@ -143,6 +160,9 @@ pub struct LayoutSettings {
     pub date_order: DateOrder,
     pub density: Density,
     pub show_previews: bool,
+    pub avatars: Avatars,
+    /// Profile photos over the avatars (Sixel/Kitty/iTerm2 terminals only).
+    pub photos: bool,
 }
 
 impl Default for LayoutSettings {
@@ -153,6 +173,8 @@ impl Default for LayoutSettings {
             date_order: DateOrder::default(),
             density: Density::default(),
             show_previews: true,
+            avatars: Avatars::default(),
+            photos: true,
         }
     }
 }
@@ -160,9 +182,10 @@ impl Default for LayoutSettings {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum NotifyPreview {
     /// No message text leaves the process.
-    #[default]
     Off,
     Sender,
+    /// Sender and message text in the toast.
+    #[default]
     Full,
 }
 
@@ -224,14 +247,28 @@ pub struct TeamsSettings {
     pub files_read: bool,
     /// Ask for Files.ReadWrite so files can be sent.
     pub files_write: bool,
+    /// Ask for User.ReadBasic.All so profile photos can be shown.
+    pub photos: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WhatsAppSettings {
     /// Send read receipts when a chat is marked read.
     pub send_read_receipts: bool,
     /// Send our own typing indicator. Showing other people's is always on.
     pub send_typing: bool,
+    /// Fetch pictures in opened WhatsApp chats and show them as thumbnails.
+    pub download_images: bool,
+}
+
+impl Default for WhatsAppSettings {
+    fn default() -> Self {
+        WhatsAppSettings {
+            send_read_receipts: true,
+            send_typing: true,
+            download_images: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -617,6 +654,8 @@ fn layout_section(t: &Table, _text: &str) -> Result<LayoutSettings, Bad> {
         date_order: choice(t, "date_order", d.date_order, &DATE_ORDERS)?,
         density: choice(t, "density", d.density, &DENSITIES)?,
         show_previews: flag(t, "show_previews", d.show_previews)?,
+        avatars: choice(t, "avatars", d.avatars, &AVATARS)?,
+        photos: flag(t, "photos", d.photos)?,
     })
 }
 
@@ -671,13 +710,15 @@ fn teams_section(t: &Table, _text: &str) -> Result<TeamsSettings, Bad> {
     Ok(TeamsSettings {
         files_read: flag(t, "files_read", false)?,
         files_write: flag(t, "files_write", false)?,
+        photos: flag(t, "photos", false)?,
     })
 }
 
 fn whatsapp_section(t: &Table, _text: &str) -> Result<WhatsAppSettings, Bad> {
     Ok(WhatsAppSettings {
-        send_read_receipts: flag(t, "send_read_receipts", false)?,
-        send_typing: flag(t, "send_typing", false)?,
+        send_read_receipts: flag(t, "send_read_receipts", true)?,
+        send_typing: flag(t, "send_typing", true)?,
+        download_images: flag(t, "download_images", true)?,
     })
 }
 
@@ -873,6 +914,12 @@ impl DateOrder {
 impl Density {
     pub fn to_setting(self) -> SettingValue {
         SettingValue::str(spelling(&DENSITIES, self))
+    }
+}
+
+impl Avatars {
+    pub fn to_setting(self) -> SettingValue {
+        SettingValue::str(spelling(&AVATARS, self))
     }
 }
 
@@ -1124,7 +1171,7 @@ mod tests {
         assert_eq!(s.layout.sidebar_width, None);
         assert!(s.layout.show_previews);
         assert!(s.notifications.enabled && s.notifications.sound);
-        assert_eq!(s.notifications.preview, NotifyPreview::Off);
+        assert_eq!(s.notifications.preview, NotifyPreview::Full);
         assert_eq!(
             (
                 s.media.cache_max_mb,
@@ -1133,8 +1180,11 @@ mod tests {
             ),
             (200, 30, 25)
         );
-        assert!(!s.teams.files_read && !s.teams.files_write);
-        assert!(!s.whatsapp.send_read_receipts && !s.whatsapp.send_typing);
+        assert!(!s.teams.files_read && !s.teams.files_write && !s.teams.photos);
+        assert!(s.layout.photos);
+        assert!(
+            s.whatsapp.send_read_receipts && s.whatsapp.send_typing && s.whatsapp.download_images
+        );
     }
 
     #[test]
@@ -1157,6 +1207,7 @@ time_format = "12h"
 date_order = "ymd"
 density = "compact"
 show_previews = false
+photos = false
 
 [notifications]
 enabled = false
@@ -1173,10 +1224,12 @@ image_protocol = "kitty"
 [teams]
 files_read = true
 files_write = true
+photos = true
 
 [whatsapp]
-send_read_receipts = true
-send_typing = true
+send_read_receipts = false
+send_typing = false
+download_images = false
 "##,
         );
         assert!(r.problems.is_empty(), "{:?}", r.problems);
@@ -1192,7 +1245,7 @@ send_typing = true
         assert_eq!(s.layout.time_format, TimeFormat::H12);
         assert_eq!(s.layout.date_order, DateOrder::Ymd);
         assert_eq!(s.layout.density, Density::Compact);
-        assert!(!s.layout.show_previews);
+        assert!(!s.layout.show_previews && !s.layout.photos);
         assert!(!s.notifications.enabled && !s.notifications.sound);
         assert_eq!(s.notifications.preview, NotifyPreview::Sender);
         assert_eq!(s.media.cache_max_mb, 500);
@@ -1200,8 +1253,12 @@ send_typing = true
         assert_eq!(s.media.max_file_mb, 50);
         assert!(!s.media.inline_images);
         assert_eq!(s.media.image_protocol, ImageProtocol::Kitty);
-        assert!(s.teams.files_read && s.teams.files_write);
-        assert!(s.whatsapp.send_read_receipts && s.whatsapp.send_typing);
+        assert!(s.teams.files_read && s.teams.files_write && s.teams.photos);
+        assert!(
+            !s.whatsapp.send_read_receipts
+                && !s.whatsapp.send_typing
+                && !s.whatsapp.download_images
+        );
     }
 
     #[test]
@@ -1300,6 +1357,7 @@ send_typing = true
             "[notifications]\npreview = \"all\"\n",
             "[teams]\nfiles_read = \"true\"\n",
             "[whatsapp]\nsend_typing = 0\n",
+            "[whatsapp]\ndownload_images = \"yes\"\n",
         ] {
             let r = load(text);
             assert_eq!(errors(&r).len(), 1, "{text:?} -> {:?}", r.problems);
@@ -1532,6 +1590,23 @@ send_typing = true
     }
 
     #[test]
+    fn the_photos_keys_round_trip_and_keep_comments() {
+        let text = "[layout]\n# my note\ndensity = \"cozy\"\n\n[teams]\nfiles_read = true\n";
+        let out = edited(
+            text,
+            &[
+                set("layout", "photos", SettingValue::Bool(false)),
+                set("teams", "photos", SettingValue::Bool(true)),
+            ],
+        );
+        assert!(out.contains("# my note"), "{out}");
+        let r = load(&out);
+        assert!(r.problems.is_empty(), "{:?}", r.problems);
+        assert!(!r.settings.layout.photos && r.settings.teams.photos);
+        assert!(r.settings.teams.files_read);
+    }
+
+    #[test]
     fn a_new_key_goes_into_its_table_and_a_new_table_is_created() {
         let out = edited(
             COMMENTED,
@@ -1548,10 +1623,12 @@ send_typing = true
         assert_eq!(out, "[layout]\ndensity = \"compact\"\n");
         let out = edited(
             "[teams]\nfiles_read = true\n",
-            &[set("whatsapp", "send_typing", SettingValue::Bool(true))],
+            &[set("whatsapp", "send_typing", SettingValue::Bool(false))],
         );
         let r = load(&out);
-        assert!(r.settings.teams.files_read && r.settings.whatsapp.send_typing);
+        assert!(r.settings.teams.files_read && !r.settings.whatsapp.send_typing);
+        // Only the edited key moves; the others keep their defaults.
+        assert!(r.settings.whatsapp.send_read_receipts && r.settings.whatsapp.download_images);
     }
 
     #[test]

@@ -881,6 +881,15 @@ fn shortcode_popup() {
     check("shortcode_popup_second", 80, 24, &got);
 }
 
+/// The open list covers the bottom of the pane, so the newest messages sit above it, not under.
+#[test]
+fn shortcode_popup_does_not_hide_the_newest_messages() {
+    let mut app = typing_app();
+    type_str(&mut app, "nice :thu");
+    let got = render_cursor(&mut app, 100, 30);
+    assert!(got.contains("yes, shipped"), "{got}");
+}
+
 /// The popup squeezes into a short conversation pane without overflowing.
 #[test]
 fn shortcode_popup_in_a_small_terminal() {
@@ -1441,6 +1450,90 @@ fn mention_list_in_a_group() {
         type_str(&mut app, "hello @al");
         app
     });
+}
+
+/// The project group with a run of messages: two from Sam within five minutes (one name row),
+/// one from Alex, a reply from you, and one from Sam again after a gap.
+fn group_run_app(settings: Settings) -> App {
+    let mut app = online_in(new_app_with(settings));
+    press(&mut app, KeyCode::Down);
+    let at = |h, m| ts(2026, 11, 16, h, m);
+    let g = |id: &str, t, me, who: &str, sid: &str, text: &str| ChatMessage {
+        chat_id: "proj".into(),
+        sender_id: sid.into(),
+        ..msg(id, t, me, who, text)
+    };
+    app.handle_event(Event::Messages {
+        network: Network::Teams,
+        chat_id: "proj".into(),
+        messages: vec![
+            g("g1", at(8, 2), false, "Sam Sample", "u0", "morning all"),
+            g(
+                "g2",
+                at(8, 4),
+                false,
+                "Sam Sample",
+                "u0",
+                "the build is green again",
+            ),
+            g(
+                "g3",
+                at(8, 5),
+                false,
+                "Alex Example",
+                "u1",
+                "great, shipping the notes after lunch",
+            ),
+            ChatMessage {
+                reply_to: Some(chatcli_core::model::QuotedRef {
+                    id: "g3".into(),
+                    sender: "Alex Example".into(),
+                    sender_id: "u1".into(),
+                    preview: "great, shipping the notes after lunch".into(),
+                }),
+                ..g("g4", at(8, 6), true, "Me", "", "thanks Alex")
+            },
+            g(
+                "g5",
+                at(9, 30),
+                false,
+                "Sam Sample",
+                "u0",
+                "meeting moved to 10",
+            ),
+        ],
+    });
+    app
+}
+
+#[test]
+fn group_messages_show_avatars_and_runs() {
+    let got = render(&mut group_run_app(Settings::default()), 80, 24);
+    check("group_avatars", 80, 24, &got);
+    let got = render(&mut group_run_app(Settings::default()), 100, 30);
+    // One name row for Sam's two close messages, another after the gap.
+    assert_eq!(got.matches("Sam Sample 08:02").count(), 1, "{got}");
+    assert!(!got.contains("Sam Sample 08:04"), "{got}");
+    assert!(got.contains("Sam Sample 09:30"), "{got}");
+}
+
+#[test]
+fn avatars_off_and_avatars_everywhere() {
+    let mut off = Settings::default();
+    off.layout.avatars = chatcli_core::settings::Avatars::Off;
+    let got = render(&mut group_run_app(off), 100, 30);
+    assert!(
+        got.contains("08:02 Sam Sample"),
+        "the one-line layout: {got}"
+    );
+    // A 1:1 chat has name rows without avatars by default, and avatars with `all`.
+    let one = render(&mut themed(Settings::default()), 100, 30);
+    assert!(one.contains("Alex Example 14:20"), "{one}");
+    assert!(!one.contains(" AE "), "no avatar in a 1:1 chat: {one}");
+    let mut all = Settings::default();
+    all.layout.avatars = chatcli_core::settings::Avatars::All;
+    let got = render(&mut themed(all), 100, 30);
+    assert!(got.contains("Alex Example 14:20"), "{got}");
 }
 
 #[test]
@@ -2056,6 +2149,17 @@ fn theme_light_and_dark() {
         let got = render(&mut themed(theme_settings(name, &[])), 100, 30);
         check(&format!("theme_{name}"), 100, 30, &got);
     }
+}
+
+#[test]
+fn palette_lines_is_the_screen_without_a_palette() {
+    let plain = render(&mut themed(Settings::default()), 100, 30);
+    let lines = render(
+        &mut themed(theme_settings("default", &[("palette", "lines")])),
+        100,
+        30,
+    );
+    assert_eq!(plain, lines);
 }
 
 #[test]
@@ -3168,7 +3272,11 @@ fn settings_number_error() {
 fn settings_colour_entry() {
     at_sizes("settings_colour_entry", &[(80, 24)], || {
         let mut app = settings_app(0, true);
-        press(&mut app, KeyCode::Down);
+        // Past Theme, Palette, the four panel outline and fill pairs and the two bar fills:
+        // the first colour role.
+        for _ in 0..12 {
+            press(&mut app, KeyCode::Down);
+        }
         press(&mut app, KeyCode::Enter);
         type_str(&mut app, "#12ab");
         app

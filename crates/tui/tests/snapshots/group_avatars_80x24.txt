@@ -1,0 +1,70 @@
+ chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
+╔ Chats ═══════════════════╗┌ Project Team ────────────────────────────────────┐
+║  2  Alex Example    09:15║│                                                  │
+║     Alex Example: is the…║│                                                  │
+║99+  Project Team    08:02║│                                                  │
+║     Sam Sample: thanks   ║│                  ---- Today ----                 │
+║  1  Sam Sample        Sun║│ SS   Sam Sample 08:02                            │
+║     You: see you tomorrow║│      morning all                                 │
+║     Release Planning… Fri║│      the build is green again                    │
+║     Jordan Placeholder: …║│                                                  │
+║     田中太郎 (T… 05/11/26║│ AE   Alex Example 08:05                          │
+║     了解しました         ║│      great, shipping the notes after lunch       │
+║     Jordan Plac… 09/10/26║│                                                  │
+║     You: thanks          ║│ Y    You 08:06                                   │
+║                          ║│      > Alex Example: great, shipping the notes a…│
+║                          ║│      thanks Alex                                 │
+║                          ║│                                                  │
+║                          ║│ SS   Sam Sample 09:30                            │
+║                          ║│      meeting moved to 10                         │
+║                          ║└──────────────────────────────────────────────────┘
+║                          ║┌ Message ─────────────────────────────────────────┐
+║                          ║│i to type                                         │
+╚══════════════════════════╝└──────────────────────────────────────────────────┘
+Up/Down chat  Enter open  i type  / filter  : commands  ? help  Tab network
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 69-79: fg=Reset bg=Reset DIM
+row 1 cols 1-7: fg=Reset bg=Reset BOLD
+row 2 cols 1-4: fg=Reset bg=Reset BOLD
+row 2 cols 6-20: fg=Reset bg=Reset BOLD
+row 2 cols 21-26: fg=DarkGray bg=Reset NONE
+row 3 cols 1-26: fg=DarkGray bg=Reset NONE
+row 4 cols 1-26: fg=Reset bg=Reset BOLD | REVERSED
+row 5 cols 1-26: fg=Reset bg=Reset BOLD | REVERSED
+row 5 cols 47-61: fg=DarkGray bg=Reset NONE
+row 6 cols 1-4: fg=Reset bg=Reset BOLD
+row 6 cols 6-22: fg=Reset bg=Reset BOLD
+row 6 cols 23-26: fg=DarkGray bg=Reset NONE
+row 6 cols 29-32: fg=Black bg=LightMagenta BOLD
+row 6 cols 35-44: fg=LightMagenta bg=Reset BOLD
+row 6 cols 46-50: fg=DarkGray bg=Reset NONE
+row 7 cols 1-26: fg=DarkGray bg=Reset NONE
+row 7 cols 29-32: fg=Black bg=LightMagenta BOLD
+row 8 cols 1-4: fg=Reset bg=Reset BOLD
+row 8 cols 23-26: fg=DarkGray bg=Reset NONE
+row 9 cols 1-26: fg=DarkGray bg=Reset NONE
+row 10 cols 1-4: fg=Reset bg=Reset BOLD
+row 10 cols 18-26: fg=DarkGray bg=Reset NONE
+row 10 cols 29-32: fg=Black bg=LightGreen BOLD
+row 10 cols 35-46: fg=LightGreen bg=Reset BOLD
+row 10 cols 48-52: fg=DarkGray bg=Reset NONE
+row 11 cols 1-17: fg=DarkGray bg=Reset NONE
+row 11 cols 29-32: fg=Black bg=LightGreen BOLD
+row 12 cols 1-4: fg=Reset bg=Reset BOLD
+row 12 cols 18-26: fg=DarkGray bg=Reset NONE
+row 13 cols 1-16: fg=DarkGray bg=Reset NONE
+row 13 cols 29-32: fg=Black bg=Cyan BOLD
+row 13 cols 35-37: fg=Cyan bg=Reset BOLD
+row 13 cols 39-43: fg=DarkGray bg=Reset NONE
+row 14 cols 29-32: fg=Black bg=Cyan BOLD
+row 14 cols 35-78: fg=DarkGray bg=Reset NONE
+row 17 cols 29-32: fg=Black bg=LightMagenta BOLD
+row 17 cols 35-44: fg=LightMagenta bg=Reset BOLD
+row 17 cols 46-50: fg=DarkGray bg=Reset NONE
+row 18 cols 29-32: fg=Black bg=LightMagenta BOLD
+row 21 cols 29-37: fg=Reset bg=Reset DIM
+row 23 cols 0-74: fg=Reset bg=Reset DIM

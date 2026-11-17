@@ -5,6 +5,7 @@
 pub(crate) mod cmds;
 pub(crate) mod everyday;
 pub(crate) mod media;
+pub(crate) mod mouse;
 pub(crate) mod msg;
 pub(crate) mod settings;
 pub(crate) mod tour;
@@ -129,6 +130,8 @@ pub(crate) struct NetState {
     pub members: HashMap<String, Vec<PersonRef>>,
     /// Chats whose members were asked for this session (once each: a Graph call per ask).
     members_asked: HashSet<String>,
+    /// Profile photos by person id: present = asked this session, None = pending or no photo.
+    pub(crate) avatars: HashMap<String, Option<std::path::PathBuf>>,
     /// Downloads and previews the user asked for, per attachment.
     pub media: MediaState,
     /// A file chosen for the next message, per chat id (the chip above the message box).
@@ -177,6 +180,7 @@ impl NetState {
             caps: Capabilities::default(),
             members: HashMap::new(),
             members_asked: HashSet::new(),
+            avatars: HashMap::new(),
             media: MediaState::default(),
             pending: HashMap::new(),
             progress: HashMap::new(),
@@ -283,6 +287,9 @@ pub struct App {
     notices: VecDeque<Notice>,
     size: Rect,
     clock: Clock,
+    /// Set when a pane may have come back on screen: `fire_timers` then refills the picture
+    /// downloads that stalled while it was hidden.
+    auto_kick: bool,
     next_client: u64,
     quit: bool,
     keys: Keymap,
@@ -311,6 +318,8 @@ pub struct App {
     prompt: Option<Prompt>,
     /// Links the user confirmed; the run loop opens them (App stays pure).
     open_urls: Vec<String>,
+    /// When a click last raised a y/n question (a double-click must not answer it).
+    prompt_opened_ms: i64,
     /// Text `y` asked the run loop to put on the clipboard (`take_copy`).
     copy: Option<(Network, String)>,
     /// Attachments: the path prompt, queues for the run loop, thumbnail settings (issues 16-37).
@@ -497,6 +506,7 @@ impl App {
             notices: VecDeque::new(),
             size: Rect::new(0, 0, 80, 24),
             clock,
+            auto_kick: false,
             next_client: 0,
             quit: false,
             keys: Keymap::build(&settings.keys).0,
@@ -511,6 +521,7 @@ impl App {
             store: None,
             prompt: None,
             open_urls: Vec::new(),
+            prompt_opened_ms: i64::MIN / 2,
             copy: None,
             media: media::Ctl::default(),
             theme: Theme::default(),
@@ -567,6 +578,7 @@ impl App {
         };
         self.notif = settings.notifications.clone();
         self.send_typing = settings.whatsapp.send_typing;
+        self.media.auto = settings.whatsapp.download_images;
     }
 
     /// The app as `run` builds it: settings, `--keys`, and one start-up notice that sums up
@@ -781,6 +793,7 @@ impl App {
         let now = self.clock.now_ms;
         for n in Network::ALL {
             let visible = self.convo_visible(n);
+            self.auto_kick |= visible;
             let ns = self.ns_mut(n);
             if !ns.previewing || ns.open.is_none() {
                 continue;
@@ -822,6 +835,11 @@ impl App {
             .min()
     }
 
+    /// True when `fire_timers` has picture downloads to refill after a pane came back.
+    pub fn refill_due(&self) -> bool {
+        self.auto_kick
+    }
+
     /// Runs the timers that are due at the clock time set by `tick`: requests a chat that has
     /// rested for `SETTLE_MS`, and marks one read after `READ_AFTER_MS` of preview.
     pub fn fire_timers(&mut self) -> Out {
@@ -829,6 +847,7 @@ impl App {
         self.fire_toasts();
         let mut out = self.tour_tick();
         let visible = Network::ALL.map(|n| self.convo_visible(n));
+        let mut counted = Vec::new();
         for (ns, visible) in self.nets.iter_mut().zip(visible) {
             if ns.settle.as_ref().is_some_and(|s| now >= s.1) {
                 if let Some((id, _)) = ns.settle.take() {
@@ -842,12 +861,20 @@ impl App {
                 // the pane is shown again (`sync_read_timers`).
                 if let Some(id) = ns.open.clone().filter(|_| ns.previewing && visible) {
                     ns.previewing = false;
+                    counted.push(ns.network);
                     // Only when the chat has something unread: browsing read chats costs no call.
                     if ns.chats.iter().any(|c| c.id == id && c.unread > 0) {
                         ns.mark_read(&id, &mut out);
                     }
                 }
             }
+        }
+        for n in counted {
+            out.extend(self.auto_images(n));
+        }
+        // A pane that came back on screen: repeating is safe, `auto_tried` and the cap hold.
+        if std::mem::take(&mut self.auto_kick) {
+            out.extend(self.auto_images(self.active));
         }
         out
     }
@@ -1066,6 +1093,10 @@ impl App {
                     // to ask again.
                     ns.older.retain(|_, o| *o != Older::Loading);
                 }
+                // Signed out: the next sign-in may be another account, so photos are asked afresh.
+                if matches!(status, Status::NeedsLogin { .. }) {
+                    ns.avatars.clear();
+                }
                 ns.status = status;
                 // A sign-in panel appearing or going away changes what is on screen.
                 self.sync_read_timers();
@@ -1109,6 +1140,9 @@ impl App {
                     .entry(chat_id.clone())
                     .or_default();
                 *held = merge_history(std::mem::take(held), messages);
+                if is_open {
+                    out.extend(self.auto_images(network));
+                }
                 self.keep_selection(network, &chat_id);
                 if follow {
                     self.follow_newest(network);
@@ -1145,6 +1179,9 @@ impl App {
                 }
                 if follow {
                     self.follow_newest(n);
+                }
+                if is_open && !from_me {
+                    out.extend(self.auto_images(n));
                 }
                 if is_open && !from_me && !self.ns(n).previewing {
                     let ns = self.ns_mut(n);
@@ -1205,6 +1242,16 @@ impl App {
                 }
             }
             Event::Capabilities { network, caps } => self.ns_mut(network).caps = caps,
+            Event::Avatar {
+                network,
+                person_id,
+                path,
+            } => {
+                // Only an answer to a pending ask: a late one after sign-out is dropped.
+                if let Some(slot) = self.ns_mut(network).avatars.get_mut(&person_id) {
+                    *slot = path;
+                }
+            }
             Event::Members {
                 network,
                 chat_id,
@@ -1224,7 +1271,11 @@ impl App {
                 message_id,
                 index,
                 path,
-            } => self.media_ready(network, chat_id, message_id, index, path),
+            } => {
+                self.media_ready(network, chat_id, message_id, index, path);
+                // A slot freed: a picture held back by the in-flight cap starts now.
+                out.extend(self.auto_images(network));
+            }
             Event::MediaFailed {
                 network,
                 chat_id,
@@ -1232,7 +1283,10 @@ impl App {
                 index,
                 reason,
                 fallback_url,
-            } => self.media_failed(network, chat_id, message_id, index, reason, fallback_url),
+            } => {
+                self.media_failed(network, chat_id, message_id, index, reason, fallback_url);
+                out.extend(self.auto_images(network));
+            }
             Event::SendProgress {
                 network,
                 chat_id,
@@ -2246,6 +2300,7 @@ impl App {
         }
         ns.previewing = false;
         self.ensure_visible(n);
+        out.extend(self.auto_images(n));
         out
     }
 
@@ -2358,11 +2413,34 @@ impl App {
     }
 
     pub fn handle_mouse(&mut self, m: MouseEvent) -> Out {
+        let had_prompt = self.prompt.is_some();
+        let out = self.mouse_now(m);
+        if !had_prompt && self.prompt.is_some() {
+            self.prompt_opened_ms = self.clock.now_ms;
+        }
+        out
+    }
+
+    fn mouse_now(&mut self, m: MouseEvent) -> Out {
         if self.tour.as_ref().is_some_and(|t| !t.done) {
             return Vec::new();
         }
-        // A held vim `g` is about the keyboard; a click or wheel ends it. The help overlay
-        // takes keys only, so the screen behind it stays put.
+        // Pointer moves, drags and releases do nothing: they must not close the completion
+        // list or end a held `g` on the way to a click.
+        if matches!(
+            m.kind,
+            MouseEventKind::Moved | MouseEventKind::Drag(_) | MouseEventKind::Up(_)
+        ) {
+            return Vec::new();
+        }
+        // Nothing is drawn but a notice: nothing can be clicked.
+        if ui::too_small(self.size) {
+            return Vec::new();
+        }
+        let foot = self.footer_click_hit(m);
+        // A held vim `g` is about the keyboard; a click or wheel ends it. Something open over
+        // the screen (help, a question, the attach prompt, search, the command bar, settings)
+        // gets the mouse first, so the screen behind it stays put.
         self.pending = None;
         if self.help.is_some()
             || self.prompt.is_some()
@@ -2371,15 +2449,25 @@ impl App {
             || self.palette.is_some()
             || self.settings_page.is_some()
         {
-            return Vec::new();
+            return self.overlay_mouse(m);
         }
         if self.picker.is_some() {
             return self.picker_mouse(m);
         }
-        self.popup = None;
         let pos = Position::new(m.column, m.row);
         let n = self.active;
         let lay = self.layout_for(n);
+        // The completion list takes clicks on it; any other mouse event closes it.
+        if let Some(out) = self.popup_mouse(m, &lay, pos) {
+            return out;
+        }
+        // A click on a footer key hint runs that key's action (before the popup is closed: the
+        // footer drawn with the list open is the one that was clicked).
+        if let Some(action) = foot {
+            return self.run_click_action(action);
+        }
+        self.popup = None;
+        self.popup_closed = true;
         match m.kind {
             MouseEventKind::Down(MouseButton::Left) => {
                 if lay.header.contains(pos) {
@@ -2393,8 +2481,12 @@ impl App {
                     let ns = self.ns(n);
                     let row = ns.list_top + (pos.y - lay.list.y) as usize / self.row_h() as usize;
                     if let Some(&i) = ns.visible().get(row) {
-                        // A click previews like a cursor move; Enter replies.
+                        // A click previews like a cursor move; a click on the chat already
+                        // shown opens it, as Enter does.
                         let id = ns.chats[i].id.clone();
+                        if ns.selected.as_ref() == Some(&id) && ns.open.as_ref() == Some(&id) {
+                            return self.open_selected(n);
+                        }
                         let ns = self.ns_mut(n);
                         ns.selected = Some(id.clone());
                         ns.focus = Focus::List;
@@ -2405,7 +2497,11 @@ impl App {
                     && lay.composer.contains(pos)
                     && self.ns(n).open.is_some()
                 {
-                    return self.commit(n);
+                    return self.click_composer(n, &lay, pos);
+                } else if !self.ns(n).panel() && lay.messages.contains(pos) {
+                    if let Some((id, kind)) = ui::convo_hit(self, &lay, pos) {
+                        return self.click_message(n, id, kind);
+                    }
                 }
             }
             MouseEventKind::ScrollUp | MouseEventKind::ScrollDown if !self.ns(n).panel() => {
@@ -5133,5 +5229,18 @@ mod tests {
         assert_eq!(entries.len(), commands::COMMANDS.len());
         assert_eq!(entries[0], (&":help".to_string(), &"?".to_string()));
         assert_eq!(entries[1], (&":settings".to_string(), &"F2".to_string()));
+    }
+
+    #[test]
+    fn clicking_the_chat_already_shown_opens_it_like_enter() {
+        let mut app = online_app();
+        // First click previews and keeps the list focus.
+        assert!(app.handle_mouse(click(5, 4)).is_empty());
+        assert_eq!(app.active().focus, Focus::List);
+        // The second click on the same row is Enter: the message box takes focus.
+        let out = app.handle_mouse(click(5, 4));
+        assert_eq!(app.active().focus, Focus::Composer);
+        assert_eq!(app.active().open.as_deref(), Some("b"));
+        assert!(out.contains(&open_chat_cmd("b")), "{out:?}");
     }
 }

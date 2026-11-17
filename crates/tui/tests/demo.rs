@@ -810,3 +810,35 @@ async fn demo_whatsapp_shows_someone_typing_and_then_their_message() {
     .await;
     assert!(text.contains("composing"), "{text}");
 }
+
+#[tokio::test]
+async fn avatars_are_answered_for_every_person_and_sam_sample_has_none() {
+    let (mut rx, cmds) = spawn_demo();
+    let tx = &cmds[&Network::Teams];
+    let people: Vec<String> = ["demo:Alex Example", "demo:Sam Sample", "someone-else"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    tx.send(Command::FetchAvatars {
+        people: people.clone(),
+    })
+    .unwrap();
+    let mut got = HashMap::new();
+    while got.len() < people.len() {
+        let (id, path) = next(&mut rx, |e| match e {
+            Event::Avatar {
+                network: Network::Teams,
+                person_id,
+                path,
+            } => Some((person_id, path)),
+            _ => None,
+        })
+        .await;
+        got.insert(id, path);
+    }
+    let alex = got["demo:Alex Example"].clone().expect("a portrait");
+    assert!(alex.is_file());
+    assert_eq!(alex.extension().and_then(|e| e.to_str()), Some("png"));
+    assert!(got["demo:Sam Sample"].is_none(), "the initials fallback");
+    assert!(got["someone-else"].is_none());
+}

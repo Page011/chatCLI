@@ -1,7 +1,7 @@
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                                           Ctrl+C quit
 ┌ Settings ──────┐╔ Notifications ═════════════════════════════════════════════════════════════════╗
 │Appearance      │║Enabled             on             desktop toasts for new messages              ║
-│Layout          │║Preview             off            off keeps message text out of toasts         ║
+│Layout          │║Preview             full           off or sender: no message text in toasts     ║
 │Notifications   │║Sound               on             play a sound                                 ║
 │Media           │║                                                                                ║
 │Teams           │║                                                                                ║

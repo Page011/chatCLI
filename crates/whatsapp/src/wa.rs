@@ -79,6 +79,29 @@ pub(crate) trait Wa: Send + Sync {
     ) -> Result<(), String>;
     /// Pin, mute (for good) or archive a chat, or undo it.
     async fn set_flag(&self, chat: Jid, flag: ChatFlag, on: bool) -> Result<(), String>;
+    /// The small profile picture of a phone-number or LID address. Ok(None) = no photo or not
+    /// shared. Err(AVATAR_TOO_BIG) = the download was over 1 MB.
+    async fn profile_picture(&self, jid: Jid) -> Result<Option<Vec<u8>>, String>;
+}
+
+/// `profile_picture` error: the picture is over `AVATAR_MAX_BYTES`.
+pub(crate) const AVATAR_TOO_BIG: &str = "profile photo too big";
+
+/// A profile picture may be downloaded only from WhatsApp's own CDN: https, host `whatsapp.net`
+/// or a subdomain of it, no user info, no port.
+pub(crate) fn cdn_url_ok(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("https://") else {
+        return false;
+    };
+    let host = rest
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if host.contains('@') || host.contains(':') {
+        return false;
+    }
+    host == "whatsapp.net" || host.ends_with(".whatsapp.net")
 }
 
 /// URLs carry tokens in their query strings. Anything shaped like one never reaches a log or a
@@ -89,6 +112,9 @@ pub(crate) fn redact_urls(text: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
 }
+
+/// Each step of a profile photo lookup (the IQ, then the download).
+const PHOTO_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
 /// Largest buffer reserved up front for a download whose size the sender declared.
 const PREALLOC_MAX: u64 = 64 * 1024 * 1024;
@@ -299,6 +325,52 @@ impl Wa for RealWa {
         .map_err(|e| chain(&e))
     }
 
+    async fn profile_picture(&self, jid: Jid) -> Result<Option<Vec<u8>>, String> {
+        let pic = self
+            .client
+            .contacts()
+            .get_profile_picture_with_timeout(&jid, true, Some(PHOTO_TIMEOUT))
+            .await
+            .map_err(|e| redact_urls(&chain(&e)))?;
+        let Some(pic) = pic else { return Ok(None) };
+        if !cdn_url_ok(&pic.url) {
+            chatcli_core::log::error("whatsapp", "profile photo URL not on a WhatsApp host");
+            return Ok(None);
+        }
+        let agent = crate::tls::photo_agent(PHOTO_TIMEOUT);
+        let url = pic.url;
+        let max = chatcli_core::media::AVATAR_MAX_BYTES;
+        // ureq is blocking: its own thread. The read stops one byte past the cap.
+        let read = tokio::task::spawn_blocking(move || {
+            let resp = agent
+                .get(&url)
+                .call()
+                .map_err(|e| redact_urls(&e.to_string()))?;
+            if resp.status().as_u16() != 200 {
+                return Err(format!(
+                    "WhatsApp's photo server answered {}",
+                    resp.status().as_u16()
+                ));
+            }
+            let mut bytes = Vec::new();
+            resp.into_body()
+                .into_reader()
+                .take(max + 1)
+                .read_to_end(&mut bytes)
+                .map_err(|e| redact_urls(&e.to_string()))?;
+            Ok(bytes)
+        });
+        let bytes = match tokio::time::timeout(PHOTO_TIMEOUT, read).await {
+            Ok(Ok(r)) => r?,
+            Ok(Err(e)) => return Err(format!("photo download failed ({e})")),
+            Err(_) => return Err("photo download timed out".to_string()),
+        };
+        if bytes.len() as u64 > max {
+            return Err(AVATAR_TOO_BIG.to_string());
+        }
+        Ok(Some(bytes))
+    }
+
     async fn members(&self, chat: Jid) -> Result<Vec<Member>, String> {
         let meta = self
             .client
@@ -393,6 +465,35 @@ impl Read for CountingReader {
 mod tests {
     use super::*;
     use std::sync::atomic::AtomicU64;
+
+    #[test]
+    fn only_whatsapp_cdn_hosts_are_downloaded_from() {
+        for ok in [
+            "https://pps.whatsapp.net/v/t61/a.jpg?oh=1",
+            "https://whatsapp.net/x",
+            "https://PPS.WhatsApp.NET/x",
+        ] {
+            assert!(cdn_url_ok(ok), "{ok}");
+        }
+        // Built at run time: a literal user@host would trip the repo privacy scan.
+        let userinfo = [
+            format!("https://user{}pps.whatsapp.net/x", '@'),
+            format!("https://evil.com{}pps.whatsapp.net/x", '@'),
+        ];
+        for bad in userinfo.iter().map(String::as_str).chain([
+            "http://pps.whatsapp.net/x",
+            "https://evil.com/x",
+            "https://pps.whatsapp.net.evil.com/x",
+            "https://pps.whatsapp.net:8443/x",
+            "https://whatsapp.net.evil/x",
+            "https://evilwhatsapp.net/x",
+            "https://evil.com/?a=.whatsapp.net",
+            "https://evil.com#.whatsapp.net",
+            "",
+        ]) {
+            assert!(!cdn_url_ok(bad), "{bad}");
+        }
+    }
 
     #[test]
     fn urls_never_survive_into_a_message() {

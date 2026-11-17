@@ -1034,6 +1034,7 @@ mod tests {
         let on = TeamsSettings {
             files_read: true,
             files_write: true,
+            ..TeamsSettings::default()
         };
         let c = capabilities(&both, &on);
         assert!(c.send_file && c.fetch_files);

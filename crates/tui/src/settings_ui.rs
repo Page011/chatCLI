@@ -1,6 +1,6 @@
 //! Drawing the settings screen. The model is `settings_view`, the keys are `app/settings.rs`.
 
-use ratatui::layout::{Margin, Rect};
+use ratatui::layout::{Margin, Position, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph};
@@ -11,7 +11,7 @@ use crate::keymap::{Action, Context};
 use crate::list::keep_visible;
 use crate::settings_view::{Kind, PageEdit, Row, RowId, Section, SettingsPage};
 use crate::text::{fit, sw, truncate, wrap};
-use crate::theme::Theme;
+use crate::theme::{Panel, Theme};
 use crate::ui::{bold, centered_note, pane};
 
 const SECTIONS_W: u16 = 18;
@@ -63,6 +63,38 @@ pub(crate) fn geometry(body: Rect) -> Option<Geom> {
     })
 }
 
+/// The section list as drawn: the left pane, or the whole list while narrow and not in a section.
+fn sections_area(g: &Geom, page: &SettingsPage) -> Option<Rect> {
+    match g.left {
+        Some(left) => Some(left.inner(Margin::new(1, 1))),
+        None if !page.in_rows => Some(g.list),
+        None => None,
+    }
+}
+
+/// The section drawn at `pos`, if any.
+pub(crate) fn section_at(page: &SettingsPage, g: &Geom, pos: Position) -> Option<Section> {
+    let area = sections_area(g, page).filter(|a| a.contains(pos))?;
+    let idx = Section::ALL.iter().position(|s| *s == page.section)?;
+    let top = keep_visible(0, idx, area.height as usize, Section::ALL.len());
+    Section::ALL.get(top + (pos.y - area.y) as usize).copied()
+}
+
+/// The index of the row drawn at `pos`, if any (a heading or a wrapped problem line counts: the
+/// caller checks whether it can be chosen).
+pub(crate) fn row_at(page: &SettingsPage, rows: &[Row], g: &Geom, pos: Position) -> Option<usize> {
+    if (g.left.is_none() && !page.in_rows) || !g.list.contains(pos) {
+        return None;
+    }
+    let (w, h) = (g.list.width as usize, g.list.height as usize);
+    let top = keep_visible(page.top, page.row, h, rows.len());
+    let line = (pos.y - g.list.y) as usize;
+    row_layout(rows, top, w, h)
+        .into_iter()
+        .find(|(_, at, n)| (*at..at + n).contains(&line))
+        .map(|(k, ..)| k)
+}
+
 /// Rows of the list that fit on screen.
 pub(crate) fn rows_shown(body: Rect) -> usize {
     geometry(body).map_or(1, |g| g.list.height as usize)
@@ -81,17 +113,28 @@ pub(crate) fn draw(f: &mut Frame, app: &App, body: Rect) {
     let rows = app.page_rows();
     match g.left {
         Some(left) => {
-            f.render_widget(pane("Settings", !page.in_rows), left);
+            f.render_widget(pane(t, Panel::Sidebar, "Settings", !page.in_rows), left);
             draw_sections(f, page, left.inner(Margin::new(1, 1)), t, !page.in_rows);
-            f.render_widget(pane(&pane_title(page, &rows, &g), page.in_rows), g.right);
+            f.render_widget(
+                pane(
+                    t,
+                    Panel::Messages,
+                    &pane_title(page, &rows, &g),
+                    page.in_rows,
+                ),
+                g.right,
+            );
             draw_rows(f, app, page, &rows, &g);
         }
         None if page.in_rows => {
-            f.render_widget(pane(&pane_title(page, &rows, &g), true), g.right);
+            f.render_widget(
+                pane(t, Panel::Messages, &pane_title(page, &rows, &g), true),
+                g.right,
+            );
             draw_rows(f, app, page, &rows, &g);
         }
         None => {
-            f.render_widget(pane("Settings", true), g.right);
+            f.render_widget(pane(t, Panel::Sidebar, "Settings", true), g.right);
             draw_sections(f, page, g.list, t, true);
             draw_status(f, page, &rows, &g, t);
         }
@@ -135,6 +178,32 @@ fn draw_sections(f: &mut Frame, page: &SettingsPage, area: Rect, t: &Theme, focu
     }
 }
 
+/// Where each row from `top` sits in a list `w` wide and `h` lines tall: (row index, first
+/// line, lines). A problem row wraps over several lines; the rest take one. Drawing and the
+/// mouse both read this.
+pub(crate) fn row_layout(
+    rows: &[Row],
+    top: usize,
+    w: usize,
+    h: usize,
+) -> Vec<(usize, usize, usize)> {
+    let mut out = Vec::new();
+    let mut used = 0usize;
+    for (k, row) in rows.iter().enumerate().skip(top) {
+        if used >= h {
+            break;
+        }
+        let lines = if matches!(row.id, RowId::Problem(_)) {
+            wrap(&row.value, w).len().min(h - used).max(1)
+        } else {
+            1
+        };
+        out.push((k, used, lines));
+        used += lines;
+    }
+    out
+}
+
 fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Geom) {
     let t = app.theme();
     let area = g.list;
@@ -157,13 +226,9 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
     let value_w = if show_hint { want_w } else { after_label };
     let top = keep_visible(page.top, page.row, h, rows.len());
     // A problem line wraps over several screen rows: `used` counts the rows drawn.
-    let mut used = 0usize;
-    for (k, row) in rows.iter().enumerate().skip(top) {
-        if used >= h {
-            break;
-        }
+    for (k, used, lines) in row_layout(rows, top, w, h) {
+        let row = &rows[k];
         let y = area.y + used as u16;
-        used += 1;
         let selected = page.in_rows && k == page.row;
         let line_area = Rect::new(area.x, y, area.width, 1);
         let base = if selected { t.selected } else { Style::new() };
@@ -175,11 +240,7 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
             continue;
         }
         if matches!(row.id, RowId::Problem(_)) {
-            let lines = wrap(&row.value, w);
-            for (i, text) in lines.iter().take(h - (used - 1)).enumerate() {
-                if i > 0 {
-                    used += 1;
-                }
+            for (i, text) in wrap(&row.value, w).iter().take(lines).enumerate() {
                 f.render_widget(
                     Paragraph::new(Span::styled(text.clone(), t.error)),
                     Rect::new(area.x, y + i as u16, area.width, 1),
@@ -243,7 +304,14 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
         // The `selected` role is not shown in its own style: reversed text would read as a
         // second cursor.
         if let RowId::Role(name) = row.id {
-            if name != "selected" {
+            if name.ends_with("_background") {
+                // A swatch: the value drawn on the colour it names.
+                if let (false, Ok(Some(c))) =
+                    (app.no_colour(), crate::theme::background(&row.value))
+                {
+                    value_style = value_style.bg(c);
+                }
+            } else if name != "selected" {
                 value_style = value_style.patch(t.role(name).unwrap_or_default());
             }
         }

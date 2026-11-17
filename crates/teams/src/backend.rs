@@ -34,7 +34,7 @@ use chatcli_core::{config, log};
 use crate::auth::{self, AuthFailure, ScopeSet};
 use crate::body;
 use crate::graph::{self, ApiResult, Graph};
-use crate::map::{self, FetchSpec, Local, RemoteLast, TOKEN_MARGIN_MS};
+use crate::map::{self, has_scope, FetchSpec, Local, RemoteLast, TOKEN_MARGIN_MS};
 use crate::relay::{self, Frame, LifecycleItem, Notification, RelayEvent};
 use crate::subscription::{self, Spec, SubState, SUB_ID_KEY};
 use crate::transfer;
@@ -130,6 +130,10 @@ struct Backend {
     scope_warned: bool,
     /// Uploads and downloads in flight.
     tasks: JoinSet<()>,
+    /// Photo batches run one after another; the value is "throttled until" after a 429.
+    avatar_gate: Arc<tokio::sync::Mutex<Option<Instant>>>,
+    /// Bumped on sign-out: a running photo batch stops and answers nothing.
+    avatar_gen: Arc<std::sync::atomic::AtomicU64>,
     me_id: Option<String>,
     tenant_id: Option<String>,
     relay: Option<relay::Client>,
@@ -394,6 +398,8 @@ impl Backend {
             last_caps: None,
             scope_warned: false,
             tasks: JoinSet::new(),
+            avatar_gate: Arc::new(tokio::sync::Mutex::new(None)),
+            avatar_gen: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             me_id: None,
             tenant_id: None,
             relay: None,
@@ -527,6 +533,9 @@ impl Backend {
         if teams.files_write && !caps.send_file {
             missing.push("Files.ReadWrite (sending files)");
         }
+        if teams.photos && !has_scope(&self.granted, auth::PHOTOS_SCOPE) {
+            missing.push("User.ReadBasic.All (profile photos)");
+        }
         if !missing.is_empty() {
             self.scope_warned = true;
             self.notice(
@@ -540,6 +549,11 @@ impl Backend {
     }
 
     // --- tokens and Graph calls ------------------------------------------------------------
+
+    /// Profile photos need the setting and the consent.
+    fn photos_allowed(&self) -> bool {
+        self.settings.teams.photos && has_scope(&self.granted, auth::PHOTOS_SCOPE)
+    }
 
     fn scopes(&self) -> ScopeSet {
         ScopeSet::from_settings(&self.settings.teams)
@@ -663,6 +677,8 @@ impl Backend {
 
     /// Forgets who is signed in. Capabilities are re-sent after the next sign-in.
     fn forget_session(&mut self) {
+        self.avatar_gen
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         self.token = None;
         self.granted.clear();
         self.last_caps = None;
@@ -911,6 +927,7 @@ impl Backend {
             } => self.load_older(&chat_id, before_ts, &before_id).await,
             Command::LoadMembers { chat_id } => self.load_members(&chat_id).await,
             Command::Typing { .. } => {}
+            Command::FetchAvatars { people } => self.fetch_avatars(people).await,
             Command::Settings(s) => self.apply_settings(s),
             Command::SetChatFlag { chat_id, flag, on } => {
                 self.set_chat_flag(&chat_id, flag, on).await
@@ -1353,6 +1370,132 @@ impl Backend {
     }
 
     // --- media -----------------------------------------------------------------------------
+
+    /// Answers every person. Without the setting or the consent nothing touches the network.
+    /// Cached photos are answered at once; the rest are fetched one at a time by one task, and
+    /// a 429 stops the loop. A failed lookup keeps an older photo. Logs counts only.
+    async fn fetch_avatars(&mut self, people: Vec<String>) {
+        let answer = |events: &EventTx, id: String, path: Option<PathBuf>| {
+            let _ = events.send(Event::Avatar {
+                network: NET,
+                person_id: id,
+                path,
+            });
+        };
+        let asked = people.len();
+        if !self.photos_allowed() {
+            for id in people {
+                answer(&self.events, id, None);
+            }
+            return;
+        }
+        let now = now_ms();
+        let (mut todo, mut cached) = (Vec::new(), 0usize);
+        for id in people {
+            if !config::is_guid(&id) {
+                answer(&self.events, id, None);
+                continue;
+            }
+            match self.media.avatar_lookup(NET, &id, now) {
+                media::AvatarLookup::Fresh(p) => {
+                    cached += 1;
+                    answer(&self.events, id, Some(p));
+                }
+                media::AvatarLookup::NoPhoto => {
+                    cached += 1;
+                    answer(&self.events, id, None);
+                }
+                media::AvatarLookup::Stale(p) => todo.push((id, Some(p))),
+                media::AvatarLookup::Missing => todo.push((id, None)),
+            }
+        }
+        if todo.is_empty() {
+            log::info(
+                "teams",
+                &format!("profile photos: {asked} asked, 0 found, {cached} cached"),
+            );
+            return;
+        }
+        let graph = match self.task_graph().await {
+            Ok(g) => g,
+            Err(_) => {
+                for (id, stale) in todo {
+                    answer(&self.events, id, stale);
+                }
+                return;
+            }
+        };
+        let (cache, events) = (self.media.clone(), self.events.clone());
+        let gate = self.avatar_gate.clone();
+        let gen_now = self.avatar_gen.clone();
+        let gen_at = gen_now.load(std::sync::atomic::Ordering::SeqCst);
+        self.tasks.spawn(async move {
+            let mut gate = gate.lock().await;
+            let mut found = 0usize;
+            let mut stop = gate.is_some_and(|t| Instant::now() < t);
+            for (id, stale) in todo {
+                if gen_now.load(std::sync::atomic::Ordering::SeqCst) != gen_at {
+                    return;
+                }
+                if stop {
+                    answer(&events, id, stale);
+                    continue;
+                }
+                let got = graph.user_photo(&id).await;
+                // Signed out while the request was in flight: write and answer nothing.
+                if gen_now.load(std::sync::atomic::Ordering::SeqCst) != gen_at {
+                    return;
+                }
+                let path = match got {
+                    Ok(Some(bytes)) => {
+                        let (c, i) = (cache.clone(), id.clone());
+                        let stored = tokio::task::spawn_blocking(move || {
+                            c.store_avatar(NET, &i, &bytes).or_else(|e| {
+                                c.store_no_avatar(NET, &i)?;
+                                Err(e)
+                            })
+                        })
+                        .await;
+                        match stored {
+                            Ok(Ok(p)) => {
+                                found += 1;
+                                Some(p)
+                            }
+                            _ => None,
+                        }
+                    }
+                    Ok(None) => {
+                        let _ = cache.store_no_avatar(NET, &id);
+                        None
+                    }
+                    // Over the size cap counts as no photo.
+                    Err(e) if e.status == 413 => {
+                        let _ = cache.store_no_avatar(NET, &id);
+                        None
+                    }
+                    Err(e) => {
+                        // Throttled, or no network: end the batch, later ones wait a minute.
+                        if e.status == 429 || e.status == 0 {
+                            stop = true;
+                            *gate = Some(Instant::now() + std::time::Duration::from_secs(60));
+                        }
+                        stale
+                    }
+                };
+                if gen_now.load(std::sync::atomic::Ordering::SeqCst) != gen_at {
+                    return;
+                }
+                answer(&events, id, path);
+            }
+            // One cache walk per batch, not per photo.
+            let c = cache.clone();
+            let _ = tokio::task::spawn_blocking(move || c.evict(now_ms())).await;
+            log::info(
+                "teams",
+                &format!("profile photos: {asked} asked, {found} found, {cached} cached"),
+            );
+        });
+    }
 
     async fn fetch_media(&mut self, chat_id: String, message_id: String, index: u32) {
         let failed = |b: &Backend, reason: String, fallback_url: Option<String>| {

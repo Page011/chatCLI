@@ -17,6 +17,8 @@ pub const MAX_PAGE: u32 = 50;
 /// A file or picture moving to or from Graph may take a while; the client's 30 s default is
 /// for ordinary calls.
 const TRANSFER_TIMEOUT: Duration = Duration::from_secs(600);
+/// One profile photo request: a dead network must not hold the batch for ten minutes.
+const PHOTO_TIMEOUT: Duration = Duration::from_secs(15);
 /// Where Teams chat files are uploaded in the user's OneDrive (the folder Teams itself uses).
 const CHAT_FILES_FOLDER: &str = "Microsoft Teams Chat Files";
 
@@ -253,6 +255,14 @@ pub struct ApiError {
     pub message: String,
 }
 
+/// A profile photo over the size cap: status 413, so callers can tell it from a network failure.
+fn too_big() -> ApiError {
+    ApiError {
+        status: 413,
+        message: "profile photo too big".to_string(),
+    }
+}
+
 pub type ApiResult<T> = std::result::Result<T, ApiError>;
 
 impl std::convert::From<ApiError> for String {
@@ -393,6 +403,26 @@ impl Download {
                 Err(e) => return Err(format!("Graph: {}", chain(&e))),
             }
         }
+    }
+}
+
+/// A `Write` that errors once more than `max` bytes arrive.
+struct CappedVec {
+    bytes: Vec<u8>,
+    max: u64,
+}
+
+impl std::io::Write for CappedVec {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if self.bytes.len() as u64 + buf.len() as u64 > self.max {
+            return Err(std::io::Error::other("profile photo too big"));
+        }
+        self.bytes.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 
@@ -810,8 +840,12 @@ impl Graph {
     // --- media -----------------------------------------------------------------------------
 
     async fn download(&self, url: reqwest::Url) -> ApiResult<Download> {
+        self.download_within(url, TRANSFER_TIMEOUT).await
+    }
+
+    async fn download_within(&self, url: reqwest::Url, limit: Duration) -> ApiResult<Download> {
         let response = self
-            .checked(self.http.get(url).timeout(TRANSFER_TIMEOUT), true)
+            .checked(self.http.get(url).timeout(limit), true)
             .await?;
         let content_type = response
             .headers()
@@ -855,6 +889,44 @@ impl Graph {
         let share = share_id(content_url);
         self.download(self.url(&["shares", &share, "driveItem", "content"], &[])?)
             .await
+    }
+
+    /// A person's profile photo: `GET /users/{id}/photos/48x48/$value`, and on 404
+    /// `/users/{id}/photo/$value` (a photo kept only in Entra has no fixed sizes). Ok(None) =
+    /// 404 on both (no photo) or 403 (no consent). The body is read with a 1 MB cap: over it is
+    /// an error.
+    pub async fn user_photo(&self, user_id: &str) -> ApiResult<Option<Vec<u8>>> {
+        let sized = self.url(&["users", user_id, "photos", "48x48", "$value"], &[])?;
+        let plain = self.url(&["users", user_id, "photo", "$value"], &[])?;
+        let mut dl = None;
+        for url in [sized, plain] {
+            match self.download_within(url, PHOTO_TIMEOUT).await {
+                Ok(d) => {
+                    dl = Some(d);
+                    break;
+                }
+                Err(e) if e.status == 404 => {}
+                Err(e) if e.status == 403 => return Ok(None),
+                Err(e) => return Err(e),
+            }
+        }
+        let Some(dl) = dl else { return Ok(None) };
+        let max = chatcli_core::media::AVATAR_MAX_BYTES;
+        if dl.content_length.is_some_and(|n| n > max) {
+            return Err(too_big());
+        }
+        let mut out = CappedVec {
+            bytes: Vec::new(),
+            max,
+        };
+        dl.copy_to(&mut out).await.map_err(|e| {
+            if e.contains("profile photo too big") {
+                too_big()
+            } else {
+                e.into()
+            }
+        })?;
+        Ok(Some(out.bytes))
     }
 
     // --- sending files ---------------------------------------------------------------------
@@ -1387,6 +1459,45 @@ mod tests {
             None,
             "the bearer token must not follow the redirect to another host"
         );
+    }
+
+    #[tokio::test]
+    async fn user_photo_reads_the_sized_photo_then_the_plain_one() {
+        let mock = Mock::start(|_| Reply::bytes(200, "image/jpeg", vec![1, 2, 3]));
+        let g = graph_for(&mock);
+        assert_eq!(g.user_photo("u1").await.unwrap(), Some(vec![1, 2, 3]));
+        assert_eq!(
+            mock.requests()[0].path(),
+            "/v1.0/users/u1/photos/48x48/$value"
+        );
+        let mock = Mock::start(|r| {
+            if r.path().contains("48x48") {
+                Reply::error(404, "ImageNotFound", "none")
+            } else {
+                Reply::bytes(200, "image/jpeg", vec![9])
+            }
+        });
+        let g = graph_for(&mock);
+        assert_eq!(g.user_photo("u1").await.unwrap(), Some(vec![9]));
+        assert_eq!(mock.requests()[1].path(), "/v1.0/users/u1/photo/$value");
+    }
+
+    #[tokio::test]
+    async fn user_photo_answers_none_for_404_twice_and_for_403() {
+        let mock = Mock::start(|_| Reply::error(404, "ImageNotFound", "none"));
+        assert_eq!(graph_for(&mock).user_photo("u1").await.unwrap(), None);
+        assert_eq!(mock.requests().len(), 2);
+        let mock = Mock::start(|_| Reply::error(403, "Forbidden", "no scope"));
+        assert_eq!(graph_for(&mock).user_photo("u1").await.unwrap(), None);
+        assert_eq!(mock.requests().len(), 1);
+        let mock = Mock::start(|_| Reply::error(500, "Oops", "x"));
+        assert!(graph_for(&mock).user_photo("u1").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn user_photo_over_one_megabyte_is_an_error() {
+        let mock = Mock::start(|_| Reply::bytes(200, "image/jpeg", vec![0; 1024 * 1024 + 1]));
+        assert!(graph_for(&mock).user_photo("u1").await.is_err());
     }
 
     #[tokio::test]

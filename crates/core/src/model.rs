@@ -469,6 +469,13 @@ pub enum Event {
         members: Vec<PersonRef>,
         error: Option<String>,
     },
+    /// Answer to FetchAvatars. `path` is a square PNG in the media cache; None = no photo, not
+    /// allowed, or failed. The TUI does not ask again this session.
+    Avatar {
+        network: Network,
+        person_id: String,
+        path: Option<PathBuf>,
+    },
     /// Sent after reaching Online and whenever a capability changes.
     Capabilities {
         network: Network,
@@ -555,6 +562,13 @@ pub enum Command {
         chat_id: String,
         active: bool,
     },
+    /// Profile photos for the avatars beside messages: people of this network (Teams AAD user
+    /// id, WhatsApp JID). Answered with one `Event::Avatar` per person, in any order, never
+    /// silent. The TUI asks once per person per session, only for people whose avatar is on
+    /// screen.
+    FetchAvatars {
+        people: Vec<String>,
+    },
     /// Pin, mute (forever) or hide a chat, or undo it.
     SetChatFlag {
         chat_id: String,
@@ -615,6 +629,14 @@ pub fn unsupported(network: Network, cmd: &Command) -> Vec<Event> {
             members: Vec::new(),
             error: Some(no("Mentions")),
         }],
+        Command::FetchAvatars { people } => people
+            .iter()
+            .map(|p| Event::Avatar {
+                network,
+                person_id: p.clone(),
+                path: None,
+            })
+            .collect(),
         Command::SetChatFlag { flag, .. } => vec![notice(match flag {
             ChatFlag::Pinned => "Pinning",
             ChatFlag::Muted => "Muting",
@@ -745,11 +767,18 @@ mod tests {
                 flag: ChatFlag::Pinned,
                 on: true,
             },
+            Command::FetchAvatars {
+                people: vec!["p".into()],
+            },
         ];
         for cmd in &answered {
             let events = unsupported(n, cmd);
             assert_eq!(events.len(), 1, "{cmd:?}");
         }
+        let two = Command::FetchAvatars {
+            people: vec!["a".into(), "b".into()],
+        };
+        assert_eq!(unsupported(n, &two).len(), 2);
         assert_eq!(
             unsupported(n, &answered[1]),
             vec![Event::Notice {

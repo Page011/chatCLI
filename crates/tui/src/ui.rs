@@ -3,12 +3,12 @@
 //! text or shape signal (status words, reverse video, double border on the focused pane).
 
 use chatcli_core::model::{ChatMessage, MessageState, Network, Status};
-use chatcli_core::settings::SidebarWidth;
+use chatcli_core::settings::{Avatars, SidebarWidth};
 use qrcode::{Color as QrColor, EcLevel, QrCode};
-use ratatui::layout::{Alignment, Margin, Rect};
+use ratatui::layout::{Alignment, Margin, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Clear, Paragraph, Wrap};
+use ratatui::widgets::{Block, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
 use crate::app::msg::Target;
@@ -24,13 +24,24 @@ use crate::media_view::{
 use crate::older::Older;
 use crate::settings_view::RowId;
 use crate::text::{clean_line, fit, sw, truncate, wrap, wrap_pieces, Clock, Fmt, Piece};
-use crate::theme::Theme;
+use crate::theme::{Outline, Panel, Theme};
 use std::path::PathBuf;
 
 const MIN_W: u16 = 30;
 const MIN_H: u16 = 8;
 const BRAND: &str = " chatcli ";
 const SENDER_MAX: usize = 14;
+
+/// Avatar size in cells: 4 by 2 is about square in a terminal font.
+const AVATAR_W: usize = 4;
+/// Columns between the avatar and the name and text.
+const AVATAR_GAP: usize = 2;
+/// Columns between the sidebar and the text in chats without avatars.
+const NAME_ROW_PAD: usize = 2;
+/// Messages from the same person this close together share one name row and avatar.
+const GROUP_MS: i64 = 5 * 60 * 1000;
+/// Narrower than this, the avatar layout leaves too little room for text.
+const AVATAR_MIN_WIDTH: usize = 24;
 const QR_HELP: &str = "Linked devices (Android: menu, iPhone: Settings) > Link a device";
 /// Modules of white border around the QR code (the QR standard asks for 4).
 const QUIET: usize = 4;
@@ -48,6 +59,8 @@ pub(crate) struct Look<'a> {
     pub theme: &'a Theme,
     pub clock: &'a Clock,
     pub fmt: Fmt,
+    /// Where messages get an avatar and a name row (`[layout] avatars`).
+    pub avatars: Avatars,
 }
 
 /// Smallest terminal height whose body is `body` rows tall: header, the key-hint row and one
@@ -80,7 +93,7 @@ pub(crate) struct Layout {
 }
 
 /// Columns the draft can use in a message box `width` wide: the border and the `> ` prompt take 4.
-fn composer_text_width(width: u16) -> usize {
+pub(crate) fn composer_text_width(width: u16) -> usize {
     (width as usize).saturating_sub(4)
 }
 
@@ -247,6 +260,7 @@ fn draw_header(f: &mut Frame, app: &App, area: Rect) {
     if area.height == 0 {
         return;
     }
+    bar_background(f, t, Panel::Header, area);
     if area.width >= NARROW {
         f.render_widget(Paragraph::new(Span::styled(BRAND, bold())), area);
     }
@@ -344,29 +358,41 @@ fn tag_network(text: &str, label: &str) -> String {
 /// action list is literal text; an action with no key is left out.
 type Hint<'a> = (&'a [Action], &'a str);
 
-/// The footer as whole items (text, applies), most important first: when the line is too short
-/// the least important ones are dropped, never cut in half.
-fn join_hints(keys: &Keymap, ctx: Context, items: &[Hint]) -> Vec<(String, bool)> {
+/// One footer item: (text, applies, the action a click on it runs). Only a hint for exactly one
+/// action can be clicked; `Up/Down choose` and literal text have none.
+type HintItem = (String, bool, Option<Action>);
+
+/// The one action a click on a hint runs.
+fn click_action(actions: &[Action]) -> Option<Action> {
+    match actions {
+        [a] => Some(*a),
+        _ => None,
+    }
+}
+
+/// The footer as whole items, most important first: when the line is too short the least
+/// important ones are dropped, never cut in half.
+fn join_hints(keys: &Keymap, ctx: Context, items: &[Hint]) -> Vec<HintItem> {
     items
         .iter()
         .filter_map(|(actions, label)| {
             if actions.is_empty() {
-                Some(((*label).to_string(), true))
+                Some(((*label).to_string(), true, None))
             } else {
                 keys.hint(ctx, actions)
-                    .map(|k| (format!("{k} {label}"), true))
+                    .map(|k| (format!("{k} {label}"), true, click_action(actions)))
             }
         })
         .collect()
 }
 
-fn hints(app: &App) -> Vec<(String, bool)> {
+fn hints(app: &App) -> Vec<HintItem> {
     use Action::*;
     let ns = app.active();
     let keys = app.keys();
     let ctx = app.context();
     if let Some(tour) = app.tour_bar() {
-        return vec![(tour.hint.to_string(), true)];
+        return vec![(tour.hint.to_string(), true, None)];
     }
     if app.help_open().is_some() {
         return join_hints(
@@ -380,7 +406,7 @@ fn hints(app: &App) -> Vec<(String, bool)> {
         );
     }
     if let Some(prompt) = app.prompt() {
-        return vec![(link_line(prompt, keys, ctx), true)];
+        return vec![(link_line(prompt, keys, ctx), true, None)];
     }
     if app.palette().is_some() {
         return join_hints(
@@ -396,14 +422,14 @@ fn hints(app: &App) -> Vec<(String, bool)> {
     }
     if let Some(page) = app.settings_page() {
         if let Some(line) = crate::settings_view::capture_line(page.edit.as_ref()) {
-            return vec![(line, true)];
+            return vec![(line, true, None)];
         }
         if page.filtering {
             return vec![
-                (format!("/{}", page.filter.text()), true),
-                ("Up/Down move".to_string(), true),
-                ("Enter keep".to_string(), true),
-                ("Esc clear".to_string(), true),
+                (format!("/{}", page.filter.text()), true, None),
+                ("Up/Down move".to_string(), true, None),
+                ("Enter keep".to_string(), true, None),
+                ("Esc clear".to_string(), true, None),
             ];
         }
         let row = app.current_row().map(|r| r.id);
@@ -439,7 +465,7 @@ fn hints(app: &App) -> Vec<(String, bool)> {
         } else {
             &["Up/Down section", "Esc close", "Enter open", "F1 help"]
         };
-        return items.iter().map(|i| (i.to_string(), true)).collect();
+        return items.iter().map(|i| (i.to_string(), true, None)).collect();
     }
     if app.search().is_some() {
         return join_hints(
@@ -594,7 +620,11 @@ fn hints(app: &App) -> Vec<(String, bool)> {
             );
             // The pointer is for an empty box: once you type, the keys matter more.
             if !ns.draft().is_empty() {
-                items.retain(|(t, _)| t != ": commands");
+                items.retain(|(t, ..)| t != ": commands");
+            }
+            // The literal ": commands" hint opens the command bar.
+            for it in items.iter_mut().filter(|it| it.0 == ": commands") {
+                it.2 = Some(CommandBar);
             }
             items
         }
@@ -603,7 +633,7 @@ fn hints(app: &App) -> Vec<(String, bool)> {
 
 /// The footer while a message is selected: (text, applies). What does not apply to the selected
 /// message (edit on someone else's, an action the backend cannot do) is drawn dimmed.
-fn select_items(app: &App) -> Vec<(String, bool)> {
+fn select_items(app: &App) -> Vec<HintItem> {
     use Action::*;
     let ns = app.active();
     let keys = app.keys();
@@ -644,7 +674,7 @@ fn select_items(app: &App) -> Vec<(String, bool)> {
         .iter()
         .filter_map(|(actions, label, applies)| {
             keys.hint(Context::Select, actions)
-                .map(|k| (format!("{k} {label}"), *applies))
+                .map(|k| (format!("{k} {label}"), *applies, click_action(actions)))
         })
         .collect()
 }
@@ -666,34 +696,125 @@ fn hint_spans_of(app: &App, room: usize) -> Vec<Span<'static>> {
     {
         return clip_spans(prompt_spans(&line, t), room).spans;
     }
+    hint_cells(app, room).into_iter().map(|c| c.0).collect()
+}
+
+/// The key-hint items as spans, each with the action a click on it runs (the separators and
+/// the items without one have none). Drawing and `footer_hit_at` both read this, so a click
+/// lands on what is drawn.
+fn hint_cells(app: &App, room: usize) -> Vec<(Span<'static>, Option<Action>)> {
+    let t = app.theme();
     let selecting = app.active().focus == Focus::Select
         && !app.active().panel()
         && !app.overlay_open()
         && app.popup().is_none();
     let strong = t.text.patch(bold());
     let items = hints(app);
-    let mut spans = Vec::new();
+    let mut cells = Vec::new();
     let mut used = 0;
-    for (i, (text, applies)) in items.iter().enumerate() {
+    for (i, (text, applies, action)) in items.iter().enumerate() {
         let w = sw(text) + if i > 0 { 2 } else { 0 };
         if used + w > room {
             // Even the first item is cut when nothing else fits; later ones are dropped whole.
             if i == 0 {
-                spans.push(Span::styled(truncate(text, room), t.hint));
+                cells.push((Span::styled(truncate(text, room), t.hint), *action));
             }
             break;
         }
         if i > 0 {
-            spans.push(Span::styled("  ", t.hint));
+            cells.push((Span::styled("  ", t.hint), None));
         }
         let style = match (selecting, applies) {
             (true, true) => strong,
             _ => t.hint,
         };
-        spans.push(Span::styled(text.clone(), style));
+        cells.push((Span::styled(text.clone(), style), *action));
         used += w;
     }
-    spans
+    cells
+}
+
+/// What a click on the footer's key-hint row hit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FooterHit {
+    /// A hint: run its action as its key would.
+    Hint(Action),
+    /// The yes key of a y/n question.
+    Yes,
+    /// The no key of a y/n question.
+    No,
+}
+
+/// The key-hint row is the last row of the footer; a short terminal shows a problem there
+/// instead while no question waits.
+fn hint_row(app: &App, area: Rect, screen_height: u16) -> Option<u16> {
+    let problem = screen_height < 14
+        && app.prompt().is_none()
+        && (status_part(app).is_some() || notice_part(app).is_some());
+    (area.height > 0 && !problem).then(|| area.y + area.height - 1)
+}
+
+/// What is under `pos` on the footer drawn in `area` on a screen `screen_height` rows tall.
+/// Only text drawn whole counts: a y/n cut by a narrow terminal answers nothing.
+pub(crate) fn footer_hit_at(
+    app: &App,
+    area: Rect,
+    screen_height: u16,
+    pos: Position,
+) -> Option<FooterHit> {
+    if hint_row(app, area, screen_height)? != pos.y || pos.x < area.x {
+        return None;
+    }
+    let mode_w: usize = mode_spans(app).iter().map(Span::width).sum();
+    let col = (pos.x - area.x) as usize;
+    let room = (area.width as usize).saturating_sub(mode_w);
+    let col = col.checked_sub(mode_w).filter(|c| *c < room)?;
+    if let Some(prompt) = app.prompt() {
+        return yes_no_hit(prompt, app, room, col);
+    }
+    if app
+        .settings_page()
+        .is_some_and(|p| crate::settings_view::capture_line(p.edit.as_ref()).is_some())
+    {
+        return None;
+    }
+    let mut x = 0;
+    for (span, action) in hint_cells(app, room) {
+        let w = sw(&span.content);
+        if (x..x + w).contains(&col) {
+            return action.map(FooterHit::Hint);
+        }
+        x += w;
+    }
+    None
+}
+
+/// The `y` and the `n` of a question line, where they are drawn: the question ends with the
+/// keys (`y/n`) except for the file and link-pick questions, which answer no click.
+fn yes_no_hit(prompt: &Prompt, app: &App, room: usize, col: usize) -> Option<FooterHit> {
+    let ctx = app.context();
+    if matches!(prompt, Prompt::Pick(_)) {
+        return None;
+    }
+    let line = link_line(prompt, app.keys(), ctx);
+    let yes = app.keys().hint(ctx, &[Action::ConfirmYes])?;
+    let no = app.keys().hint(ctx, &[Action::ConfirmNo])?;
+    let both = format!("{yes}/{no}");
+    // Only a question that ends in its keys: the send-file question puts them last too.
+    let at = line.strip_suffix(both.as_str())?.len();
+    let start = sw(&line[..at]);
+    let (yes_w, no_w) = (sw(&yes), sw(&no));
+    if start + yes_w + 1 + no_w > room {
+        return None;
+    }
+    let rel = col.checked_sub(start)?;
+    if rel < yes_w {
+        Some(FooterHit::Yes)
+    } else if (yes_w + 1..yes_w + 1 + no_w).contains(&rel) {
+        Some(FooterHit::No)
+    } else {
+        None
+    }
 }
 
 /// A y/n question in bold. The uppercase danger word (EXECUTABLE) and "Delete" are red.
@@ -837,6 +958,7 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect, screen_height: u16) {
     if area.height == 0 {
         return;
     }
+    bar_background(f, t, Panel::Footer, area);
     let w = area.width as usize;
     let mode = mode_spans(app);
     let mode_w: usize = mode.iter().map(Span::width).sum();
@@ -941,13 +1063,13 @@ pub(crate) fn help_rows(app: &App) -> Vec<HelpRow> {
     rows
 }
 
-fn help_fits(area: Rect, body: Rect) -> bool {
+pub(crate) fn help_fits(area: Rect, body: Rect) -> bool {
     area.width >= HELP_MIN_W && body.height >= HELP_MIN_BODY_H
 }
 
 /// The overlay fills the body (between header and footer), at most `HELP_MAX_W` wide and
 /// centred. The body is cleared first, so nothing of the panes behind shows at its edges.
-fn help_box(body: Rect) -> Rect {
+pub(crate) fn help_box(body: Rect) -> Rect {
     let w = body.width.min(HELP_MAX_W);
     Rect::new(body.x + (body.width - w) / 2, body.y, w, body.height)
 }
@@ -969,7 +1091,7 @@ fn draw_help(f: &mut Frame, app: &App, area: Rect, body: Rect) {
         return;
     }
     let b = help_box(body);
-    f.render_widget(pane("Help", true), b);
+    f.render_widget(pane(app.theme(), Panel::Popup, "Help", true), b);
     let inner = b.inner(Margin::new(1, 1));
     let w = inner.width as usize;
     let user = app.keys().user_bindings();
@@ -1050,15 +1172,35 @@ fn draw_help(f: &mut Frame, app: &App, area: Rect, body: Rect) {
 
 // ---- panes ----
 
-pub(crate) fn pane(title: &str, focused: bool) -> Block<'static> {
-    let b = Block::bordered().title(Span::styled(
-        format!(" {title} "),
-        if focused { bold() } else { Style::new() },
-    ));
-    if focused {
-        b.border_type(BorderType::Double)
+/// A framed panel in the palette's look. Every outline keeps the one-cell frame, so the text
+/// inside sits in the same place whatever the palette.
+pub(crate) fn pane(t: &Theme, panel: Panel, title: &str, focused: bool) -> Block<'static> {
+    let look = t.panel(panel);
+    let (outline, bg) = if focused {
+        (look.focus_outline, look.focus_bg)
     } else {
-        b
+        (look.outline, look.bg)
+    };
+    let mut b = Block::bordered()
+        .border_set(outline.set())
+        .title(Span::styled(
+            format!(" {title} "),
+            if focused { bold() } else { Style::new() },
+        ));
+    if let Some(c) = bg {
+        b = b.style(Style::new().bg(c));
+    }
+    match outline {
+        Outline::Rule if !focused => b.border_style(t.dim),
+        _ if focused && look.focus_tint => b.border_style(t.accent),
+        _ => b,
+    }
+}
+
+/// Fills a one-line bar (top bar, footer) with its palette background, if it has one.
+fn bar_background(f: &mut Frame, t: &Theme, panel: Panel, area: Rect) {
+    if let Some(c) = t.panel(panel).bg {
+        f.render_widget(Block::new().style(Style::new().bg(c)), area);
     }
 }
 
@@ -1104,7 +1246,10 @@ fn draw_sidebar(f: &mut Frame, app: &App, lay: &Layout) {
     } else {
         "Chats"
     };
-    f.render_widget(pane(title, focused), lay.sidebar);
+    f.render_widget(
+        pane(app.theme(), Panel::Sidebar, title, focused),
+        lay.sidebar,
+    );
     if let Some(r) = lay.filter_row {
         let (shown, col) = ns.filter.view(r.width.saturating_sub(1) as usize);
         f.render_widget(
@@ -1267,6 +1412,33 @@ pub(crate) struct MsgSpan {
     pub end: usize,
     /// Thumbnails drawn under this message, for the terminal graphics overlay.
     pub images: Vec<ImageSlot>,
+    /// The initials avatar beside the name row, where a profile photo can be drawn over it.
+    pub avatar: Option<AvatarSlot>,
+    /// Links and attachment chips, where the mouse can hit them.
+    pub hits: Vec<Hit>,
+}
+
+/// What a click on a spot of a message means besides selecting it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum HitKind {
+    Link(String),
+    Chip(usize),
+}
+
+/// A clickable part of one conversation line: columns `x0..x1` of the message area.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Hit {
+    pub line: usize,
+    pub x0: usize,
+    pub x1: usize,
+    pub kind: HitKind,
+}
+
+/// An avatar box (`AVATAR_W` x 2 at column 0) whose top row is conversation line `line`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AvatarSlot {
+    pub person: String,
+    pub line: usize,
 }
 
 /// Where a thumbnail sits in the conversation lines: `rows` lines from `line`, `cols` wide,
@@ -1342,6 +1514,16 @@ pub(crate) fn message_layout(
             m.sender.clone()
         }
     };
+    // Name rows: the name and time on a row of their own with the text underneath (every chat
+    // unless `avatars = "off"`, which keeps the one-line layout). Avatars beside them: group
+    // chats, or every chat with `all`, when there is room.
+    let name_rows = look.avatars != Avatars::Off;
+    let avatars = width >= AVATAR_MIN_WIDTH
+        && match look.avatars {
+            Avatars::All => true,
+            Avatars::Groups => ns.open_is_group(),
+            Avatars::Off => false,
+        };
     let sender_w = msgs
         .iter()
         .map(|m| sw(&label(m)))
@@ -1349,7 +1531,13 @@ pub(crate) fn message_layout(
         .unwrap_or(0)
         .min(SENDER_MAX)
         .min(width.saturating_sub(fmt.time_width() + 10));
-    let indent_w = fmt.time_width() + 1 + sender_w + 2;
+    let indent_w = if avatars {
+        AVATAR_W + AVATAR_GAP
+    } else if name_rows {
+        NAME_ROW_PAD
+    } else {
+        fmt.time_width() + 1 + sender_w + 2
+    };
     let text_w = width.saturating_sub(indent_w).max(1);
     let chat_id = ns.open.as_deref();
     let selected = if ns.focus == Focus::Select {
@@ -1373,13 +1561,29 @@ pub(crate) fn message_layout(
     }
     let mut spans: Vec<MsgSpan> = Vec::new();
     let mut last_day = None;
+    let mut prev: Option<&ChatMessage> = None;
     for m in msgs {
         let day = clock.day(m.ts);
-        if day != last_day || spans.is_empty() {
+        let new_day = day != last_day || spans.is_empty();
+        if new_day {
             last_day = day;
+            // Room above the day line, as between people.
+            if name_rows && !spans.is_empty() {
+                lines.push(Line::default());
+            }
             let sep = format!("---- {} ----", clock.day_label_f(m.ts, fmt));
             lines.push(Line::from(Span::styled(sep, t.dim)).alignment(Alignment::Center));
         }
+        // Avatar layout: a run of messages from one person shares one name row and avatar, and
+        // a blank row sets each run apart. A reply starts a run, so its quote sits under a name.
+        let starts_run = name_rows
+            && (new_day
+                || m.reply_to.is_some()
+                || prev.is_none_or(|p| person_key(p) != person_key(m) || m.ts - p.ts > GROUP_MS));
+        if starts_run && !new_day {
+            lines.push(Line::default());
+        }
+        prev = Some(m);
         let first_line = lines.len();
         let deleted = matches!(m.state, MessageState::Deleted);
         // Attachments are drawn as chips, so the backends' `[image]` markers leave the text.
@@ -1396,10 +1600,37 @@ pub(crate) fn message_layout(
             _ => (shown, t.text),
         };
         let who_style = if m.from_me { t.own_name } else { bold() };
+        let mut rows: Vec<Vec<Span<'static>>> = Vec::new();
+        // Avatar layout: name (in the person's colour) and time on a row of their own, the
+        // avatar's top half beside them and its bottom half beside the first row of text.
+        let name_style = if m.from_me {
+            t.own_name
+        } else {
+            t.person(&person_key(m))
+        };
+        let (av_top, av_bottom) = avatar_cells(&label(m), name_style);
+        let mut av_pending = starts_run && avatars;
+        if starts_run {
+            let time = clock.hm_f(m.ts, fmt);
+            let name_w = text_w.saturating_sub(sw(&time) + 1).max(1);
+            let mut row = if avatars {
+                vec![av_top, Span::raw(" ".repeat(AVATAR_GAP))]
+            } else {
+                vec![Span::raw(" ".repeat(indent_w))]
+            };
+            row.extend([
+                Span::styled(truncate(&label(m), name_w), name_style),
+                Span::raw(" "),
+                Span::styled(time, t.dim),
+            ]);
+            rows.push(row);
+        }
         // Time and sender go on the first row of the message, whatever that row is.
-        let mut need_lead = true;
-        let lead = |need: &mut bool| -> Vec<Span<'static>> {
-            if std::mem::take(need) {
+        let mut need_lead = !name_rows;
+        let lead = |need: &mut bool, av: &mut bool| -> Vec<Span<'static>> {
+            if std::mem::take(av) {
+                vec![av_bottom.clone(), Span::raw(" ".repeat(AVATAR_GAP))]
+            } else if std::mem::take(need) {
                 vec![
                     Span::styled(clock.hm_f(m.ts, fmt), t.dim),
                     Span::raw(" "),
@@ -1410,7 +1641,6 @@ pub(crate) fn message_layout(
                 vec![Span::raw(" ".repeat(indent_w))]
             }
         };
-        let mut rows: Vec<Vec<Span<'static>>> = Vec::new();
         // A reply shows what it quotes, dimmed, on one line above the body.
         if let Some(q) = &m.reply_to {
             let who = if q.sender.is_empty() {
@@ -1423,7 +1653,7 @@ pub(crate) fn message_layout(
             } else {
                 &q.preview
             };
-            let mut row = lead(&mut need_lead);
+            let mut row = lead(&mut need_lead, &mut av_pending);
             row.push(Span::styled(
                 truncate(&format!("> {who}: {what}"), text_w),
                 t.dim,
@@ -1433,12 +1663,14 @@ pub(crate) fn message_layout(
         // Marks come from the stored text, not the wrapped lines, so a link that wraps is
         // underlined on every line it covers. Mentions are bold.
         let mut marks: Vec<(usize, usize, Modifier)> = Vec::new();
+        let mut hits: Vec<Hit> = Vec::new();
+        let found = if deleted {
+            Vec::new()
+        } else {
+            find_links(&body)
+        };
         if !deleted {
-            marks.extend(
-                find_links(&body)
-                    .into_iter()
-                    .map(|l| (l.start, l.end, Modifier::UNDERLINED)),
-            );
+            marks.extend(found.iter().map(|l| (l.start, l.end, Modifier::UNDERLINED)));
             let mut from = 0;
             for p in &m.mentions {
                 let token = format!("@{}", p.name);
@@ -1452,7 +1684,30 @@ pub(crate) fn message_layout(
         // A message that is only attachments has no body line: the chips carry the time and name.
         if !(body.trim().is_empty() && !m.attachments.is_empty()) {
             for pieces in wrap_pieces(&body, text_w) {
-                let mut row = lead(&mut need_lead);
+                let mut row = lead(&mut need_lead, &mut av_pending);
+                // Columns of each link part on this row (pieces are joined by one space).
+                let mut x = row.iter().map(Span::width).sum::<usize>();
+                for p in &pieces {
+                    let end = p.start + p.text.len();
+                    for l in &found {
+                        let (a, b) = (l.start.max(p.start), l.end.min(end));
+                        if a >= b {
+                            continue;
+                        }
+                        if let (Some(pre), Some(part)) = (
+                            p.text.get(..a - p.start),
+                            p.text.get(a - p.start..b - p.start),
+                        ) {
+                            hits.push(Hit {
+                                line: first_line + rows.len(),
+                                x0: x + sw(pre),
+                                x1: x + sw(pre) + sw(part),
+                                kind: HitKind::Link(l.url.clone()),
+                            });
+                        }
+                    }
+                    x += sw(&p.text) + 1;
+                }
                 row.extend(piece_spans(&pieces, &marks, body_style));
                 rows.push(row);
             }
@@ -1463,7 +1718,14 @@ pub(crate) fn message_layout(
         for (idx, a) in m.attachments.iter().enumerate() {
             let item = chat_id.and_then(|c| ns.media.get(c, &m.id, idx as u32));
             let label = chip_label(a);
-            let mut row = lead(&mut need_lead);
+            let mut row = lead(&mut need_lead, &mut av_pending);
+            let lead_w = row.iter().map(Span::width).sum::<usize>();
+            hits.push(Hit {
+                line: first_line + rows.len(),
+                x0: lead_w,
+                x1: lead_w + sw(&label).min(text_w),
+                kind: HitKind::Chip(idx),
+            });
             match item.and_then(MediaState::status_text) {
                 // The state shares the chip's row when it fits, else it gets rows of its own: a
                 // reason cut off ("FAILED: MEDIA EXP...") is no reason.
@@ -1574,9 +1836,72 @@ pub(crate) fn message_layout(
             start: first_line,
             end: lines.len(),
             images: slots,
+            hits,
+            // Only when both halves were placed (a message with no body row has no bottom half).
+            avatar: (starts_run && avatars && !av_pending && !m.sender_id.is_empty()).then(|| {
+                AvatarSlot {
+                    person: m.sender_id.clone(),
+                    line: first_line,
+                }
+            }),
         });
     }
     (lines, spans)
+}
+
+/// Who sent a message, for grouping and name colours: their network id when known. `:me` can
+/// not clash with a real id (Teams ids are GUIDs, WhatsApp ids have an `@`).
+fn person_key(m: &ChatMessage) -> String {
+    if m.from_me {
+        ":me".to_string()
+    } else if m.sender_id.is_empty() {
+        m.sender.clone()
+    } else {
+        m.sender_id.clone()
+    }
+}
+
+/// A person's initials (`Alex Example` -> `AE`, a phone number -> `#`), at most two.
+fn initials(name: &str) -> String {
+    let words: Vec<&str> = name.split_whitespace().collect();
+    let first = |w: &str| w.chars().next();
+    let picked: Vec<char> = match words.as_slice() {
+        [] => Vec::new(),
+        [w] => first(w).into_iter().collect(),
+        [a, .., b] => first(a).into_iter().chain(first(b)).collect(),
+    };
+    if picked.first().is_some_and(|c| !c.is_alphabetic()) {
+        return "#".to_string();
+    }
+    picked.into_iter().flat_map(char::to_uppercase).collect()
+}
+
+/// The two rows of an initials avatar: a block in the person's colour (reverse video when there
+/// is no colour), the initials centred on the top row.
+fn avatar_cells(name: &str, person: Style) -> (Span<'static>, Span<'static>) {
+    let style = match person.fg {
+        Some(c) => Style::new()
+            .bg(c)
+            .fg(Color::Black)
+            .add_modifier(Modifier::BOLD),
+        None => Style::new().add_modifier(Modifier::REVERSED | Modifier::BOLD),
+    };
+    let ini = initials(name);
+    let ini = if sw(&ini) > AVATAR_W {
+        String::new()
+    } else {
+        ini
+    };
+    let left = (AVATAR_W - sw(&ini)) / 2;
+    let top = format!(
+        "{}{ini}{}",
+        " ".repeat(left),
+        " ".repeat(AVATAR_W - sw(&ini) - left)
+    );
+    (
+        Span::styled(top, style),
+        Span::styled(" ".repeat(AVATAR_W), style),
+    )
 }
 
 /// The spans of one wrapped line: words joined by one space, the parts that lie inside a mark
@@ -1621,7 +1946,10 @@ fn draw_convo(f: &mut Frame, app: &App, lay: &Layout) {
     let t = app.theme();
     let ns = app.active();
     let Some(open) = ns.open.as_ref() else {
-        f.render_widget(pane("Conversation", false), lay.convo);
+        f.render_widget(
+            pane(app.theme(), Panel::Messages, "Conversation", false),
+            lay.convo,
+        );
         centered_note(
             f,
             lay.messages,
@@ -1645,7 +1973,15 @@ fn draw_convo(f: &mut Frame, app: &App, lay: &Layout) {
             (lay.convo.width as usize).saturating_sub(4),
         );
     }
-    f.render_widget(pane(&title, ns.focus == Focus::Select), lay.convo);
+    f.render_widget(
+        pane(
+            app.theme(),
+            Panel::Messages,
+            &title,
+            ns.focus == Focus::Select,
+        ),
+        lay.convo,
+    );
     if !ns.messages.contains_key(open) {
         centered_note(f, lay.messages, "Loading messages...", t);
         return;
@@ -1655,10 +1991,58 @@ fn draw_convo(f: &mut Frame, app: &App, lay: &Layout) {
         centered_note(f, lay.messages, "No messages in this chat yet.", t);
         return;
     }
-    let height = lay.messages.height as usize;
-    let end = lines.len() - ns.scroll.min(lines.len().saturating_sub(height));
+    let (start, end, area) = convo_view(app, lay, lines.len(), ns.scroll);
+    f.render_widget(Paragraph::new(lines[start..end].to_vec()), area);
+}
+
+/// The lines `start..end` of `total` that show in the message area at `scroll`, and where they
+/// are drawn. Shared by drawing and the mouse.
+fn convo_view(app: &App, lay: &Layout, total: usize, scroll: usize) -> (usize, usize, Rect) {
+    let mut msgs = lay.messages;
+    // An open completion list covers the bottom of the pane: lay the lines out above it.
+    if let Some(g) = popup_geometry(app, lay) {
+        msgs.height = g.outer.y.saturating_sub(msgs.y).min(msgs.height);
+    }
+    let height = msgs.height as usize;
+    let end = total - scroll.min(total.saturating_sub(height));
     let start = end.saturating_sub(height);
-    f.render_widget(Paragraph::new(lines[start..end].to_vec()), lay.messages);
+    (start, end, bottom_anchored(msgs, end - start))
+}
+
+/// What is under `pos` in the conversation: the message and, on a link or attachment chip,
+/// which. None for the day separators, blank rows and anything outside the message area.
+pub(crate) fn convo_hit(
+    app: &App,
+    lay: &Layout,
+    pos: Position,
+) -> Option<(String, Option<HitKind>)> {
+    let ns = app.active();
+    if ns.panel() || ns.open.is_none() || lay.messages.width == 0 {
+        return None;
+    }
+    let (lines, spans) = message_layout(ns, &app.look(), lay.messages.width as usize);
+    let (start, _, area) = convo_view(app, lay, lines.len(), ns.scroll);
+    if !area.contains(pos) {
+        return None;
+    }
+    let line = start + (pos.y - area.y) as usize;
+    let x = (pos.x - area.x) as usize;
+    let sp = spans
+        .into_iter()
+        .find(|s| (s.start..s.end).contains(&line))?;
+    let kind = sp
+        .hits
+        .into_iter()
+        .find(|h| h.line == line && (h.x0..h.x1).contains(&x))
+        .map(|h| h.kind);
+    Some((sp.id, kind))
+}
+
+/// The bottom `rows` rows of the message area: a short conversation sits next to the message
+/// box, as in other chat apps, instead of under the title.
+fn bottom_anchored(area: Rect, rows: usize) -> Rect {
+    let rows = (rows as u16).min(area.height);
+    Rect::new(area.x, area.y + area.height - rows, area.width, rows)
 }
 
 /// A thumbnail that is wholly on screen: where, and the cached file it comes from. The terminal
@@ -1669,22 +2053,51 @@ pub(crate) struct VisibleImage {
     pub rect: Rect,
 }
 
-pub(crate) fn visible_images(app: &App, lay: &Layout) -> Vec<VisibleImage> {
+/// What the overlay draws, and the people whose avatars are fully on screen (newest first), whose
+/// photos the TUI may ask for.
+#[derive(Default)]
+pub(crate) struct Visible {
+    pub images: Vec<VisibleImage>,
+    pub people: Vec<String>,
+}
+
+pub(crate) fn visible_images(app: &App, lay: &Layout) -> Visible {
     let ns = app.active();
     // Something drawn over the conversation (help, a list, a question) must stay on top.
     if ns.panel() || ns.open.is_none() || app.overlay_open() || app.popup().is_some() {
-        return Vec::new();
+        return Visible::default();
     }
     // A terminal too small to draw the conversation, or one that hides it (narrow list).
     let drawn_height = lay.header.height + lay.body.height + lay.footer.height;
     if lay.header.width < MIN_W || drawn_height < MIN_H || lay.messages.width == 0 {
-        return Vec::new();
+        return Visible::default();
     }
     let (lines, spans) = message_layout(ns, &app.look(), lay.messages.width as usize);
-    let height = lay.messages.height as usize;
-    let end = lines.len() - ns.scroll.min(lines.len().saturating_sub(height));
-    let start = end.saturating_sub(height);
-    let mut out = Vec::new();
+    let (start, end, area) = convo_view(app, lay, lines.len(), ns.scroll);
+    let mut out = Visible::default();
+    // A partly visible avatar keeps its initials.
+    if app.photos() {
+        for slot in spans.iter().rev().filter_map(|s| s.avatar.as_ref()) {
+            if slot.line < start || slot.line + 2 > end {
+                continue;
+            }
+            if !out.people.contains(&slot.person) {
+                out.people.push(slot.person.clone());
+            }
+            if let Some(Some(path)) = ns.avatars.get(&slot.person) {
+                out.images.push(VisibleImage {
+                    path: path.clone(),
+                    rect: Rect::new(
+                        area.x,
+                        area.y + (slot.line - start) as u16,
+                        AVATAR_W as u16,
+                        2,
+                    )
+                    .intersection(lay.messages),
+                });
+            }
+        }
+    }
     for slot in spans.iter().flat_map(|s| &s.images) {
         if slot.line < start || slot.line + slot.rows > end || slot.cols == 0 {
             continue;
@@ -1693,11 +2106,11 @@ pub(crate) fn visible_images(app: &App, lay: &Layout) -> Vec<VisibleImage> {
         else {
             continue;
         };
-        out.push(VisibleImage {
+        out.images.push(VisibleImage {
             path,
             rect: Rect::new(
-                lay.messages.x + slot.indent as u16,
-                lay.messages.y + (slot.line - start) as u16,
+                area.x + slot.indent as u16,
+                area.y + (slot.line - start) as u16,
                 slot.cols as u16,
                 slot.rows as u16,
             )
@@ -1757,6 +2170,32 @@ fn composer_extras(app: &App, ns: &NetState, width: usize) -> Vec<Line<'static>>
     out
 }
 
+/// The box of folder entries above the path prompt and the entries it shows, for `cands`
+/// candidates. None when the screen is too small. Shared with the mouse.
+pub(crate) fn attach_list(lay: &Layout, cands: usize) -> Option<(Rect, usize)> {
+    if lay.composer.width < 12 {
+        return None;
+    }
+    let room = (lay.convo.height as usize).saturating_sub(4);
+    let n = cands.clamp(1, 10).min(room);
+    if n == 0 {
+        return None;
+    }
+    let h = n as u16 + 2;
+    let list = Rect::new(
+        lay.composer.x + 1,
+        lay.composer.y.saturating_sub(1 + h),
+        lay.composer.width - 2,
+        h,
+    );
+    Some((list, n))
+}
+
+/// First entry shown: the window follows the highlighted one.
+pub(crate) fn attach_top(sel: usize, shown: usize) -> usize {
+    (sel + 1).saturating_sub(shown)
+}
+
 /// The path prompt: the message box becomes its input line, the matching folder entries list
 /// above it like the `:shortcode` suggestions.
 fn draw_attach(f: &mut Frame, app: &App, lay: &Layout) {
@@ -1764,7 +2203,7 @@ fn draw_attach(f: &mut Frame, app: &App, lay: &Layout) {
     let Some(a) = app.attach_prompt() else { return };
     let r = lay.composer;
     f.render_widget(Clear, r);
-    f.render_widget(pane("Attach file", true), r);
+    f.render_widget(pane(app.theme(), Panel::Composer, "Attach file", true), r);
     let inner = r.inner(Margin::new(1, 1));
     if inner.height == 0 {
         return;
@@ -1779,23 +2218,11 @@ fn draw_attach(f: &mut Frame, app: &App, lay: &Layout) {
         Rect::new(inner.x, inner.y, inner.width, 1),
     );
     f.set_cursor_position((inner.x + 2 + col as u16, inner.y));
-    if lay.composer.width < 12 {
+    let Some((list, n)) = attach_list(lay, a.cands.len()) else {
         return;
-    }
-    let room = (lay.convo.height as usize).saturating_sub(4);
-    let n = a.cands.len().clamp(1, 10).min(room);
-    if n == 0 {
-        return;
-    }
-    let h = n as u16 + 2;
-    let list = Rect::new(
-        lay.composer.x + 1,
-        lay.composer.y.saturating_sub(1 + h),
-        lay.composer.width - 2,
-        h,
-    );
+    };
     f.render_widget(Clear, list);
-    f.render_widget(pane("Files", false), list);
+    f.render_widget(pane(app.theme(), Panel::Popup, "Files", false), list);
     let rows = list.inner(Margin::new(1, 1));
     if a.cands.is_empty() {
         f.render_widget(
@@ -1805,7 +2232,7 @@ fn draw_attach(f: &mut Frame, app: &App, lay: &Layout) {
         return;
     }
     // Keep the highlighted entry in the window.
-    let top = (a.sel + 1).saturating_sub(n);
+    let top = attach_top(a.sel, n);
     for (k, c) in a.cands.iter().skip(top).take(n).enumerate() {
         let mark = if c.dir { "/" } else { "" };
         let text = truncate(
@@ -1826,11 +2253,20 @@ fn draw_attach(f: &mut Frame, app: &App, lay: &Layout) {
     }
 }
 
+/// The rows of the message box that hold the draft: inside the border, under the reply or edit
+/// line and the file chip. Shared by drawing and the mouse.
+pub(crate) fn composer_text_area(app: &App, lay: &Layout) -> Rect {
+    let inner = lay.composer.inner(Margin::new(1, 1));
+    let extras = composer_extras(app, app.active(), inner.width as usize).len();
+    let take = (extras as u16).min(inner.height.saturating_sub(1));
+    Rect::new(inner.x, inner.y + take, inner.width, inner.height - take)
+}
+
 fn draw_composer(f: &mut Frame, app: &App, lay: &Layout) {
     let t = app.theme();
     let ns = app.active();
     let focused = ns.focus == Focus::Composer;
-    let mut block = pane("Message", focused);
+    let mut block = pane(app.theme(), Panel::Composer, "Message", focused);
     // Someone is typing in this chat: on the box's top edge, right-aligned (WhatsApp only).
     if let Some(text) = ns
         .open
@@ -1862,12 +2298,7 @@ fn draw_composer(f: &mut Frame, app: &App, lay: &Layout) {
             Rect::new(inner.x, inner.y + i as u16, inner.width, 1),
         );
     }
-    let inner = Rect::new(
-        inner.x,
-        inner.y + take as u16,
-        inner.width,
-        inner.height - take as u16,
-    );
+    let inner = composer_text_area(app, lay);
     if ns.open.is_none() {
         f.render_widget(
             Paragraph::new(Span::styled("Open a chat to type", t.hint)),
@@ -1930,34 +2361,54 @@ fn draw_composer(f: &mut Frame, app: &App, lay: &Layout) {
     }
 }
 
-/// The `:shortcode` list, drawn just above the message box and over the conversation.
-fn draw_popup(f: &mut Frame, app: &App, lay: &Layout) {
-    let t = app.theme();
-    let Some(p) = app.popup() else { return };
+/// Where the completion list is: its box, the item rows inside it, and the first item shown.
+/// Shared by drawing and the mouse.
+pub(crate) struct PopupGeom {
+    pub outer: Rect,
+    pub rows: Rect,
+    pub start: usize,
+    pub n: usize,
+}
+
+pub(crate) fn popup_geometry(app: &App, lay: &Layout) -> Option<PopupGeom> {
+    let p = app.popup()?;
     if app.overlay_open() || lay.composer.width < 18 {
-        return;
+        return None;
     }
     // Inside the conversation pane, above its bottom border: its inner rows minus the list's own
     // two border rows.
     let room = (lay.convo.height as usize).saturating_sub(4);
     let n = p.items.len().min(room);
     if n == 0 {
-        return;
+        return None;
     }
     // The full width of the conversation pane, so no half of a wide character of the messages
     // underneath is left at the list's edges.
     let h = n as u16 + 2;
-    let r = Rect::new(
+    let outer = Rect::new(
         lay.composer.x + 1,
         lay.composer.y - 1 - h,
         lay.composer.width - 2,
         h,
     );
+    Some(PopupGeom {
+        outer,
+        rows: outer.inner(Margin::new(1, 1)),
+        // A list longer than the box scrolls to keep the chosen row in view.
+        start: (p.selected + 1).saturating_sub(n),
+        n,
+    })
+}
+
+/// The `:shortcode` list, drawn just above the message box and over the conversation.
+fn draw_popup(f: &mut Frame, app: &App, lay: &Layout) {
+    let t = app.theme();
+    let (Some(p), Some(g)) = (app.popup(), popup_geometry(app, lay)) else {
+        return;
+    };
+    let (r, inner, start, n) = (g.outer, g.rows, g.start, g.n);
     f.render_widget(Clear, r);
-    f.render_widget(pane(p.title, false), r);
-    let inner = r.inner(Margin::new(1, 1));
-    // A list longer than the box scrolls to keep the chosen row in view.
-    let start = (p.selected + 1).saturating_sub(n);
+    f.render_widget(pane(app.theme(), Panel::Popup, p.title, false), r);
     for (k, item) in p.items.iter().skip(start).take(n).enumerate() {
         let selected = start + k == p.selected;
         let detail = if selected { Style::new() } else { t.dim };
@@ -2079,7 +2530,7 @@ fn draw_picker(f: &mut Frame, app: &App, body: Rect) {
         PickerFor::Compose => "Emoji",
         PickerFor::React { .. } => "React",
     };
-    f.render_widget(pane(title, true), g.outer);
+    f.render_widget(pane(app.theme(), Panel::Popup, title, true), g.outer);
     f.render_widget(
         Paragraph::new(Line::from(category_spans(
             p.cat,
@@ -2289,16 +2740,21 @@ fn draw_panel(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(
         Paragraph::new(lines)
             .alignment(Alignment::Center)
-            .block(pane(name, true)),
+            .block(pane(app.theme(), Panel::Popup, name, true)),
         r,
     );
 }
 
 // ---- entry point ----
 
+/// Smaller than this, `draw` shows only a notice: nothing else may be clicked.
+pub(crate) fn too_small(area: Rect) -> bool {
+    area.width < MIN_W || area.height < MIN_H
+}
+
 pub fn draw(f: &mut Frame, app: &App) {
     let area = f.area();
-    if area.width < MIN_W || area.height < MIN_H {
+    if too_small(area) {
         f.render_widget(
             Paragraph::new(format!(
                 "Terminal too small: needs at least {MIN_W} x {MIN_H}"
@@ -2397,7 +2853,7 @@ fn draw_palette(f: &mut Frame, app: &App, body: Rect) {
         centered_note(f, body, PALETTE_TOO_SMALL, t);
         return;
     };
-    f.render_widget(pane("Commands", true), g.outer);
+    f.render_widget(pane(app.theme(), Panel::Popup, "Commands", true), g.outer);
     let (shown, col) = p.query.view(g.query.width.saturating_sub(1) as usize);
     let prompt = prompt_for(app, Action::CommandBar, ":");
     let query_line = if p.query.is_empty() {
@@ -2522,7 +2978,7 @@ fn draw_search(f: &mut Frame, app: &App, body: Rect) {
         centered_note(f, body, SEARCH_TOO_SMALL, t);
         return;
     };
-    f.render_widget(pane("Search", true), g.outer);
+    f.render_widget(pane(app.theme(), Panel::Popup, "Search", true), g.outer);
     let (shown, col) = s.query.view(g.query.width.saturating_sub(1) as usize);
     let query_line = if s.query.is_empty() {
         Line::from(vec![
@@ -2611,6 +3067,42 @@ fn draw_search(f: &mut Frame, app: &App, body: Rect) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn initials_and_avatars() {
+        assert_eq!(initials("Alex Example"), "AE");
+        assert_eq!(initials("Sam"), "S");
+        assert_eq!(initials("Jordan de la Placeholder"), "JP");
+        assert_eq!(initials("007 Agent"), "#");
+        assert_eq!(initials("田中太郎"), "田");
+        assert_eq!(initials("  "), "");
+        let (top, bottom) = avatar_cells("Alex Example", Style::new().fg(Color::Green));
+        assert_eq!(
+            (top.content.as_ref(), bottom.content.as_ref()),
+            (" AE ", "    ")
+        );
+        assert_eq!(top.style.bg, Some(Color::Green));
+        let (top, _) = avatar_cells("田中太郎", Style::new());
+        assert_eq!(top.content.as_ref(), " 田 ");
+        assert!(
+            top.style.add_modifier.contains(Modifier::REVERSED),
+            "no colour: reverse video"
+        );
+    }
+
+    #[test]
+    fn a_person_keeps_one_colour() {
+        let t = Theme::default();
+        assert_eq!(t.person("u1"), t.person("u1"));
+        let picked: std::collections::HashSet<_> =
+            (0..40).map(|i| t.person(&format!("user-{i}")).fg).collect();
+        assert!(
+            picked.len() >= 6,
+            "names spread over the colours: {picked:?}"
+        );
+        assert!(!picked.contains(&Some(Color::Red)), "red is for errors");
+        assert_eq!(t.clone().without_colour().person("u1"), bold());
+    }
 
     #[test]
     fn the_network_goes_after_the_uppercase_key_word() {

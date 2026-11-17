@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Mouse: click a message, a link (asks y/n with the host), an attachment chip, a chat row (a second click opens it), the message box text, a completion item, a footer key hint (not send or quit), the y or n of a question, and items in the command bar, search, settings and the attach prompt; the wheel scrolls them. Pointer moves do nothing.
 - `settings.toml`: one hand-edited file for key bindings, theme, layout, notifications, media limits, optional Teams scopes and WhatsApp privacy options. A broken section falls back to its defaults with one notice naming the line and key. `chatcli settings path` and `chatcli settings check`.
 - Keys are named actions in a keymap. Rebind them in `settings.toml` (`[keys.<context>]`), with a notice for every mistake and a suggested name. `?` opens a help screen generated from the active keys.
 - Message selection (`Enter` on a chat, or `Esc` from the message box): reply with a quote, react, edit and delete your own messages, open links, open attachments.
@@ -23,12 +24,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Open links from messages in the browser (`u` in message selection), after an `Open <host>? y/n` line that shows the real host.
 - Colour themes with named roles (`[theme]`, `high-contrast`, `light`, `dark`) and `NO_COLOR` support.
 - Layout options: sidebar width, 12-hour time, date order, compact rows, hidden previews.
-- Windows toast notifications for new messages, off by default for message text (`[notifications] preview`), folded per chat.
+- Windows toast notifications for new messages, with a choice of how much text shows (`[notifications] preview`), folded per chat.
 - Scroll past the top to load older messages on Teams (one page per scroll) and WhatsApp (asks your phone).
 - `n` and `N` jump to the next and previous unread chat; `R` marks the chat read, and `:readall` every chat after a y/n.
 - Pin, mute and hide chats (`p`, `m`, `z`, `Z`). WhatsApp syncs them with the phone.
 - Local full-text search across both networks (`Ctrl+F`, `chatcli search <text>`).
-- WhatsApp typing indicator, and your own typing only with `[whatsapp] send_typing`.
+- WhatsApp typing indicator, and your own typing (on by default; `[whatsapp] send_typing = false` turns it off).
+- WhatsApp pictures download by themselves when you open a chat (or a new one arrives in it): thumbnails show under the message as with `v`. `[whatsapp] download_images = false` turns it off.
 - `chatcli doctor [--online] [--json]` checks the setup and prints fixes.
 - `chatcli relay url <url>` and `chatcli relay setup <url> --rotate`.
 - `chatcli --help`.
@@ -39,6 +41,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Sidebar preview: moving through the chat list (arrow keys, j/k, page keys, a click) shows each chat in the message pane at once. Enter replies, Esc goes back. A previewed chat counts as read after 2 s on screen, never while its pane is hidden.
 - `:` command bar (everywhere outside the boxes you type in): lists every command and your chats. Commands also work as `:command` at the start of the message box, from one list with the emoji shortcodes: `:help` `:settings` `:keys` `:theme` `:layout` `:notifications` `:search` `:refresh` `:readall` `:signin` `:signout` `:about` `:tour` `:quit`.
 - Settings screen (`F2`, `:settings`): theme and the 14 colour roles with a live preview, layout, notifications, media limits, Teams file permissions and WhatsApp privacy options. Every change applies at once and is saved to `settings.toml`, one key at a time, with comments kept. A `settings.toml` that does not parse is never written: the change applies for the session and `NOT SAVED` says why.
+- Palettes (`:settings` > Appearance > Palette): `lines` (bordered panels, the default), `blocks` (no borders, the chat window keeps the terminal background, the sidebar and message box are fixed lighter shades that do not change with focus), `minimal` (a top rule only) and `rounded`. Each panel (sidebar, messages, message box, popups) can override its outline (`none`, `rule`, `single`, `rounded`, `double`, `thick`) and fill, and the top bar and footer their fill. `NO_COLOR` turns shaded panels back into lines.
+- Group chats show messages Discord style: an avatar on the left (initials in the person's colour), the name in that colour with the time beside it, and the text underneath. Messages from one person within five minutes share one name row, and a blank row separates people. 1:1 chats get the same name rows without avatars, set 2 columns in from the sidebar. `[layout] avatars = "groups" | "all" | "off"` (Settings > Layout > Avatars); `off` keeps the one-line layout everywhere. A short conversation sits at the bottom of the pane, next to the message box.
+- Profile photos over the initials avatars on terminals with Sixel, Kitty or iTerm2 graphics (other terminals, and `NO_COLOR`, keep initials). Teams asks for the new `User.ReadBasic.All` permission: sign in again after upgrading. WhatsApp looks photos up slowly (10 a minute, once per person per run) and signing out deletes them. Photos are cached for 7 days. `[layout] photos = false` (Settings > Layout > Photos) and `[teams] photos = false` (Settings > Teams > Profile photos) turn them off.
 - Key bindings page (`:keys`): change any key by pressing the new one, swap on a clash, remove, and reset one or all. `/` filters it by action, name, key or context. Saved to `[keys]` in `settings.toml`.
 - `Ctrl+C` and `Esc` are ordinary keys: a context can bind `Ctrl+C` to something else and `quit` can move to another key. chatcli checks instead that some key quits from every context and that help, popups and `y/n` questions keep a key that backs out; the keys page refuses a change that breaks this, and `settings.toml` falls back to `Ctrl+C` or `Esc` there with a notice. Capturing a key on the keys page takes every key, `Esc` and `Backspace` included. The header shows the key that quits.
 - Key bindings page: several keys per action. `a` adds a key and keeps the others, `d` chooses one of the action's keys with `Left` / `Right` and deletes it. A key another action of the same context holds is refused and named; one that overlaps an `Everywhere` key or a two-key sequence asks first.
@@ -51,7 +56,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - New default keys and chat flow, the same keys meaning the same thing everywhere. `Enter` (or `l`, `Right`) goes into a chat with its newest message selected, `i` goes to its message box; `Esc` steps back out: the message box to selection, selection (also `h`, `Left`) to the chat list, and on the list it clears the filter or closes the open chat. `j`/`k`, `g`/`G`, `H`/`L` (and `M` in selection) move in the chat list, message selection and help. In selection `c` edits and `x` or `d` deletes. `Ctrl+O` jumps back to where the selection was before the last big jump. With the newest message selected, new ones take the selection with them. `y` copies the selected message (the system clipboard, and the terminal through OSC 52, which also works over SSH). `?` helps from anywhere outside a text box. Removed: `q` (use `Ctrl+C` or `:quit`), `Tab` to accept in popups (use `Enter`), and the help's `q`, `?` and `F1` to close it (use `Esc`). `open_link` in the chat list keeps its action with no default key.
 - Most default keys now live in `[keys.common]`, and `"key" = "unbound"` in a context's table stops a `common` key there.
 - `settings.toml` is no longer read-only to chatcli: the settings screen writes it (see Added).
-- WhatsApp read receipts are now off by default (`[whatsapp] send_read_receipts`). Before, they were always sent.
+- WhatsApp read receipts are sent by default and can be turned off (`[whatsapp] send_read_receipts = false`).
+- Toast notifications show the sender and message text by default (`[notifications] preview = "full"`). Set `"off"` to keep text out of toasts.
 - An edited WhatsApp message no longer gets an `(edited)` text suffix: the message carries an edited flag. A deleted message has empty text and shows `[message deleted]`.
 - Teams chats you hid in Teams are kept in the list as hidden (`H` shows them) instead of being dropped.
 - `chatcli relay setup` stops with a message when the secrets already exist, instead of replacing them.
@@ -62,6 +68,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Auto-download no longer fetches your own sent pictures back (that includes ones you sent from your phone: press `v` for those). A completion list closed by a click stays closed. Settings: clicking a section ends the `/` filter, and turning Teams photos back on asks again for people missed while off. A photo answer that arrives after sign-out is dropped on WhatsApp as well as Teams. Auto-download fetches three pictures at a time instead of up to twenty together. An open completion list no longer hides the newest messages. Avatars count towards the cache size limit at once. NO_COLOR also removes the colour swatches on the Appearance page.
+- No more screen flashes when switching tabs or chats or scrolling: a picture that moves or goes away now has only its own cells redrawn instead of the whole screen being cleared, and every frame is sent as one synchronized update (terminals without support ignore it).
 - Linux on Wayland: the clipboard is the native Wayland one (wlroots compositors such as Hyprland and sway, and KDE), so `Alt+V` reads pictures and copied text reaches other apps. Through XWayland it did neither. Older GNOME, without the data-control protocol, still goes through XWayland.
 - Running `relay setup` twice no longer silently breaks live Teams with a 401.
 - A Teams subscription that needs reauthorization is renewed with one request, never reauthorize plus renew.

@@ -1,8 +1,8 @@
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ┌ Settings ──────┐╔ WhatsApp ══════════════════════════════════════════════════╗
-│Appearance      │║Send read receipts  off                                     ║
-│Layout          │║Send typing         off                                     ║
-│Notifications   │║                                                            ║
+│Appearance      │║Send read receipts  on                                      ║
+│Layout          │║Send typing         on                                      ║
+│Notifications   │║Download images     on                                      ║
 │Media           │║                                                            ║
 │Teams           │║                                                            ║
 │WhatsApp        │║                                                            ║

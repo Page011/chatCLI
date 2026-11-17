@@ -9,6 +9,7 @@ use chatcli_core::paths;
 use chatcli_core::runtime::UiCtx;
 use chatcli_core::settings::{SettingEdit, Settings};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::layout::Position;
 
 use super::{App, Out, Prompt};
 use crate::keymap::{Action, Context, KeyChord, Keymap};
@@ -122,6 +123,11 @@ impl App {
     /// Makes `new` the live settings: theme, keymap, layout, notifications and the rest follow
     /// at once. The backends get a copy when something they read changed.
     pub(crate) fn apply_settings(&mut self, new: Settings) -> Out {
+        let old = &self.settings;
+        if old.teams.photos != new.teams.photos {
+            // Off hides what is already drawn; on asks again for people answered None while off.
+            self.ns_mut(Network::Teams).avatars.clear();
+        }
         let old = &self.settings;
         let backend =
             old.teams != new.teams || old.whatsapp != new.whatsapp || old.media != new.media;
@@ -629,6 +635,72 @@ impl App {
         Vec::new()
     }
 
+    /// A left click on the settings page. While a value is typed or a key is captured it is Esc
+    /// (nothing saves). A section on the left is shown (a narrow screen goes into it); a row is
+    /// chosen, and a click on the chosen row does what Enter does there.
+    pub(super) fn settings_click(&mut self, pos: Position) -> Out {
+        let Some(g) = crate::settings_ui::geometry(self.layout_in(self.size).body) else {
+            return Vec::new();
+        };
+        let Some(page) = self.settings_page.as_ref() else {
+            return Vec::new();
+        };
+        if page.edit.is_some() {
+            self.set_edit(None);
+            self.set_error(None);
+            return Vec::new();
+        }
+        if let Some(section) = crate::settings_ui::section_at(page, &g, pos) {
+            if let Some(p) = self.settings_page.as_mut() {
+                p.section = section;
+                p.filter.clear();
+                p.filtering = false;
+                p.row = 0;
+                p.top = 0;
+                p.in_rows = false;
+                p.error = None;
+            }
+            self.settings_fit();
+            if g.left.is_none() {
+                self.enter_rows();
+            }
+            return Vec::new();
+        }
+        let rows = self.page_rows();
+        let Some(k) = crate::settings_ui::row_at(page, &rows, &g, pos)
+            .filter(|k| rows.get(*k).is_some_and(Row::selectable))
+        else {
+            return Vec::new();
+        };
+        if page.in_rows && page.row == k {
+            self.set_error(None);
+            return self.enter_row();
+        }
+        if let Some(p) = self.settings_page.as_mut() {
+            p.in_rows = true;
+            p.row = k;
+            p.error = None;
+        }
+        self.settings_fit();
+        Vec::new()
+    }
+
+    /// The wheel on the settings page: Up/Down, on the rows or on the sections.
+    pub(super) fn settings_wheel(&mut self, up: bool) {
+        let Some(p) = self.settings_page.as_ref() else {
+            return;
+        };
+        if p.edit.is_some() {
+            return;
+        }
+        let step = if up { -1 } else { 1 };
+        if p.in_rows {
+            self.move_row(step);
+        } else {
+            self.move_section(step);
+        }
+    }
+
     /// F1, F2 and Esc.
     fn settings_global(&mut self, global: Option<Action>, key: &KeyEvent) -> Out {
         match global {
@@ -822,13 +894,13 @@ mod tests {
     fn whatsapp_typing_goes_to_both_backends_and_updates_the_ui() {
         let mut a = in_section(Section::WhatsApp);
         goto(&mut a, RowId::SendTyping);
-        assert!(!a.send_typing);
+        assert!(a.settings.whatsapp.send_typing, "on by default");
         let out = press(&mut a, KeyCode::Char(' '));
-        assert!(a.send_typing);
+        assert!(!a.send_typing);
         assert_eq!(out.len(), 2);
         for (n, cmd) in &out {
             match cmd {
-                Command::Settings(s) => assert!(s.whatsapp.send_typing, "{n:?}"),
+                Command::Settings(s) => assert!(!s.whatsapp.send_typing, "{n:?}"),
                 other => panic!("{other:?}"),
             }
         }

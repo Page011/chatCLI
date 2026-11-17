@@ -2,13 +2,13 @@
 ┌ Chats ───────────────────┐┌ Alex Example - scrolled, PgDn for newer ─────────┐
 │     Alex Example    09:15││                 loading older...                 │
 │     Alex Example: is the…││                  ---- Today ----                 │
-│99+  Project Team    08:02││09:00 Alex Example  Photos and files from the site│
-│     Sam Sample: thanks   ││                    visit:                        │
-│  1  Sam Sample        Sun││09:02 Alex Example  sunset from the lab window    │
-│     You: see you tomorrow││                    [image sunset.png 51 KB]      │
-│     Release Planning… Fri││                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀│
-│     Jordan Placeholder: …││                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀│
-│     田中太郎 (T… 05/11/26││                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀│
+│99+  Project Team    08:02││  Alex Example 09:00                              │
+│     Sam Sample: thanks   ││  Photos and files from the site visit:           │
+│  1  Sam Sample        Sun││  sunset from the lab window                      │
+│     You: see you tomorrow││  [image sunset.png 51 KB]                        │
+│     Release Planning… Fri││  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀        │
+│     Jordan Placeholder: …││  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀        │
+│     田中太郎 (T… 05/11/26││  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀        │
 │     了解しました         │└──────────────────────────────────────────────────┘
 │     Jordan Plac… 09/10/26│╔ Message ═════════════════════════════════════════╗
 │     You: thanks          │║>                                                 ║
@@ -27,29 +27,28 @@ row 3 cols 47-61: fg=DarkGray bg=Reset NONE
 row 4 cols 1-4: fg=Reset bg=Reset BOLD
 row 4 cols 6-20: fg=Reset bg=Reset BOLD
 row 4 cols 21-26: fg=DarkGray bg=Reset NONE
-row 4 cols 29-33: fg=DarkGray bg=Reset NONE
-row 4 cols 35-46: fg=Reset bg=Reset BOLD
+row 4 cols 31-42: fg=Yellow bg=Reset BOLD
+row 4 cols 44-48: fg=DarkGray bg=Reset NONE
 row 5 cols 1-23: fg=DarkGray bg=Reset NONE
 row 6 cols 1-4: fg=Reset bg=Reset BOLD
 row 6 cols 6-22: fg=Reset bg=Reset BOLD
 row 6 cols 23-26: fg=DarkGray bg=Reset NONE
-row 6 cols 29-33: fg=DarkGray bg=Reset NONE
-row 6 cols 35-46: fg=Reset bg=Reset BOLD
 row 7 cols 1-26: fg=DarkGray bg=Reset NONE
-row 7 cols 49-72: fg=Reset bg=Reset BOLD
+row 7 cols 31-54: fg=Reset bg=Reset BOLD
 row 8 cols 1-4: fg=Reset bg=Reset BOLD
 row 8 cols 23-26: fg=DarkGray bg=Reset NONE
-row 8 cols 49-52: fg=Rgb(255, 255, 255) bg=Rgb(255, 255, 255) NONE
-row 8 cols 53-63: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
-row 8 cols 64-78: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
+row 8 cols 31-35: fg=Rgb(255, 255, 255) bg=Rgb(255, 255, 255) NONE
+row 8 cols 36-50: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 8 cols 51-70: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
 row 9 cols 1-26: fg=DarkGray bg=Reset NONE
-row 9 cols 49-52: fg=Rgb(255, 255, 255) bg=Rgb(255, 255, 255) NONE
-row 9 cols 53-63: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
-row 9 cols 64-78: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
+row 9 cols 31-35: fg=Rgb(255, 255, 255) bg=Rgb(255, 255, 255) NONE
+row 9 cols 36-50: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 9 cols 51-70: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
 row 10 cols 1-4: fg=Reset bg=Reset BOLD
 row 10 cols 18-26: fg=DarkGray bg=Reset NONE
-row 10 cols 49-63: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
-row 10 cols 64-78: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
+row 10 cols 31-35: fg=Rgb(255, 255, 255) bg=Rgb(220, 40, 40) NONE
+row 10 cols 36-50: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 10 cols 51-70: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
 row 11 cols 1-17: fg=DarkGray bg=Reset NONE
 row 12 cols 1-4: fg=Reset bg=Reset BOLD
 row 12 cols 18-26: fg=DarkGray bg=Reset NONE

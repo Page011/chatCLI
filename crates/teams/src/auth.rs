@@ -30,6 +30,8 @@ const LEGACY_SCOPES: &str = "offline_access User.Read Chat.ReadWrite";
 const FILES_READ_SCOPE: &str = "Files.Read.All";
 /// Optional: upload files to the user's OneDrive to send them (`[teams] files_write`).
 const FILES_WRITE_SCOPE: &str = "Files.ReadWrite";
+/// Optional: profile photos beside messages (`[teams] photos`). Needs no admin consent.
+pub const PHOTOS_SCOPE: &str = "User.ReadBasic.All";
 const REFRESH_TOKEN_NAME: &str = "teams-refresh-token";
 /// How long the browser sign-in may take before the listener gives up.
 const SIGN_IN_TIMEOUT: Duration = Duration::from_secs(300);
@@ -111,6 +113,7 @@ pub struct Token {
 pub struct ScopeSet {
     pub files_read: bool,
     pub files_write: bool,
+    pub photos: bool,
 }
 
 impl ScopeSet {
@@ -118,11 +121,12 @@ impl ScopeSet {
         ScopeSet {
             files_read: s.files_read,
             files_write: s.files_write,
+            photos: s.photos,
         }
     }
 
     fn optional(&self) -> bool {
-        self.files_read || self.files_write
+        self.files_read || self.files_write || self.photos
     }
 
     /// The scope string of a sign-in or a refresh that wants everything the settings ask for.
@@ -135,6 +139,10 @@ impl ScopeSet {
         if self.files_write {
             s.push(' ');
             s.push_str(FILES_WRITE_SCOPE);
+        }
+        if self.photos {
+            s.push(' ');
+            s.push_str(PHOTOS_SCOPE);
         }
         s
     }
@@ -169,7 +177,7 @@ fn add_scope_hint(error: String, scopes: &ScopeSet) -> String {
         || error.contains("AADSTS90094")
         || error.to_ascii_lowercase().contains("admin");
     if scopes.optional() && needs_admin {
-        format!("{error} If an admin must approve file access, set files_read and files_write to false in settings.toml and sign in again.")
+        format!("{error} If an admin must approve file access, set files_read, files_write and photos to false in settings.toml and sign in again.")
     } else {
         error
     }
@@ -751,13 +759,14 @@ mod tests {
         );
         let read = ScopeSet {
             files_read: true,
-            files_write: false,
+            ..ScopeSet::default()
         };
         assert!(read.scope_string().ends_with(" Files.Read.All"));
         assert!(!read.scope_string().contains("Files.ReadWrite"));
         let both = ScopeSet {
             files_read: true,
             files_write: true,
+            ..ScopeSet::default()
         };
         assert!(both
             .scope_string()
@@ -765,14 +774,25 @@ mod tests {
         let from = ScopeSet::from_settings(&TeamsSettings {
             files_read: false,
             files_write: true,
+            photos: true,
         });
         assert_eq!(
             from,
             ScopeSet {
                 files_read: false,
-                files_write: true
+                files_write: true,
+                photos: true
             }
         );
+        let photos = ScopeSet {
+            photos: true,
+            ..ScopeSet::default()
+        };
+        assert!(photos.scope_string().ends_with(" User.ReadBasic.All"));
+        let attempts = photos.refresh_attempts();
+        assert_eq!(attempts.len(), 3);
+        assert!(attempts[0].contains("User.ReadBasic.All"));
+        assert!(!attempts[1].contains("User.ReadBasic.All"));
     }
 
     /// A refresh for a scope the user never consented to must fall back, never end the sign-in.
@@ -789,6 +809,7 @@ mod tests {
         let both = ScopeSet {
             files_read: true,
             files_write: true,
+            ..ScopeSet::default()
         }
         .refresh_attempts();
         assert_eq!(both.len(), 3);
@@ -820,11 +841,11 @@ mod tests {
     fn a_failed_sign_in_with_file_scopes_says_how_to_back_out() {
         let files = ScopeSet {
             files_read: true,
-            files_write: false,
+            ..ScopeSet::default()
         };
         let hint = add_scope_hint("Need admin approval (AADSTS90094)".into(), &files);
         assert!(
-            hint.contains("set files_read and files_write to false"),
+            hint.contains("set files_read, files_write and photos to false"),
             "{hint}"
         );
         // No hint when no optional scope was asked for, or for an unrelated failure.

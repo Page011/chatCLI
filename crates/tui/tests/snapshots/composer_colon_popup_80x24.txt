@@ -1,10 +1,10 @@
  chatcli  Teams 101 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ┌ Chats ───────────────────┐┌ Alex Example ────────────────────────────────────┐
-│     Alex Example    09:15││                ---- 05/11/26 ----                │
-│     Alex Example: is the…││14:20 Alex Example  Can you review the draft      │
-│99+  Project Team    08:02││                    before Friday?                │
-│     Sam Sample: thanks   ││14:31 You           Will do.                      │
-│  1  Sam Sample        Sun││                ---- Yesterday ----               │
+│     Alex Example    09:15││  Alex Example 09:10                              │
+│     Alex Example: is the…││  is the build done? 🚀 今日はどうですか          │
+│99+  Project Team    08:02││                                                  │
+│     Sam Sample: thanks   ││  You 09:15                                       │
+│  1  Sam Sample        Sun││  yes, shipped                                    │
 │     You: see you tomorrow││┌ Commands ──────────────────────────────────────┐│
 │     Release Planning… Fri│││:settings       theme, layout, keys and more    ││
 │     Jordan Placeholder: …│││:search         search every stored message     ││
@@ -29,20 +29,18 @@ row 0 cols 27-34: fg=Reset bg=Reset BOLD
 row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
 row 0 cols 69-79: fg=Reset bg=Reset DIM
 row 2 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
-row 2 cols 45-62: fg=DarkGray bg=Reset NONE
+row 2 cols 31-42: fg=Yellow bg=Reset BOLD
+row 2 cols 44-48: fg=DarkGray bg=Reset NONE
 row 3 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
-row 3 cols 29-33: fg=DarkGray bg=Reset NONE
-row 3 cols 35-46: fg=Reset bg=Reset BOLD
 row 4 cols 1-4: fg=Reset bg=Reset BOLD
 row 4 cols 6-20: fg=Reset bg=Reset BOLD
 row 4 cols 21-26: fg=DarkGray bg=Reset NONE
 row 5 cols 1-23: fg=DarkGray bg=Reset NONE
-row 5 cols 29-33: fg=DarkGray bg=Reset NONE
-row 5 cols 35-46: fg=Cyan bg=Reset BOLD
+row 5 cols 31-33: fg=Cyan bg=Reset BOLD
+row 5 cols 35-39: fg=DarkGray bg=Reset NONE
 row 6 cols 1-4: fg=Reset bg=Reset BOLD
 row 6 cols 6-22: fg=Reset bg=Reset BOLD
 row 6 cols 23-26: fg=DarkGray bg=Reset NONE
-row 6 cols 45-63: fg=DarkGray bg=Reset NONE
 row 7 cols 1-26: fg=DarkGray bg=Reset NONE
 row 8 cols 1-4: fg=Reset bg=Reset BOLD
 row 8 cols 23-26: fg=DarkGray bg=Reset NONE

@@ -1,7 +1,7 @@
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ┌ Settings ──────┐╔ Notifications ═════════════════════════════════════════════╗
 │Appearance      │║Enabled             on                                      ║
-│Layout          │║Preview             off                                     ║
+│Layout          │║Preview             full                                    ║
 │Notifications   │║Sound               on                                      ║
 │Media           │║                                                            ║
 │Teams           │║                                                            ║

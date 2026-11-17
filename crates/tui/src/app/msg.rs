@@ -3,10 +3,12 @@
 //! Pure App behaviour, like the rest of `app`: no terminal, no network. `ui` draws the result.
 
 use chatcli_core::model::{ChatMessage, Command, MessageState, Network, PersonRef, QuotedRef};
+use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+use ratatui::layout::Position;
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::{too_long, App, Focus, Out, Prompt};
-use crate::composer::Composer;
+use crate::composer::{self, Composer};
 use crate::keymap::Action;
 use crate::links;
 use crate::popup::{Popup, PopupItem};
@@ -522,6 +524,94 @@ impl App {
         } else {
             self.offer_links(urls);
         }
+    }
+
+    // ---- mouse on the main screen ----
+
+    /// A click on a message selects it and moves focus to it (from the list the chat is opened
+    /// first, as Enter on the chat does). On a link it then asks y/n with the host, on an
+    /// attachment chip it runs the `o` flow: a click never does more than the key would.
+    pub(super) fn click_message(
+        &mut self,
+        n: Network,
+        id: String,
+        kind: Option<ui::HitKind>,
+    ) -> Out {
+        let ns = self.ns(n);
+        let known = ns
+            .open
+            .as_ref()
+            .and_then(|c| ns.messages.get(c))
+            .is_some_and(|l| l.iter().any(|m| m.id == id && selectable(m)));
+        if !known {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        let from_list = !matches!(ns.focus, Focus::Composer | Focus::Select);
+        if from_list {
+            out = self.commit(n);
+        }
+        let ns = self.ns_mut(n);
+        ns.focus = Focus::Select;
+        ns.sel_msg = Some(id);
+        // Opening the chat scrolled it to the newest message.
+        if from_list {
+            self.ensure_sel_visible(n);
+        }
+        match kind {
+            Some(ui::HitKind::Link(url)) => self.offer_links(vec![url]),
+            Some(ui::HitKind::Chip(i)) => out.extend(self.open_media_at(n, i)),
+            None => {}
+        }
+        out
+    }
+
+    /// A click in the message box focuses it and puts the cursor on the clicked character.
+    pub(super) fn click_composer(&mut self, n: Network, lay: &ui::Layout, pos: Position) -> Out {
+        let mut out = Vec::new();
+        if self.ns(n).focus != Focus::Composer {
+            out = self.commit(n);
+        }
+        let area = ui::composer_text_area(self, lay);
+        if area.contains(pos) {
+            let w = ui::composer_text_width(lay.composer.width);
+            let crow = self.ns(n).composer().map_or(0, |c| c.layout(w).1);
+            let row = composer::top_row(crow, area.height as usize) + (pos.y - area.y) as usize;
+            // The first two columns are the `> ` prompt.
+            let col = ((pos.x - area.x) as usize).saturating_sub(2);
+            if let Some(c) = self.ns_mut(n).composer_mut() {
+                c.click(w, row, col);
+            }
+        }
+        out
+    }
+
+    /// The mouse while the completion list is open: a click on an item chooses it (as Enter
+    /// does), the wheel moves the choice. None when the pointer is outside the list.
+    pub(super) fn popup_mouse(
+        &mut self,
+        m: MouseEvent,
+        lay: &ui::Layout,
+        pos: Position,
+    ) -> Option<Out> {
+        let g = ui::popup_geometry(self, lay)?;
+        if !g.outer.contains(pos) {
+            return None;
+        }
+        let p = self.popup.as_mut()?;
+        match m.kind {
+            MouseEventKind::Down(MouseButton::Left) if g.rows.contains(pos) => {
+                p.selected = g.start + (pos.y - g.rows.y) as usize;
+                // Same path as Enter: typing notice and list refresh included.
+                return Some(self.run_click_action(Action::Accept));
+            }
+            MouseEventKind::ScrollUp => p.selected = p.selected.saturating_sub(1),
+            MouseEventKind::ScrollDown => {
+                p.selected = (p.selected + 1).min(p.items.len().saturating_sub(1));
+            }
+            _ => {}
+        }
+        Some(Vec::new())
     }
 
     /// Drops the reply or edit in the message box. An edit gives the earlier draft back.
@@ -1823,6 +1913,27 @@ mod tests {
     }
 
     #[test]
+    fn members_arriving_do_not_reopen_a_list_closed_by_the_mouse() {
+        let mut app = app_with(ChatKind::Group, three());
+        typed(&mut app, ":he");
+        assert!(app.popup().is_some());
+        app.handle_mouse(MouseEvent {
+            kind: MouseEventKind::ScrollUp,
+            column: 10,
+            row: 10,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        });
+        assert!(app.popup().is_none());
+        app.handle_event(Event::Members {
+            network: Network::Teams,
+            chat_id: "a".into(),
+            members: Vec::new(),
+            error: None,
+        });
+        assert!(app.popup().is_none(), "closed until the draft is edited");
+    }
+
+    #[test]
     fn a_paste_is_an_edit_so_members_may_open_the_list_again() {
         let mut app = app_with(ChatKind::Group, three());
         typed(&mut app, ":he");
@@ -1877,5 +1988,525 @@ mod tests {
         let out = typed(&mut app, "@al");
         assert_eq!(out.len(), 1, "one LoadMembers: {out:?}");
         assert_eq!(app.popup().unwrap().items[0].label, "Alex Example");
+    }
+
+    // ---- profile photos in avatars ----
+
+    /// A message from a named person id.
+    fn from_id(id: &str, at: i64, who: &str) -> ChatMessage {
+        ChatMessage {
+            sender_id: who.into(),
+            ..msg(id, at, false, "hello")
+        }
+    }
+
+    fn group_app(messages: Vec<ChatMessage>) -> App {
+        let mut app = app_with(ChatKind::Group, messages);
+        app.resize(100, 30);
+        app
+    }
+
+    fn photo(app: &mut App, who: &str) {
+        app.ns_mut(Network::Teams)
+            .avatars
+            .insert(who.into(), Some(format!("{who}.png").into()));
+    }
+
+    #[test]
+    fn a_run_start_has_an_avatar_slot_at_its_name_row() {
+        let app = group_app(vec![
+            from_id("m1", 1000, "u1"),
+            from_id("m2", 2000, "u1"),
+            from_id("m3", 3000, ""),
+        ]);
+        let ns = app.ns(Network::Teams);
+        let (_, spans) = ui::message_layout(ns, &app.look(), 60);
+        let slot = spans[0].avatar.as_ref().expect("run start");
+        assert_eq!((slot.person.as_str(), slot.line), ("u1", spans[0].start));
+        assert!(spans[1].avatar.is_none(), "continuation");
+        assert!(spans[2].avatar.is_none(), "no sender id");
+        let (_, narrow) = ui::message_layout(ns, &app.look(), 20);
+        assert!(narrow.iter().all(|s| s.avatar.is_none()), "too narrow");
+        let direct = app_with(ChatKind::Direct, vec![from_id("m1", 1000, "u1")]);
+        let (_, spans) = ui::message_layout(direct.ns(Network::Teams), &direct.look(), 60);
+        assert!(spans[0].avatar.is_none(), "1:1 has no avatar by default");
+    }
+
+    #[test]
+    fn photos_are_drawn_at_the_avatar_cells_anchored_to_the_bottom() {
+        let mut app = group_app(vec![from_id("m1", 1000, "u1"), from_id("m2", 5000, "u2")]);
+        photo(&mut app, "u1");
+        photo(&mut app, "u2");
+        let lay = app.layout_in(Rect::new(0, 0, 100, 30));
+        let vis = ui::visible_images(&app, &lay);
+        assert_eq!(vis.people, ["u2", "u1"], "newest first");
+        assert_eq!(vis.images.len(), 2);
+        // Newest first: u2's box is the last two rows, as the short chat sits at the bottom.
+        let r = vis.images[0].rect;
+        assert_eq!(vis.images[0].path.to_str(), Some("u2.png"));
+        assert_eq!((r.x, r.width, r.height), (lay.messages.x, 4, 2));
+        assert_eq!(r.y + 2, lay.messages.y + lay.messages.height);
+        // u1 is 3 rows higher: a blank row, then name and text rows of u2's run.
+        assert_eq!(vis.images[1].rect.y + 3 + 2, r.y + 2);
+    }
+
+    #[test]
+    fn a_partly_scrolled_avatar_keeps_its_initials() {
+        let list = (0..40)
+            .map(|i| from_id(&format!("m{i}"), 1000 + i, &format!("u{i}")))
+            .collect();
+        let mut app = group_app(list);
+        photo(&mut app, "u39");
+        photo(&mut app, "u38");
+        let lay = app.layout_in(Rect::new(0, 0, 100, 30));
+        let vis = ui::visible_images(&app, &lay);
+        assert_eq!(vis.people[0], "u39");
+        assert_eq!(vis.images.len(), 2);
+        // One line up: u39's text row is gone, so its box is cut and nobody asks for it.
+        app.ns_mut(Network::Teams).scroll = 1;
+        let vis = ui::visible_images(&app, &lay);
+        assert_eq!(vis.people[0], "u38");
+        assert!(!vis.people.contains(&"u39".to_string()));
+        assert_eq!(vis.images.len(), 1);
+        assert_eq!(vis.images[0].path.to_str(), Some("u38.png"));
+    }
+
+    #[test]
+    fn photos_off_draws_and_asks_for_nothing() {
+        let mut app = group_app(vec![from_id("m1", 1000, "u1")]);
+        photo(&mut app, "u1");
+        app.layout.photos = false;
+        let lay = app.layout_in(Rect::new(0, 0, 100, 30));
+        let vis = ui::visible_images(&app, &lay);
+        assert!(vis.images.is_empty() && vis.people.is_empty());
+        assert!(app.avatar_requests(&["u1".to_string()]).is_empty());
+    }
+
+    #[test]
+    fn no_colour_draws_and_asks_for_no_photos() {
+        let mut app = group_app(vec![from_id("m1", 1000, "u1")]);
+        photo(&mut app, "u1");
+        app.no_colour = true;
+        let lay = app.layout_in(Rect::new(0, 0, 100, 30));
+        let vis = ui::visible_images(&app, &lay);
+        assert!(vis.images.is_empty() && vis.people.is_empty());
+        assert!(app.avatar_requests(&["u2".to_string()]).is_empty());
+    }
+
+    #[test]
+    fn an_answer_nobody_asked_for_is_dropped() {
+        let mut app = group_app(Vec::new());
+        app.ns_mut(Network::Teams).avatars.clear();
+        app.handle_event(Event::Avatar {
+            network: Network::Teams,
+            person_id: "late".to_string(),
+            path: Some("late.png".into()),
+        });
+        assert!(app.ns(Network::Teams).avatars.is_empty());
+    }
+
+    #[test]
+    fn each_person_is_asked_once_and_none_stops_the_asking() {
+        let mut app = group_app(Vec::new());
+        let ask = |app: &mut App, who: &[&str]| {
+            let people: Vec<String> = who.iter().map(|s| s.to_string()).collect();
+            app.avatar_requests(&people)
+        };
+        let out = ask(&mut app, &["u1", "u2"]);
+        assert_eq!(out.len(), 1);
+        assert!(
+            matches!(&out[0].1, Command::FetchAvatars { people } if people == &["u1", "u2"]),
+            "{out:?}"
+        );
+        assert!(ask(&mut app, &["u1", "u2"]).is_empty(), "never twice");
+        let out = ask(&mut app, &["u2", "u3"]);
+        assert!(matches!(&out[0].1, Command::FetchAvatars { people } if people == &["u3"]));
+        // The answer is stored; a None answer does not bring the question back.
+        app.handle_event(Event::Avatar {
+            network: Network::Teams,
+            person_id: "u1".into(),
+            path: Some("u1.png".into()),
+        });
+        app.handle_event(Event::Avatar {
+            network: Network::Teams,
+            person_id: "u2".into(),
+            path: None,
+        });
+        let ns = app.ns(Network::Teams);
+        assert_eq!(
+            ns.avatars["u1"].as_deref().and_then(|p| p.to_str()),
+            Some("u1.png")
+        );
+        assert_eq!(ns.avatars["u2"], None);
+        assert!(ask(&mut app, &["u1", "u2"]).is_empty());
+        // Signed out: the next account is asked afresh.
+        app.handle_event(Event::Status(
+            Network::Teams,
+            Status::NeedsLogin { reason: None },
+        ));
+        assert!(app.ns(Network::Teams).avatars.is_empty());
+    }
+
+    #[test]
+    fn nobody_is_asked_while_the_network_is_not_online() {
+        let mut app = App::new(clock());
+        let people = ["u1".to_string()];
+        assert!(app.avatar_requests(&people).is_empty());
+        assert!(
+            app.ns(Network::Teams).avatars.is_empty(),
+            "not marked asked"
+        );
+    }
+
+    // ---- mouse on the main screen ----
+
+    fn left(app: &mut App, x: u16, y: u16) -> Out {
+        app.handle_mouse(MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: x,
+            row: y,
+            modifiers: KeyModifiers::NONE,
+        })
+    }
+
+    fn wheel(app: &mut App, up: bool, x: u16, y: u16) {
+        app.handle_mouse(MouseEvent {
+            kind: if up {
+                MouseEventKind::ScrollUp
+            } else {
+                MouseEventKind::ScrollDown
+            },
+            column: x,
+            row: y,
+            modifiers: KeyModifiers::NONE,
+        });
+    }
+
+    /// Screen cell of column `x` on conversation line `line`, for a conversation that fits.
+    fn cell(app: &App, line: usize, x: usize) -> (u16, u16) {
+        let lay = app.layout_for(Network::Teams);
+        let w = lay.messages.width as usize;
+        let (lines, _) = ui::message_layout(app.ns(Network::Teams), &app.look(), w);
+        assert!(lines.len() <= lay.messages.height as usize);
+        let y = lay.messages.y + lay.messages.height - (lines.len() - line) as u16;
+        (lay.messages.x + x as u16, y)
+    }
+
+    fn span_of(app: &App, id: &str) -> ui::MsgSpan {
+        let w = app.layout_for(Network::Teams).messages.width as usize;
+        let (_, spans) = ui::message_layout(app.ns(Network::Teams), &app.look(), w);
+        spans.into_iter().find(|s| s.id == id).unwrap()
+    }
+
+    fn clicked_app() -> App {
+        let mut app = app_with(ChatKind::Direct, three());
+        app.resize(80, 24);
+        app
+    }
+
+    #[test]
+    fn click_a_message_selects_it_from_the_message_box() {
+        let mut app = clicked_app();
+        assert_eq!(app.active().focus, Focus::Composer);
+        let (x, y) = cell(&app, span_of(&app, "m1").end - 1, 3);
+        left(&mut app, x, y);
+        assert_eq!(app.active().focus, Focus::Select);
+        assert_eq!(sel(&app), Some("m1"));
+        // Clicking the selected one keeps it; another one moves the highlight.
+        left(&mut app, x, y);
+        assert_eq!(sel(&app), Some("m1"));
+        let (x, y) = cell(&app, span_of(&app, "m2").end - 1, 3);
+        left(&mut app, x, y);
+        assert_eq!(sel(&app), Some("m2"));
+        assert!(app.prompt.is_none());
+    }
+
+    #[test]
+    fn click_a_day_separator_or_a_pending_message_selects_nothing() {
+        let mut m = three();
+        m.push(with_state(
+            msg("m4", 4000, true, "sending"),
+            MessageState::Pending,
+        ));
+        let mut app = app_with(ChatKind::Direct, m);
+        app.resize(80, 24);
+        let (x, y) = cell(&app, span_of(&app, "m4").start, 3);
+        left(&mut app, x, y);
+        assert_eq!(app.active().focus, Focus::Composer);
+        let (x, y) = cell(&app, 0, 3);
+        left(&mut app, x, y);
+        assert_eq!(app.active().focus, Focus::Composer);
+        assert_eq!(sel(&app), None);
+    }
+
+    #[test]
+    fn click_a_link_selects_the_message_and_asks_y_n() {
+        let mut app = clicked_app();
+        let sp = span_of(&app, "m3");
+        let hit = sp.hits.first().expect("link hit").clone();
+        let url = "https://docs.example.invalid/a".to_string();
+        assert_eq!(hit.kind, ui::HitKind::Link(url.clone()));
+        let (x, y) = cell(&app, hit.line, hit.x0);
+        left(&mut app, x, y);
+        assert_eq!(sel(&app), Some("m3"));
+        assert_eq!(app.prompt, Some(Prompt::Confirm(url)));
+        assert!(app.open_urls.is_empty(), "nothing opens before y");
+        // The last cell of the link counts, the cell after does not.
+        app.prompt = None;
+        let (x, y) = cell(&app, hit.line, hit.x1);
+        left(&mut app, x, y);
+        assert!(app.prompt.is_none());
+        let (x, y) = cell(&app, hit.line, hit.x1 - 1);
+        left(&mut app, x, y);
+        assert!(app.prompt.is_some());
+    }
+
+    #[test]
+    fn a_1_1_chat_sits_two_columns_in_and_clicks_follow() {
+        let mut app = clicked_app();
+        let w = app.layout_for(Network::Teams).messages.width as usize;
+        let (lines, _) = ui::message_layout(app.ns(Network::Teams), &app.look(), w);
+        let sp = span_of(&app, "m3");
+        // Name row and body both start at column 2.
+        for line in &lines[sp.start..sp.end] {
+            let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+            assert!(
+                text.starts_with("  ") && !text[2..].starts_with(' '),
+                "{text:?}"
+            );
+        }
+        let hit = sp.hits.first().expect("link hit").clone();
+        assert!(hit.x0 >= 2, "{hit:?}");
+        // The gutter is not the link; the first drawn cell is.
+        let (x, y) = cell(&app, hit.line, hit.x0 - 1);
+        left(&mut app, x, y);
+        assert!(app.prompt.is_none());
+        let (x, y) = cell(&app, hit.line, hit.x0);
+        left(&mut app, x, y);
+        assert!(matches!(app.prompt, Some(Prompt::Confirm(_))));
+    }
+
+    #[test]
+    fn a_link_that_wraps_is_clickable_on_every_line() {
+        let long = format!("see https://example.invalid/{}", "x".repeat(60));
+        let mut app = app_with(ChatKind::Direct, vec![msg("m1", 1000, false, &long)]);
+        app.resize(40, 24);
+        let hits = span_of(&app, "m1").hits;
+        assert!(hits.len() >= 2, "{hits:?}");
+        for h in hits {
+            let (x, y) = cell(&app, h.line, h.x0);
+            app.prompt = None;
+            left(&mut app, x, y);
+            assert!(matches!(app.prompt, Some(Prompt::Confirm(_))));
+        }
+    }
+
+    #[test]
+    fn click_a_chip_runs_the_o_flow_for_that_attachment() {
+        use chatcli_core::model::{Attachment, FetchRef, MediaKind};
+        let doc = |name: &str| Attachment {
+            kind: MediaKind::Document,
+            name: Some(name.into()),
+            mime: None,
+            size: Some(10),
+            fetch_ref: FetchRef::new("r"),
+            open_url: None,
+        };
+        let mut m = msg("m1", 1000, false, "[file] [file]");
+        m.attachments = vec![doc("fine.pdf"), doc("run.exe")];
+        let mut app = app_with(ChatKind::Direct, vec![m]);
+        app.resize(80, 24);
+        let hits = span_of(&app, "m1").hits;
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[1].kind, ui::HitKind::Chip(1));
+        let (x, y) = cell(&app, hits[1].line, hits[1].x0 + 1);
+        let out = left(&mut app, x, y);
+        assert_eq!(sel(&app), Some("m1"));
+        assert!(out.is_empty());
+        assert_eq!(
+            app.current_notice().map(|n| n.text.as_str()),
+            Some("BLOCKED: executable")
+        );
+        // The first chip is a fetch request, not the refusal.
+        let (x, y) = cell(&app, hits[0].line, hits[0].x0 + 1);
+        let out = left(&mut app, x, y);
+        assert!(
+            matches!(out[0].1, Command::FetchMedia { index: 0, .. }),
+            "{out:?}"
+        );
+    }
+
+    #[test]
+    fn click_a_message_from_the_chat_list_opens_the_chat_first() {
+        let mut app = clicked_app();
+        // Esc steps out one level at a time: message box, selection, chat list.
+        for _ in 0..3 {
+            if app.active().focus != Focus::List {
+                press(&mut app, KeyCode::Esc);
+            }
+        }
+        assert_eq!(app.active().focus, Focus::List);
+        let (x, y) = cell(&app, span_of(&app, "m2").end - 1, 40);
+        left(&mut app, x, y);
+        assert_eq!(app.active().focus, Focus::Select);
+        assert_eq!(sel(&app), Some("m2"));
+        assert!(in_view(&app));
+    }
+
+    #[test]
+    fn click_in_the_message_box_puts_the_cursor_on_the_clicked_character() {
+        let mut app = clicked_app();
+        for c in "hello wide".chars() {
+            ch(&mut app, c);
+        }
+        let lay = app.layout_for(Network::Teams);
+        let area = ui::composer_text_area(&app, &lay);
+        left(&mut app, area.x + 2 + 3, area.y);
+        assert_eq!(app.active().composer().unwrap().cursor(), 3);
+        // Past the end: the end. On the prompt: the start.
+        left(&mut app, area.x + 40, area.y);
+        assert_eq!(app.active().composer().unwrap().cursor(), 10);
+        left(&mut app, area.x, area.y);
+        assert_eq!(app.active().composer().unwrap().cursor(), 0);
+        // A click in the box from a selected message moves focus back to it.
+        let (x, y) = cell(&app, span_of(&app, "m1").end - 1, 3);
+        left(&mut app, x, y);
+        assert_eq!(app.active().focus, Focus::Select);
+        left(&mut app, area.x + 2 + 1, area.y);
+        assert_eq!(app.active().focus, Focus::Composer);
+        assert_eq!(app.active().composer().unwrap().cursor(), 1);
+    }
+
+    fn popup_item(label: &str, insert: &str) -> PopupItem {
+        PopupItem {
+            label: label.into(),
+            detail: String::new(),
+            insert: insert.into(),
+            person: None,
+            command: None,
+        }
+    }
+
+    fn open_popup(app: &mut App) {
+        for c in "x :sm".chars() {
+            ch(app, c);
+        }
+        app.popup = Some(Popup::new(
+            vec![
+                popup_item("A", "AA"),
+                popup_item("B", "BB"),
+                popup_item("C", "CC"),
+            ],
+            "sm".into(),
+            3,
+        ));
+    }
+
+    #[test]
+    fn click_a_popup_item_inserts_it_like_enter() {
+        let mut app = clicked_app();
+        open_popup(&mut app);
+        let lay = app.layout_for(Network::Teams);
+        let g = ui::popup_geometry(&app, &lay).expect("popup drawn");
+        left(&mut app, g.rows.x + 1, g.rows.y + 1);
+        assert!(app.popup.is_none());
+        assert_eq!(app.active().draft(), "x BB");
+    }
+
+    #[test]
+    fn click_outside_the_popup_closes_it_and_the_wheel_over_it_scrolls() {
+        let mut app = clicked_app();
+        open_popup(&mut app);
+        let lay = app.layout_for(Network::Teams);
+        let g = ui::popup_geometry(&app, &lay).unwrap();
+        wheel(&mut app, false, g.rows.x + 1, g.rows.y);
+        assert_eq!(app.popup.as_ref().map(|p| p.selected), Some(1));
+        wheel(&mut app, true, g.rows.x + 1, g.rows.y);
+        wheel(&mut app, true, g.rows.x + 1, g.rows.y);
+        assert_eq!(app.popup.as_ref().map(|p| p.selected), Some(0));
+        left(&mut app, 0, 0);
+        assert!(app.popup.is_none());
+        assert_eq!(app.active().draft(), "x :sm");
+    }
+
+    fn mv(app: &mut App, kind: MouseEventKind, x: u16, y: u16) -> Out {
+        app.handle_mouse(MouseEvent {
+            kind,
+            column: x,
+            row: y,
+            modifiers: KeyModifiers::NONE,
+        })
+    }
+
+    /// Footer column where the drawn y of a question is.
+    fn yes_x(app: &App) -> u16 {
+        let footer = app.layout_in(app.size).footer;
+        let y = app.size.height - 1;
+        (0..app.size.width)
+            .find(|x| {
+                ui::footer_hit_at(app, footer, app.size.height, Position::new(*x, y))
+                    == Some(ui::FooterHit::Yes)
+            })
+            .expect("y is drawn")
+    }
+
+    #[test]
+    fn pointer_moves_drags_and_releases_leave_the_completion_list_open() {
+        let mut app = clicked_app();
+        open_popup(&mut app);
+        let lay = app.layout_for(Network::Teams);
+        let g = ui::popup_geometry(&app, &lay).expect("popup drawn");
+        for kind in [
+            MouseEventKind::Moved,
+            MouseEventKind::Drag(MouseButton::Left),
+            MouseEventKind::Up(MouseButton::Left),
+        ] {
+            assert!(mv(&mut app, kind, 0, 0).is_empty());
+            assert!(app.popup.is_some(), "{kind:?}");
+        }
+        left(&mut app, g.rows.x + 1, g.rows.y + 1);
+        assert_eq!(app.active().draft(), "x BB");
+    }
+
+    #[test]
+    fn a_terminal_too_small_to_draw_takes_no_clicks() {
+        let mut app = clicked_app();
+        app.resize(29, 10);
+        app.prompt = Some(Prompt::MarkAllRead { count: 1 });
+        let x = yes_x(&app);
+        let y = app.size.height - 1;
+        assert!(left(&mut app, x, y).is_empty());
+        assert!(app.prompt.is_some(), "a stray click is never yes");
+    }
+
+    #[test]
+    fn the_second_click_of_a_double_click_does_not_answer_the_question() {
+        let mut app = clicked_app();
+        let hit = span_of(&app, "m3").hits.first().expect("link hit").clone();
+        let (x, y) = cell(&app, hit.line, hit.x0);
+        left(&mut app, x, y);
+        assert!(app.prompt.is_some());
+        let (yx, yy) = (yes_x(&app), app.size.height - 1);
+        left(&mut app, yx, yy);
+        assert!(app.prompt.is_some() && app.open_urls.is_empty());
+        // A deliberate click later answers.
+        app.tick(app.clock().now_ms + 1000);
+        left(&mut app, yx, yy);
+        assert!(app.prompt.is_none());
+        assert_eq!(app.take_open_urls().len(), 1);
+    }
+
+    #[test]
+    fn the_send_and_quit_hints_are_not_clickable() {
+        let app = clicked_app();
+        let y = app.size.height - 1;
+        let m = MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 0,
+            row: y,
+            modifiers: KeyModifiers::NONE,
+        };
+        assert_eq!(app.footer_hit(Position::new(0, y)), Some(Action::Send));
+        assert_eq!(app.footer_click_hit(m), None);
     }
 }

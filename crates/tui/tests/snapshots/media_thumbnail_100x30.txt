@@ -1,28 +1,28 @@
  chatcli  Teams 101 LIVE   WhatsApp CONNECTING                                           Ctrl+C quit
 ┌ Chats ─────────────────────┐╔ Alex Example ══════════════════════════════════════════════════════╗
 │     Alex Example      09:15│║                           ---- Today ----                          ║
-│     Alex Example: is the b…│║09:00 Alex Example  Photos and files from the site visit:           ║
-│99+  Project Team      08:02│║09:02 Alex Example  sunset from the lab window                      ║
-│     Sam Sample: thanks     │║                    [image sunset.png 51 KB]                        ║
-│  1  Sam Sample          Sun│║                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀        ║
-│     You: see you tomorrow  │║                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀        ║
-│     Release Planning f… Fri│║                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀        ║
-│     Jordan Placeholder: ag…│║                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀        ║
-│     田中太郎 (Tar… 05/11/26│║                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀        ║
-│     了解しました           │║                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀        ║
-│     Jordan Placeh… 09/10/26│║                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀        ║
-│     You: thanks            │║                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀        ║
-│                            │║                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀        ║
-│                            │║                    ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀        ║
-│                            │║09:04 Alex Example  [file notes.txt 2 KB]                           ║
-│                            │║09:06 Alex Example  [image old-photo.jpg 303 KB]                    ║
-│                            │║09:08 Alex Example  [file setup.exe 8.0 MB]                         ║
-│                            │║09:10 You           two at once                                     ║
-│                            │║                    [image a.png 2 KB]                              ║
-│                            │║                    [image b.png 3.0 MB]                            ║
+│     Alex Example: is the b…│║  Alex Example 09:00                                                ║
+│99+  Project Team      08:02│║  Photos and files from the site visit:                             ║
+│     Sam Sample: thanks     │║  sunset from the lab window                                        ║
+│  1  Sam Sample          Sun│║  [image sunset.png 51 KB]                                          ║
+│     You: see you tomorrow  │║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                          ║
+│     Release Planning f… Fri│║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                          ║
+│     Jordan Placeholder: ag…│║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                          ║
+│     田中太郎 (Tar… 05/11/26│║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                          ║
+│     了解しました           │║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                          ║
+│     Jordan Placeh… 09/10/26│║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                          ║
+│     You: thanks            │║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                          ║
+│                            │║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                          ║
+│                            │║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                          ║
+│                            │║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                          ║
+│                            │║  [file notes.txt 2 KB]                                             ║
+│                            │║  [image old-photo.jpg 303 KB]                                      ║
+│                            │║  [file setup.exe 8.0 MB]                                           ║
 │                            │║                                                                    ║
-│                            │║                                                                    ║
-│                            │║                                                                    ║
+│                            │║  You 09:10                                                         ║
+│                            │║  two at once                                                       ║
+│                            │║  [image a.png 2 KB]                                                ║
+│                            │║  [image b.png 3.0 MB]                                              ║
 │                            │╚════════════════════════════════════════════════════════════════════╝
 │                            │┌ Message ───────────────────────────────────────────────────────────┐
 │                            ││i to type                                                           │
@@ -38,64 +38,57 @@ row 1 cols 31-44: fg=Reset bg=Reset BOLD
 row 2 cols 1-28: fg=Reset bg=Reset BOLD | UNDERLINED
 row 2 cols 58-72: fg=DarkGray bg=Reset NONE
 row 3 cols 1-28: fg=Reset bg=Reset BOLD | UNDERLINED
-row 3 cols 31-35: fg=DarkGray bg=Reset NONE
-row 3 cols 37-48: fg=Reset bg=Reset BOLD
+row 3 cols 33-44: fg=Yellow bg=Reset BOLD
+row 3 cols 46-50: fg=DarkGray bg=Reset NONE
 row 4 cols 1-4: fg=Reset bg=Reset BOLD
 row 4 cols 6-22: fg=Reset bg=Reset BOLD
 row 4 cols 23-28: fg=DarkGray bg=Reset NONE
-row 4 cols 31-35: fg=DarkGray bg=Reset BOLD | REVERSED
-row 4 cols 36-76: fg=Reset bg=Reset BOLD | REVERSED
 row 5 cols 1-23: fg=DarkGray bg=Reset NONE
-row 5 cols 31-74: fg=Reset bg=Reset BOLD | REVERSED
+row 5 cols 31-58: fg=Reset bg=Reset BOLD | REVERSED
 row 6 cols 1-4: fg=Reset bg=Reset BOLD
 row 6 cols 6-24: fg=Reset bg=Reset BOLD
 row 6 cols 25-28: fg=DarkGray bg=Reset NONE
-row 6 cols 51-55: fg=Rgb(255, 255, 255) bg=Rgb(255, 255, 255) NONE
-row 6 cols 56-70: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
-row 6 cols 71-90: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
+row 6 cols 31-56: fg=Reset bg=Reset BOLD | REVERSED
 row 7 cols 1-26: fg=DarkGray bg=Reset NONE
-row 7 cols 51-55: fg=Rgb(255, 255, 255) bg=Rgb(255, 255, 255) NONE
-row 7 cols 56-70: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
-row 7 cols 71-90: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
+row 7 cols 33-37: fg=Rgb(255, 255, 255) bg=Rgb(255, 255, 255) NONE
+row 7 cols 38-52: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 7 cols 53-72: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
 row 8 cols 1-4: fg=Reset bg=Reset BOLD
 row 8 cols 25-28: fg=DarkGray bg=Reset NONE
-row 8 cols 51-55: fg=Rgb(255, 255, 255) bg=Rgb(220, 40, 40) NONE
-row 8 cols 56-70: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
-row 8 cols 71-90: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
+row 8 cols 33-37: fg=Rgb(255, 255, 255) bg=Rgb(255, 255, 255) NONE
+row 8 cols 38-52: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 8 cols 53-72: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
 row 9 cols 1-28: fg=DarkGray bg=Reset NONE
-row 9 cols 51-70: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
-row 9 cols 71-90: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
+row 9 cols 33-37: fg=Rgb(255, 255, 255) bg=Rgb(220, 40, 40) NONE
+row 9 cols 38-52: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 9 cols 53-72: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
 row 10 cols 1-4: fg=Reset bg=Reset BOLD
 row 10 cols 20-28: fg=DarkGray bg=Reset NONE
-row 10 cols 51-70: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
-row 10 cols 71-90: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
+row 10 cols 33-52: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 10 cols 53-72: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
 row 11 cols 1-17: fg=DarkGray bg=Reset NONE
-row 11 cols 51-70: fg=Rgb(50, 80, 220) bg=Rgb(50, 80, 220) NONE
-row 11 cols 71-90: fg=Rgb(240, 200, 40) bg=Rgb(240, 200, 40) NONE
+row 11 cols 33-52: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 11 cols 53-72: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
 row 12 cols 1-4: fg=Reset bg=Reset BOLD
 row 12 cols 20-28: fg=DarkGray bg=Reset NONE
-row 12 cols 51-70: fg=Rgb(50, 80, 220) bg=Rgb(50, 80, 220) NONE
-row 12 cols 71-90: fg=Rgb(240, 200, 40) bg=Rgb(240, 200, 40) NONE
+row 12 cols 33-52: fg=Rgb(50, 80, 220) bg=Rgb(50, 80, 220) NONE
+row 12 cols 53-72: fg=Rgb(240, 200, 40) bg=Rgb(240, 200, 40) NONE
 row 13 cols 1-16: fg=DarkGray bg=Reset NONE
-row 13 cols 51-70: fg=Rgb(50, 80, 220) bg=Rgb(50, 80, 220) NONE
-row 13 cols 71-90: fg=Rgb(240, 200, 40) bg=Rgb(240, 200, 40) NONE
-row 14 cols 51-70: fg=Rgb(50, 80, 220) bg=Rgb(50, 80, 220) NONE
-row 14 cols 71-90: fg=Rgb(240, 200, 40) bg=Rgb(240, 200, 40) NONE
-row 15 cols 51-70: fg=Rgb(50, 80, 220) bg=Rgb(50, 80, 220) NONE
-row 15 cols 71-90: fg=Rgb(240, 200, 40) bg=Rgb(240, 200, 40) NONE
-row 16 cols 31-35: fg=DarkGray bg=Reset NONE
-row 16 cols 37-48: fg=Reset bg=Reset BOLD
-row 16 cols 51-71: fg=Reset bg=Reset BOLD
-row 17 cols 31-35: fg=DarkGray bg=Reset NONE
-row 17 cols 37-48: fg=Reset bg=Reset BOLD
-row 17 cols 51-78: fg=Reset bg=Reset BOLD
-row 18 cols 31-35: fg=DarkGray bg=Reset NONE
-row 18 cols 37-48: fg=Reset bg=Reset BOLD
-row 18 cols 51-73: fg=Reset bg=Reset BOLD
-row 19 cols 31-35: fg=DarkGray bg=Reset NONE
-row 19 cols 37-48: fg=Cyan bg=Reset BOLD
-row 20 cols 51-68: fg=Reset bg=Reset BOLD
-row 21 cols 51-70: fg=Reset bg=Reset BOLD
+row 13 cols 33-52: fg=Rgb(50, 80, 220) bg=Rgb(50, 80, 220) NONE
+row 13 cols 53-72: fg=Rgb(240, 200, 40) bg=Rgb(240, 200, 40) NONE
+row 14 cols 33-52: fg=Rgb(50, 80, 220) bg=Rgb(50, 80, 220) NONE
+row 14 cols 53-72: fg=Rgb(240, 200, 40) bg=Rgb(240, 200, 40) NONE
+row 15 cols 33-52: fg=Rgb(50, 80, 220) bg=Rgb(50, 80, 220) NONE
+row 15 cols 53-72: fg=Rgb(240, 200, 40) bg=Rgb(240, 200, 40) NONE
+row 16 cols 33-52: fg=Rgb(50, 80, 220) bg=Rgb(50, 80, 220) NONE
+row 16 cols 53-72: fg=Rgb(240, 200, 40) bg=Rgb(240, 200, 40) NONE
+row 17 cols 33-53: fg=Reset bg=Reset BOLD
+row 18 cols 33-60: fg=Reset bg=Reset BOLD
+row 19 cols 33-55: fg=Reset bg=Reset BOLD
+row 21 cols 33-35: fg=Cyan bg=Reset BOLD
+row 21 cols 37-41: fg=DarkGray bg=Reset NONE
+row 23 cols 33-50: fg=Reset bg=Reset BOLD
+row 24 cols 33-52: fg=Reset bg=Reset BOLD
 row 27 cols 31-39: fg=Reset bg=Reset DIM
 row 29 cols 0-11: fg=Reset bg=Reset BOLD
 row 29 cols 12-13: fg=Reset bg=Reset DIM

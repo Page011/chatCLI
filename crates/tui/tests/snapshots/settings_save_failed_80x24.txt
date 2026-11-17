@@ -5,8 +5,8 @@
 │Notifications   │║Date order          dmy                                     ║
 │Media           │║Density             cozy                                    ║
 │Teams           │║Show previews       on                                      ║
-│WhatsApp        │║                                                            ║
-│Keys            │║                                                            ║
+│WhatsApp        │║Avatars             groups                                  ║
+│Keys            │║Photos              on                                      ║
 │About           │║                                                            ║
 │                │║                                                            ║
 │                │║                                                            ║

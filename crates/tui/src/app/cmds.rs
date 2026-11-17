@@ -2,6 +2,7 @@
 //! `run_cmd`. `App` stays pure: a command that needs a backend returns an `Out`.
 
 use chatcli_core::model::{Command, Status};
+use ratatui::layout::Position;
 
 use super::{App, Focus, Out, Prompt};
 use crate::commands::{self, Cmd, CmdId, COMMANDS_TITLE};
@@ -187,6 +188,48 @@ impl App {
             _ => {}
         }
         Vec::new()
+    }
+
+    /// A left click in the bar: an item runs like Enter on it, outside the box closes it, the
+    /// query row and the headings do nothing.
+    pub(super) fn palette_click(&mut self, pos: Position) -> Out {
+        let Some(g) = ui::palette_geometry(self.layout_in(self.size).body) else {
+            // Too small to draw: the note says Esc closes, a click does too.
+            self.palette = None;
+            return Vec::new();
+        };
+        if !g.outer.contains(pos) {
+            self.palette = None;
+            return Vec::new();
+        }
+        if !g.list.contains(pos) {
+            return Vec::new();
+        }
+        let items = self.palette_items();
+        let row = self.palette.as_ref().map_or(0, |p| p.top) + (pos.y - g.list.y) as usize;
+        match crate::palette::rows(&items).get(row) {
+            Some(&crate::palette::PalRow::Item(i)) => {
+                if let Some(p) = self.palette.as_mut() {
+                    p.sel = i;
+                }
+                self.palette_action(Action::Accept)
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// The wheel in the bar moves the choice a few items, clamped, and the window follows.
+    pub(super) fn palette_wheel(&mut self, up: bool) {
+        let len = self.palette_items().len();
+        let step = if up {
+            -super::WHEEL_LINES
+        } else {
+            super::WHEEL_LINES
+        };
+        if let Some(p) = self.palette.as_mut() {
+            p.page(len, step);
+        }
+        self.palette_fit();
     }
 
     /// Enter on a chat in the bar: select it and go into it like Enter in the list (its newest

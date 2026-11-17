@@ -361,6 +361,105 @@ async fn missing_scopes_are_named_once_in_a_notice() {
 }
 
 #[tokio::test]
+async fn the_missing_photos_scope_is_named_as_profile_photos() {
+    let mut settings = Settings::default();
+    settings.teams.photos = true;
+    let mut t = env_with(settings, BASE, |_| Reply::empty(500));
+    t.b.warn_missing_scopes();
+    let events = t.drain();
+    let [Event::Notice { text, .. }] = &events[..] else {
+        panic!("{events:?}")
+    };
+    assert!(text.contains("profile photos"), "{text}");
+}
+
+const GUID: &str = "11111111-1111-1111-1111-111111111111";
+
+fn photo_png() -> Vec<u8> {
+    let mut v = Vec::new();
+    image::RgbImage::from_pixel(20, 10, image::Rgb([5, 6, 7]))
+        .write_to(&mut std::io::Cursor::new(&mut v), image::ImageFormat::Png)
+        .unwrap();
+    v
+}
+
+fn avatar_cmd(ids: &[&str]) -> Command {
+    Command::FetchAvatars {
+        people: ids.iter().map(|s| s.to_string()).collect(),
+    }
+}
+
+fn avatars_of(events: Vec<Event>) -> Vec<(String, Option<PathBuf>)> {
+    events
+        .into_iter()
+        .filter_map(|e| match e {
+            Event::Avatar {
+                person_id, path, ..
+            } => Some((person_id, path)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn photos_off_answers_none_without_a_request() {
+    let mut t = env(|_| Reply::bytes(200, "image/png", photo_png()));
+    t.cmd(avatar_cmd(&[GUID, "x"])).await;
+    let got = avatars_of(t.drain());
+    assert_eq!(got.len(), 2);
+    assert!(got.iter().all(|(_, p)| p.is_none()));
+    assert_eq!(t.mock.count(), 0);
+    // Setting on, consent missing: the same.
+    let mut settings = Settings::default();
+    settings.teams.photos = true;
+    let mut t = env_with(settings, BASE, |_| Reply::empty(500));
+    t.cmd(avatar_cmd(&[GUID])).await;
+    assert!(avatars_of(t.drain())[0].1.is_none());
+    assert_eq!(t.mock.count(), 0);
+}
+
+#[tokio::test]
+async fn a_photo_is_stored_under_avatars_and_the_second_ask_comes_from_the_cache() {
+    let mut settings = Settings::default();
+    settings.teams.photos = true;
+    let mut t = env_with(settings, &format!("{BASE} User.ReadBasic.All"), |_| {
+        Reply::bytes(200, "image/png", photo_png())
+    });
+    t.cmd(avatar_cmd(&[GUID, "not-a-guid"])).await;
+    let first = t
+        .until(|e| matches!(e, Event::Avatar { path: Some(_), .. }))
+        .await;
+    let Event::Avatar {
+        path: Some(path), ..
+    } = first
+    else {
+        unreachable!()
+    };
+    assert_eq!(path.parent().unwrap(), t.media_path().join("avatars"));
+    assert!(path.is_file());
+    assert_eq!(t.mock.count(), 1, "the non-GUID id made no request");
+    t.cmd(avatar_cmd(&[GUID])).await;
+    assert_eq!(avatars_of(t.drain())[0].1.as_deref(), Some(path.as_path()));
+    assert_eq!(t.mock.count(), 1, "cache hit, no request");
+}
+
+#[tokio::test]
+async fn a_404_writes_the_no_photo_marker_and_is_not_asked_again() {
+    let mut settings = Settings::default();
+    settings.teams.photos = true;
+    let mut t = env_with(settings, &format!("{BASE} User.ReadBasic.All"), |_| {
+        Reply::error(404, "ImageNotFound", "none")
+    });
+    t.cmd(avatar_cmd(&[GUID])).await;
+    let e = t.until(|e| matches!(e, Event::Avatar { .. })).await;
+    assert!(matches!(e, Event::Avatar { path: None, .. }));
+    assert_eq!(t.mock.count(), 2, "sized, then plain");
+    t.cmd(avatar_cmd(&[GUID])).await;
+    assert!(avatars_of(t.drain())[0].1.is_none());
+    assert_eq!(t.mock.count(), 2);
+}
+
+#[tokio::test]
 async fn file_capabilities_need_both_the_setting_and_the_scope() {
     let mut settings = Settings::default();
     settings.teams.files_read = true;

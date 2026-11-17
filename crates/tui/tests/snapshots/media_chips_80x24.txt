@@ -1,21 +1,21 @@
  chatcli  Teams 101 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ┌ Chats ───────────────────┐╔ Alex Example ════════════════════════════════════╗
-│     Alex Example    09:15│║                  ---- Today ----                 ║
-│     Alex Example: is the…│║09:00 Alex Example  Photos and files from the site║
-│99+  Project Team    08:02│║                    visit:                        ║
-│     Sam Sample: thanks   │║09:02 Alex Example  sunset from the lab window    ║
-│  1  Sam Sample        Sun│║                    [image sunset.png 51 KB]      ║
-│     You: see you tomorrow│║                    downloading...                ║
-│     Release Planning… Fri│║09:04 Alex Example  [file notes.txt 2 KB]  opened ║
-│     Jordan Placeholder: …│║09:06 Alex Example  [image old-photo.jpg 303 KB]  ║
-│     田中太郎 (T… 05/11/26│║                    FAILED: MEDIA EXPIRED         ║
-│     了解しました         │║09:08 Alex Example  [file setup.exe 8.0 MB]       ║
-│     Jordan Plac… 09/10/26│║09:10 You           two at once                   ║
-│     You: thanks          │║                    [image a.png 2 KB]            ║
-│                          │║                    [image b.png 3.0 MB]          ║
-│                          │║                                                  ║
-│                          │║                                                  ║
-│                          │║                                                  ║
+│     Alex Example    09:15│║                                                  ║
+│     Alex Example: is the…│║                                                  ║
+│99+  Project Team    08:02│║                  ---- Today ----                 ║
+│     Sam Sample: thanks   │║  Alex Example 09:00                              ║
+│  1  Sam Sample        Sun│║  Photos and files from the site visit:           ║
+│     You: see you tomorrow│║  sunset from the lab window                      ║
+│     Release Planning… Fri│║  [image sunset.png 51 KB]  downloading...        ║
+│     Jordan Placeholder: …│║  [file notes.txt 2 KB]  opened                   ║
+│     田中太郎 (T… 05/11/26│║  [image old-photo.jpg 303 KB]                    ║
+│     了解しました         │║  FAILED: MEDIA EXPIRED                           ║
+│     Jordan Plac… 09/10/26│║  [file setup.exe 8.0 MB]                         ║
+│     You: thanks          │║                                                  ║
+│                          │║  You 09:10                                       ║
+│                          │║  two at once                                     ║
+│                          │║  [image a.png 2 KB]                              ║
+│                          │║  [image b.png 3.0 MB]                            ║
 │                          │╚══════════════════════════════════════════════════╝
 │                          │┌ Message ─────────────────────────────────────────┐
 │                          ││i to type                                         │
@@ -30,47 +30,39 @@ row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
 row 0 cols 69-79: fg=Reset bg=Reset DIM
 row 1 cols 29-42: fg=Reset bg=Reset BOLD
 row 2 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
-row 2 cols 47-61: fg=DarkGray bg=Reset NONE
 row 3 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
-row 3 cols 29-33: fg=DarkGray bg=Reset NONE
-row 3 cols 35-46: fg=Reset bg=Reset BOLD
 row 4 cols 1-4: fg=Reset bg=Reset BOLD
 row 4 cols 6-20: fg=Reset bg=Reset BOLD
 row 4 cols 21-26: fg=DarkGray bg=Reset NONE
+row 4 cols 47-61: fg=DarkGray bg=Reset NONE
 row 5 cols 1-23: fg=DarkGray bg=Reset NONE
-row 5 cols 29-33: fg=DarkGray bg=Reset BOLD | REVERSED
-row 5 cols 34-74: fg=Reset bg=Reset BOLD | REVERSED
+row 5 cols 31-42: fg=Yellow bg=Reset BOLD
+row 5 cols 44-48: fg=DarkGray bg=Reset NONE
 row 6 cols 1-4: fg=Reset bg=Reset BOLD
 row 6 cols 6-22: fg=Reset bg=Reset BOLD
 row 6 cols 23-26: fg=DarkGray bg=Reset NONE
-row 6 cols 29-72: fg=Reset bg=Reset BOLD | REVERSED
 row 7 cols 1-26: fg=DarkGray bg=Reset NONE
-row 7 cols 29-48: fg=Reset bg=Reset BOLD | REVERSED
-row 7 cols 49-62: fg=DarkGray bg=Reset BOLD | REVERSED
+row 7 cols 29-56: fg=Reset bg=Reset BOLD | REVERSED
 row 8 cols 1-4: fg=Reset bg=Reset BOLD
 row 8 cols 23-26: fg=DarkGray bg=Reset NONE
-row 8 cols 29-33: fg=DarkGray bg=Reset NONE
-row 8 cols 35-46: fg=Reset bg=Reset BOLD
-row 8 cols 49-69: fg=Reset bg=Reset BOLD
-row 8 cols 72-77: fg=DarkGray bg=Reset NONE
+row 8 cols 29-56: fg=Reset bg=Reset BOLD | REVERSED
+row 8 cols 57-70: fg=DarkGray bg=Reset BOLD | REVERSED
 row 9 cols 1-26: fg=DarkGray bg=Reset NONE
-row 9 cols 29-33: fg=DarkGray bg=Reset NONE
-row 9 cols 35-46: fg=Reset bg=Reset BOLD
-row 9 cols 49-76: fg=Reset bg=Reset BOLD
+row 9 cols 31-51: fg=Reset bg=Reset BOLD
+row 9 cols 54-59: fg=DarkGray bg=Reset NONE
 row 10 cols 1-4: fg=Reset bg=Reset BOLD
 row 10 cols 18-26: fg=DarkGray bg=Reset NONE
-row 10 cols 49-69: fg=Red bg=Reset NONE
+row 10 cols 31-58: fg=Reset bg=Reset BOLD
 row 11 cols 1-17: fg=DarkGray bg=Reset NONE
-row 11 cols 29-33: fg=DarkGray bg=Reset NONE
-row 11 cols 35-46: fg=Reset bg=Reset BOLD
-row 11 cols 49-71: fg=Reset bg=Reset BOLD
+row 11 cols 31-51: fg=Red bg=Reset NONE
 row 12 cols 1-4: fg=Reset bg=Reset BOLD
 row 12 cols 18-26: fg=DarkGray bg=Reset NONE
-row 12 cols 29-33: fg=DarkGray bg=Reset NONE
-row 12 cols 35-46: fg=Cyan bg=Reset BOLD
+row 12 cols 31-53: fg=Reset bg=Reset BOLD
 row 13 cols 1-16: fg=DarkGray bg=Reset NONE
-row 13 cols 49-66: fg=Reset bg=Reset BOLD
-row 14 cols 49-68: fg=Reset bg=Reset BOLD
+row 14 cols 31-33: fg=Cyan bg=Reset BOLD
+row 14 cols 35-39: fg=DarkGray bg=Reset NONE
+row 16 cols 31-48: fg=Reset bg=Reset BOLD
+row 17 cols 31-50: fg=Reset bg=Reset BOLD
 row 20 cols 29-37: fg=Reset bg=Reset DIM
 row 22 cols 0-12: fg=Red bg=Reset NONE
 row 23 cols 0-11: fg=Reset bg=Reset BOLD

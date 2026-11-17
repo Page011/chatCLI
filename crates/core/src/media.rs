@@ -135,6 +135,21 @@ const PART_RETRY_AGE_MS: i64 = 5 * 60 * 1000;
 const TEMP_MAX_AGE_MS: i64 = 24 * 60 * 60 * 1000;
 /// Cache layout is `<root>/<network>/<file>`; a walk never goes deeper than this.
 const WALK_DEPTH: usize = 3;
+/// Largest profile photo downloaded, before decoding.
+pub const AVATAR_MAX_BYTES: u64 = MIB;
+/// Stored profile photos are this many pixels square.
+pub const AVATAR_PX: u32 = 96;
+/// A stored photo (or "no photo" marker) older than this is looked up again.
+pub const AVATAR_FRESH_MS: i64 = 7 * 24 * 60 * 60 * 1000;
+
+/// What the cache knows about one person's profile photo.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AvatarLookup {
+    Fresh(PathBuf),
+    NoPhoto,
+    Stale(PathBuf),
+    Missing,
+}
 
 #[derive(Clone, Debug)]
 pub struct MediaCache {
@@ -342,6 +357,125 @@ impl MediaCache {
         }
         Ok(freed)
     }
+
+    /// `<root>/avatars/<32 hex of sha256("avatar\n" + network + "\n" + person_id)>`, no extension.
+    /// Never built from network text, so a person id cannot choose a path.
+    fn avatar_stem(&self, network: Network, person_id: &str) -> PathBuf {
+        let mut hasher = Sha256::new();
+        hasher.update(b"avatar\n");
+        hasher.update(network.key().as_bytes());
+        hasher.update(b"\n");
+        hasher.update(person_id.as_bytes());
+        let hex: String = hasher
+            .finalize()
+            .iter()
+            .take(16)
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        self.root.join("avatars").join(hex)
+    }
+
+    /// By file modified time, which is the fetch time. Does NOT touch it (unlike `lookup`).
+    /// A `.png` younger than 7 days is Fresh, older is Stale; a `.none` marker younger than
+    /// 7 days is NoPhoto, older is Missing.
+    pub fn avatar_lookup(&self, network: Network, person_id: &str, now_ms: i64) -> AvatarLookup {
+        let stem = self.avatar_stem(network, person_id);
+        let fresh = |p: &Path| file_times(p).map(|(_, m)| now_ms - m <= AVATAR_FRESH_MS);
+        let png = stem.with_extension("png");
+        match fresh(&png) {
+            Some(true) => return AvatarLookup::Fresh(png),
+            Some(false) => return AvatarLookup::Stale(png),
+            None => {}
+        }
+        match fresh(&stem.with_extension("none")) {
+            Some(true) => AvatarLookup::NoPhoto,
+            _ => AvatarLookup::Missing,
+        }
+    }
+
+    /// Re-encodes the photo (`avatar_png`), writes `<hex>.png` and drops the `.none` marker.
+    /// Does not evict: callers call `evict` once after a batch.
+    /// CPU work: call from `spawn_blocking`.
+    pub fn store_avatar(&self, network: Network, person_id: &str, bytes: &[u8]) -> Result<PathBuf> {
+        let png = avatar_png(bytes)?;
+        let stem = self.avatar_stem(network, person_id);
+        let (path, part, none) = (
+            stem.with_extension("png"),
+            stem.with_extension("png.part"),
+            stem.with_extension("none"),
+        );
+        self.avatar_dir()?;
+        std::fs::write(&part, png).map_err(cache_io)?;
+        std::fs::rename(&part, &path).map_err(cache_io)?;
+        let _ = std::fs::remove_file(none);
+        Ok(path)
+    }
+
+    /// Writes the `.none` marker ("no photo") and removes any `.png`.
+    pub fn store_no_avatar(&self, network: Network, person_id: &str) -> Result<()> {
+        let stem = self.avatar_stem(network, person_id);
+        self.avatar_dir()?;
+        std::fs::write(stem.with_extension("none"), []).map_err(cache_io)?;
+        let _ = std::fs::remove_file(stem.with_extension("png"));
+        Ok(())
+    }
+
+    /// Deletes every cached profile photo and marker (both networks share the folder; each
+    /// network asks again on its next sign-in). A missing folder is fine.
+    pub fn clear_avatars(&self) {
+        let _ = std::fs::remove_dir_all(self.root.join("avatars"));
+    }
+
+    fn avatar_dir(&self) -> Result<()> {
+        std::fs::create_dir_all(self.root.join("avatars")).map_err(cache_io)
+    }
+}
+
+/// Square 96x96 PNG from a profile photo. Pure. Refuses more than `AVATAR_MAX_BYTES`, a format
+/// other than PNG/JPEG/GIF/WebP, more than 4096 px a side or 64 MiB of decode memory (a 1 MB
+/// PNG can inflate). Applies EXIF rotation, centre-crops, resizes.
+pub fn avatar_png(bytes: &[u8]) -> Result<Vec<u8>> {
+    use image::{
+        imageops::FilterType, DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits,
+    };
+
+    let bad = || "not a usable profile photo".to_string();
+    if bytes.len() as u64 > AVATAR_MAX_BYTES {
+        return Err(bad());
+    }
+    let mut reader = ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|_| bad())?;
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(4096);
+    limits.max_image_height = Some(4096);
+    limits.max_alloc = Some(64 * MIB);
+    reader.limits(limits);
+    if !matches!(
+        reader.format(),
+        Some(ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::Gif | ImageFormat::WebP)
+    ) {
+        return Err(bad());
+    }
+    let mut decoder = reader.into_decoder().map_err(|_| bad())?;
+    let orientation = decoder.orientation().ok();
+    let mut img = DynamicImage::from_decoder(decoder).map_err(|_| bad())?;
+    if let Some(o) = orientation {
+        img.apply_orientation(o);
+    }
+    let side = img.width().min(img.height());
+    let square = img.crop_imm(
+        (img.width() - side) / 2,
+        (img.height() - side) / 2,
+        side,
+        side,
+    );
+    let small = square.resize_exact(AVATAR_PX, AVATAR_PX, FilterType::Triangle);
+    let mut out = Vec::new();
+    small
+        .write_to(&mut Cursor::new(&mut out), ImageFormat::Png)
+        .map_err(|_| bad())?;
+    Ok(out)
 }
 
 fn cache_io(e: std::io::Error) -> String {
@@ -908,6 +1042,84 @@ mod tests {
         put(&c, "d", &[0; 10]);
         assert!(a.exists(), "recently opened file kept");
         assert!(!b.exists(), "least recently used evicted");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn avatar_png_crops_to_a_square() {
+        let mut src = Vec::new();
+        RgbaImage::from_pixel(300, 100, image::Rgba([1, 2, 3, 255]))
+            .write_to(&mut Cursor::new(&mut src), ImageFormat::Png)
+            .unwrap();
+        let out = avatar_png(&src).unwrap();
+        let img = image::load_from_memory_with_format(&out, ImageFormat::Png).unwrap();
+        assert_eq!((img.width(), img.height()), (96, 96));
+    }
+
+    #[test]
+    fn avatar_png_refuses_big_junk_and_huge_pictures() {
+        assert!(avatar_png(&vec![0u8; 1024 * 1024 + 1]).is_err());
+        assert!(avatar_png(b"not a picture at all").is_err());
+        let mut huge = Vec::new();
+        RgbaImage::new(5000, 5000)
+            .write_to(&mut Cursor::new(&mut huge), ImageFormat::Png)
+            .unwrap();
+        assert!(
+            huge.len() < 1024 * 1024,
+            "test picture must pass the byte cap"
+        );
+        assert!(avatar_png(&huge).is_err());
+    }
+
+    fn png_bytes() -> Vec<u8> {
+        let mut v = Vec::new();
+        RgbaImage::from_pixel(10, 10, image::Rgba([9, 9, 9, 255]))
+            .write_to(&mut Cursor::new(&mut v), ImageFormat::Png)
+            .unwrap();
+        v
+    }
+
+    #[test]
+    fn avatar_path_is_a_hash_and_lookup_follows_age() {
+        let dir = temp("avatar");
+        let c = tiny_cache(&dir, 1_000_000, 1000);
+        let id = "../../evil id";
+        let now = || crate::model::now_ms();
+        let old = 8 * 24 * 3600 * 1000;
+        assert_eq!(
+            c.avatar_lookup(Network::Teams, id, now()),
+            AvatarLookup::Missing
+        );
+        let path = c.store_avatar(Network::Teams, id, &png_bytes()).unwrap();
+        assert_eq!(path.parent().unwrap(), dir.join("avatars"));
+        let name = path.file_name().unwrap().to_str().unwrap();
+        assert!(name.len() == 36 && name.ends_with(".png") && !name.contains("evil"));
+        assert_eq!(
+            c.avatar_lookup(Network::Teams, id, now()),
+            AvatarLookup::Fresh(path.clone())
+        );
+        set_age(&path, old);
+        assert_eq!(
+            c.avatar_lookup(Network::Teams, id, now()),
+            AvatarLookup::Stale(path.clone())
+        );
+        c.store_no_avatar(Network::Teams, id).unwrap();
+        assert!(!path.exists(), "marker replaces the photo");
+        assert_eq!(
+            c.avatar_lookup(Network::Teams, id, now()),
+            AvatarLookup::NoPhoto
+        );
+        let none = path.with_extension("none");
+        set_age(&none, old);
+        assert_eq!(
+            c.avatar_lookup(Network::Teams, id, now()),
+            AvatarLookup::Missing
+        );
+        let path = c.store_avatar(Network::Teams, id, &png_bytes()).unwrap();
+        assert!(!none.exists(), "photo removes the marker");
+        c.store_no_avatar(Network::WhatsApp, "x").unwrap();
+        c.clear().unwrap();
+        assert!(!path.exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
