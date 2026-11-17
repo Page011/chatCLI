@@ -4,8 +4,8 @@
 //! those messages becomes the reader's mark in the store (`read_marks`, `delivered_marks`, only
 //! ever moving forward). A read counts as delivered too. A direct chat is read (or delivered)
 //! up to its newest mark. A group is up to the oldest mark among its members, and not at all
-//! while any member has none, as WhatsApp's ticks work. The TUI gets `Event::Receipts`, ticks
-//! the newest read message and crosses every sent message newer than `delivered`.
+//! while any member has none, as WhatsApp's ticks work. The TUI gets `Event::Receipts` and marks
+//! the newest read message, and each later one as delivered or not yet.
 //!
 //! A voice note is read like any message when the chat is seen; `played` receipts are ignored,
 //! because WhatsApp sends them even for someone who turned read receipts off.
@@ -178,30 +178,52 @@ impl Backend {
             self.read_members_asked.remove(chat_id);
             return;
         };
-        let names = self.names.clone();
-        let chat_id = chat_id.to_string();
+        let (gen, chat_id) = (self.gen, chat_id.to_string());
         self.spawn_done(async move {
-            let result = within(NETWORK_TIMEOUT, wa.members(jid))
-                .await
-                .map(|m| ops::member_people(m, &names));
-            Done::ReadMembers { chat_id, result }
+            let result = within(NETWORK_TIMEOUT, wa.members(jid)).await;
+            Done::ReadMembers {
+                gen,
+                chat_id,
+                result,
+            }
         });
     }
 
     pub(super) fn on_read_members(
         &mut self,
+        gen: u64,
         chat_id: String,
-        result: Result<Vec<PersonRef>, String>,
+        result: Result<Vec<crate::wa::Member>, String>,
     ) {
+        // From a session that has since stopped (sign-out, another account): not ours to save.
+        // The group may be asked again in this one.
+        if gen != self.gen {
+            self.read_members_asked.remove(&chat_id);
+            return;
+        }
         match result {
             Ok(members) => {
-                if let Err(e) = self.store.replace_members(NET, &chat_id, &members) {
+                // A member the group names by LID may read by phone number: learn the pair, or
+                // their receipts would never match them.
+                let mut learned = false;
+                for m in &members {
+                    learned |= self.link_jids(&m.jid, m.pn.as_ref());
+                }
+                if learned {
+                    self.schedule_retitle();
+                }
+                let people = ops::member_people(members, &self.names);
+                if let Err(e) = self.store.replace_members(NET, &chat_id, &people) {
                     self.store_failed("save members", &e);
                     return;
                 }
                 self.emit_receipts(&chat_id);
             }
-            Err(e) => log::error(AREA, &format!("group members for receipts: {}", wa_log(&e))),
+            Err(e) => {
+                // Asked again on the next receipt or open, not never.
+                self.read_members_asked.remove(&chat_id);
+                log::error(AREA, &format!("group members for receipts: {}", wa_log(&e)));
+            }
         }
     }
 }

@@ -3346,9 +3346,10 @@ async fn a_first_receipt_counts_everything_stored_before_it_as_delivered() {
 async fn a_group_is_read_and_delivered_once_every_member_is_by_either_address() {
     let (mut b, mut erx, mut rx) = backend();
     let fake = linked(&mut b);
+    // The group names Alex by the hidden address and gives the phone number with it. Nothing
+    // links the two beforehand: the member list teaches it.
     *fake.members.lock().unwrap() = vec![(LID.into(), Some(ALEX.into())), (SAM.into(), None)];
-    // The hidden address of Alex is known to be Alex's phone number.
-    b.names.link("15550100001", "100200300");
+    assert_eq!(b.names.linked("100200300"), None);
     tracked(&b, TEAM);
 
     // Alex reads by phone number. The members are fetched once, quietly (no Members event for
@@ -3385,4 +3386,49 @@ async fn a_group_is_read_and_delivered_once_every_member_is_by_either_address() 
         .filter(|c| matches!(c, Call::Members(_)))
         .count();
     assert_eq!(fetches, 1, "the member list is fetched once a run");
+}
+
+#[tokio::test]
+async fn a_failed_member_fetch_for_receipts_is_tried_again() {
+    let (mut b, mut erx, mut rx) = backend();
+    let fake = linked(&mut b);
+    fake.fail_with("offline");
+    tracked(&b, TEAM);
+    b.on_event(&receipt(TEAM, ALEX, &["m2"], ReceiptType::Read))
+        .await;
+    pump(&mut b, &mut rx).await;
+    assert!(b.store.members(NET, TEAM, 10).unwrap().is_empty());
+    // The next receipt asks again, and this time it works.
+    *fake.fail.lock().unwrap() = None;
+    *fake.members.lock().unwrap() = vec![(ALEX.into(), None)];
+    b.on_event(&receipt(TEAM, ALEX, &["m1"], ReceiptType::Delivered))
+        .await;
+    pump(&mut b, &mut rx).await;
+    drain(&mut erx);
+    let fetches = fake
+        .calls()
+        .iter()
+        .filter(|c| matches!(c, Call::Members(_)))
+        .count();
+    assert_eq!(fetches, 2);
+    assert_eq!(b.store.members(NET, TEAM, 10).unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn a_member_list_from_a_stopped_session_is_dropped() {
+    let (mut b, mut erx, mut rx) = backend();
+    let fake = linked(&mut b);
+    *fake.members.lock().unwrap() = vec![(ALEX.into(), None), (SAM.into(), None)];
+    tracked(&b, TEAM);
+    b.on_event(&receipt(TEAM, ALEX, &["m2"], ReceiptType::Read))
+        .await;
+    // Signed out (or another account) before the answer came.
+    b.gen += 1;
+    pump(&mut b, &mut rx).await;
+    assert!(b.store.members(NET, TEAM, 10).unwrap().is_empty());
+    assert!(receipts(&drain(&mut erx)).is_empty());
+    assert!(
+        !b.read_members_asked.contains(TEAM),
+        "asked again next time"
+    );
 }

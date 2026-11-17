@@ -2148,6 +2148,24 @@ mod tests {
     }
 
     #[test]
+    fn receipt_state_is_forgotten_on_sign_out() {
+        let mut app = App::new(clock());
+        app.handle_event(Event::Receipts {
+            network: Network::WhatsApp,
+            chat_id: "w".into(),
+            read: Some(1),
+            delivered: Some(2),
+            since: Some(0),
+        });
+        assert_eq!(app.ns(Network::WhatsApp).receipts.len(), 1);
+        app.handle_event(Event::Status(
+            Network::WhatsApp,
+            Status::NeedsLogin { reason: None },
+        ));
+        assert!(app.ns(Network::WhatsApp).receipts.is_empty());
+    }
+
+    #[test]
     fn nobody_is_asked_while_the_network_is_not_online() {
         let mut app = App::new(clock());
         let people = ["u1".to_string()];

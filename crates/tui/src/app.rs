@@ -1108,9 +1108,11 @@ impl App {
                     // to ask again.
                     ns.older.retain(|_, o| *o != Older::Loading);
                 }
-                // Signed out: the next sign-in may be another account, so photos are asked afresh.
+                // Signed out: the next sign-in may be another account, so photos are asked afresh
+                // and no receipt state carries over (the backend sends it again per chat).
                 if matches!(status, Status::NeedsLogin { .. }) {
                     ns.avatars.clear();
+                    ns.receipts.clear();
                 }
                 ns.status = status;
                 // A sign-in panel appearing or going away changes what is on screen.

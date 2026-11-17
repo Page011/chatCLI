@@ -178,10 +178,13 @@ pub(crate) enum Done {
         chat_id: String,
         result: Result<Vec<PersonRef>, String>,
     },
-    /// The member list fetched for read ticks (not an answer to LoadMembers).
+    /// The member list fetched for receipts (not an answer to LoadMembers), as the library
+    /// gives it (each member's phone number kept). `gen` is the session it started under; an
+    /// answer from an older one is dropped.
     ReadMembers {
+        gen: u64,
         chat_id: String,
-        result: Result<Vec<PersonRef>, String>,
+        result: Result<Vec<crate::wa::Member>, String>,
     },
     /// The phone-history request left (Ok) or failed to leave (Err).
     OlderAsked {

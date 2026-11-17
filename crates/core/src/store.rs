@@ -32,6 +32,10 @@ pub const BASELINE_READER: &str = "";
 
 /// Members kept per chat; a bigger group is cut here so one chat cannot grow the table forever.
 const MAX_MEMBERS: usize = 1024;
+/// Receipt marks read per chat: a full group's members under both of their addresses (phone
+/// number and LID), with room for readers who have left and the delivery baseline, so no
+/// current member's mark is cut off before the group is worked out.
+const MAX_MARKS: usize = 4 * MAX_MEMBERS;
 const MAX_RECENT_EMOJI: u32 = 30;
 
 /// FTS5 snippet markers around a hit. Control characters never occur in message text we store
@@ -456,6 +460,22 @@ impl Store {
             )
             .map_err(db_err("drop duplicate message rows"))?;
         }
+        // A reader's marks only move forward, so one both chats hold keeps the later of the two
+        // (the move below would keep `to`'s alone). The delivery baseline is not a reader: `to`
+        // keeps its own, as the move does.
+        for table in ["read_marks", "delivered_marks"] {
+            tx.execute(
+                &format!(
+                    "INSERT INTO {table} (network, chat_id, reader, ts)
+                     SELECT network, ?3, reader, ts FROM {table}
+                     WHERE network = ?1 AND chat_id = ?2 AND reader != ?4
+                     ON CONFLICT (network, chat_id, reader)
+                     DO UPDATE SET ts = MAX({table}.ts, excluded.ts)"
+                ),
+                params![net, from, to, BASELINE_READER],
+            )
+            .map_err(db_err("merge receipt marks"))?;
+        }
         for (table, column) in [
             ("messages", "chat_id"),
             ("attachments", "chat_id"),
@@ -869,14 +889,14 @@ impl Store {
         Ok(n > 0)
     }
 
-    /// Every reader's read mark in one chat, as (reader, ts), ordered by reader. At most 1024
-    /// rows (a group's member cap).
+    /// Every reader's read mark in one chat, as (reader, ts), ordered by reader. At most
+    /// `MAX_MARKS` rows.
     pub fn read_marks(&self, network: Network, chat_id: &str) -> Result<Vec<(String, i64)>> {
         self.marks("read_marks", network, chat_id)
     }
 
     /// Every reader's delivery mark in one chat, the baseline (reader `BASELINE_READER`)
-    /// included, ordered by reader. At most 1024 rows plus the baseline.
+    /// included, ordered by reader. At most `MAX_MARKS` rows.
     pub fn delivered_marks(&self, network: Network, chat_id: &str) -> Result<Vec<(String, i64)>> {
         self.marks("delivered_marks", network, chat_id)
     }
@@ -913,10 +933,9 @@ impl Store {
             ))
             .map_err(db_err("read receipt marks"))?;
         let rows = stmt
-            .query_map(
-                params![network.key(), chat_id, MAX_MEMBERS as i64 + 1],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
+            .query_map(params![network.key(), chat_id, MAX_MARKS as i64], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
             .map_err(db_err("read receipt marks"))?;
         rows.collect::<std::result::Result<_, _>>()
             .map_err(db_err("read receipt marks"))
@@ -2673,6 +2692,56 @@ mod tests {
             s.read_marks(net, "c").unwrap().is_empty(),
             "separate tables"
         );
+    }
+
+    #[test]
+    fn a_full_group_under_both_addresses_reads_back_every_mark() {
+        let s = Store::open_in_memory().unwrap();
+        let net = Network::WhatsApp;
+        // 1024 members, each with a phone-number mark and a LID mark.
+        for i in 0..MAX_MEMBERS {
+            s.advance_delivered_mark(net, "g", &format!("pn{i:04}"), 1)
+                .unwrap();
+            s.advance_delivered_mark(net, "g", &format!("lid{i:04}"), 2)
+                .unwrap();
+        }
+        s.set_delivery_baseline(net, "g", 0).unwrap();
+        assert_eq!(
+            s.delivered_marks(net, "g").unwrap().len(),
+            2 * MAX_MEMBERS + 1
+        );
+    }
+
+    #[test]
+    fn a_merge_keeps_the_later_mark_and_the_target_baseline() {
+        let s = Store::open_in_memory().unwrap();
+        let net = Network::WhatsApp;
+        let mut lid = chat("lid", Some(1));
+        lid.network = net;
+        let mut pn = chat("pn", Some(1));
+        pn.network = net;
+        s.upsert_chats(&[lid, pn]).unwrap();
+        // The same reader in both chats: the LID chat holds the later marks.
+        s.advance_read_mark(net, "lid", "a", 300).unwrap();
+        s.advance_read_mark(net, "pn", "a", 100).unwrap();
+        s.advance_delivered_mark(net, "lid", "a", 400).unwrap();
+        s.advance_delivered_mark(net, "pn", "a", 200).unwrap();
+        // Only in the LID chat: moves over as it is.
+        s.advance_read_mark(net, "lid", "b", 50).unwrap();
+        // Both have a baseline: the target keeps its own (not the later one).
+        s.set_delivery_baseline(net, "lid", 90).unwrap();
+        s.set_delivery_baseline(net, "pn", 10).unwrap();
+        assert!(s.rename_chat(net, "lid", "pn").unwrap());
+        assert_eq!(
+            s.read_marks(net, "pn").unwrap(),
+            vec![("a".to_string(), 300), ("b".to_string(), 50)]
+        );
+        assert_eq!(
+            s.delivered_marks(net, "pn").unwrap(),
+            vec![(BASELINE_READER.to_string(), 10), ("a".to_string(), 400)]
+        );
+        assert!(s.read_marks(net, "lid").unwrap().is_empty());
+        assert!(s.delivered_marks(net, "lid").unwrap().is_empty());
     }
 
     #[test]

@@ -275,7 +275,11 @@ impl Backend {
                 Err(reason) => self.media_failed(chat_id, message_id, index, reason),
             },
             Done::Members { chat_id, result } => self.on_members(chat_id, result),
-            Done::ReadMembers { chat_id, result } => self.on_read_members(chat_id, result),
+            Done::ReadMembers {
+                gen,
+                chat_id,
+                result,
+            } => self.on_read_members(gen, chat_id, result),
             Done::Avatar {
                 gen,
                 person_id,
