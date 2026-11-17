@@ -6,6 +6,8 @@
 
 **WhatsApp and Microsoft Teams in your terminal.** One interface for chats, messages, replies and files, without keeping either desktop app open.
 
+![chatcli: a WhatsApp group chat with avatars and reactions next to the chat list (demo data)](docs/screenshot.png)
+
 
 ## Features
 
