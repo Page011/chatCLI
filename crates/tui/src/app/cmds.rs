@@ -1,12 +1,12 @@
-//! Commands: the `/` command bar, `/command` in the message box and `:command` in the vim
-//! box all end in `run_cmd`. `App` stays pure: a command that needs a backend returns an `Out`.
+//! Commands: the `:` command bar and `:command` at the start of the message box both end in
+//! `run_cmd`. `App` stays pure: a command that needs a backend returns an `Out`.
 
 use chatcli_core::model::{Command, Status};
 use ratatui::layout::Position;
 
 use super::{App, Focus, Out, Prompt};
 use crate::commands::{self, Cmd, CmdId, COMMANDS_TITLE};
-use crate::keymap::{Action, Preset};
+use crate::keymap::Action;
 use crate::palette::{PalItem, Palette};
 use crate::popup::{Popup, PopupItem};
 use crate::settings_view::{Section, SettingsPage};
@@ -31,6 +31,7 @@ impl App {
         let label = ns.network.label();
         match id {
             CmdId::Refresh if ns.panel() => Some("REFRESH - sign in first".to_string()),
+            CmdId::ReadAll if ns.panel() => Some("READALL - sign in first".to_string()),
             CmdId::SignIn => match ns.status {
                 Status::NeedsLogin { .. } => None,
                 Status::LoggingIn | Status::Qr { .. } => {
@@ -52,13 +53,13 @@ impl App {
         if let Some(reason) = self.cmd_unavailable(id) {
             return Some((reason, false));
         }
-        let takes_arg = matches!(id, CmdId::Keys | CmdId::Theme);
+        let takes_arg = id == CmdId::Theme;
         if arg.is_some() && !takes_arg {
             let name = commands::COMMANDS
                 .iter()
                 .find(|c| c.id == id)
                 .map_or("", |c| c.name);
-            return Some((format!("/{name} takes no arguments"), true));
+            return Some((format!(":{name} takes no arguments"), true));
         }
         None
     }
@@ -74,21 +75,13 @@ impl App {
             CmdId::Help => self.help = Some(0),
             CmdId::Settings => self.open_settings(Section::Appearance),
             CmdId::Theme => return self.cmd_theme(arg),
-            CmdId::Keys => match arg {
-                None => self.open_settings(Section::Keys),
-                Some(name) => match Preset::from_name(name) {
-                    Some(p) => self.set_preset(p),
-                    None => self.push_global_notice(
-                        &format!("Unknown key preset \"{name}\": use default or vim."),
-                        true,
-                    ),
-                },
-            },
+            CmdId::Keys => self.open_settings(Section::Keys),
             CmdId::Layout => self.open_settings(Section::Layout),
             CmdId::Notifications => self.open_settings(Section::Notifications),
             CmdId::About => self.open_settings(Section::About),
             CmdId::Search => self.open_search(),
             CmdId::Refresh => return self.refresh(n),
+            CmdId::ReadAll => self.ask_mark_all_read(n),
             CmdId::SignIn => return vec![(n, Command::Login)],
             CmdId::SignOut => self.prompt = Some(Prompt::SignOut(n)),
             CmdId::Tour => self.start_tour(),
@@ -110,7 +103,7 @@ impl App {
         let Some(p) = &self.palette else {
             return Vec::new();
         };
-        let query = p.query.trim_start_matches('/').trim();
+        let query = p.query.text().trim_start_matches([':', '/']).trim();
         let word = query.split_whitespace().next().unwrap_or("");
         let mut items: Vec<PalItem> = commands::matching(word)
             .into_iter()
@@ -118,12 +111,11 @@ impl App {
             .collect();
         let ns = self.active();
         if !query.is_empty() && !ns.panel() {
-            let needle = query.to_lowercase();
             items.extend(
                 ns.chats
                     .iter()
                     .filter(|c| ns.show_hidden || !c.flags.hidden)
-                    .filter(|c| c.title.to_lowercase().contains(&needle))
+                    .filter(|c| crate::list::matches(&c.title, query))
                     .map(|c| PalItem::Chat(c.id.clone())),
             );
         }
@@ -147,15 +139,7 @@ impl App {
 
     pub(super) fn palette_type(&mut self, text: &str) {
         if let Some(p) = self.palette.as_mut() {
-            p.query.push_str(text);
-            p.sel = 0;
-            p.top = 0;
-        }
-    }
-
-    pub(super) fn palette_backspace(&mut self) {
-        if let Some(p) = self.palette.as_mut() {
-            p.query.pop();
+            p.query.insert_str(text);
             p.sel = 0;
             p.top = 0;
         }
@@ -174,14 +158,14 @@ impl App {
     pub(super) fn palette_action(&mut self, action: Action) -> Out {
         let items = self.palette_items();
         match action {
-            Action::PopupUp | Action::PopupDown => {
-                let delta = if action == Action::PopupUp { -1 } else { 1 };
+            Action::Up | Action::Down => {
+                let delta = if action == Action::Up { -1 } else { 1 };
                 if let Some(p) = self.palette.as_mut() {
                     p.step(items.len(), delta);
                 }
                 self.palette_fit();
             }
-            Action::PopupAccept => {
+            Action::Accept => {
                 let Some(p) = self.palette.as_ref() else {
                     return Vec::new();
                 };
@@ -189,7 +173,7 @@ impl App {
                     // Nothing matches: the bar stays open.
                     return Vec::new();
                 };
-                let rest = p.query.trim_start_matches('/').trim();
+                let rest = p.query.text().trim_start_matches([':', '/']).trim();
                 let arg = rest
                     .split_once(char::is_whitespace)
                     .map(|(_, a)| a.trim().to_string())
@@ -200,7 +184,7 @@ impl App {
                     PalItem::Chat(id) => self.open_chat_by_id(&id),
                 };
             }
-            Action::PopupClose => self.palette = None,
+            Action::Back => self.palette = None,
             _ => {}
         }
         Vec::new()
@@ -228,7 +212,7 @@ impl App {
                 if let Some(p) = self.palette.as_mut() {
                     p.sel = i;
                 }
-                self.palette_action(Action::PopupAccept)
+                self.palette_action(Action::Accept)
             }
             _ => Vec::new(),
         }
@@ -248,7 +232,8 @@ impl App {
         self.palette_fit();
     }
 
-    /// Enter on a chat in the bar: select it and open it like Enter in the list.
+    /// Enter on a chat in the bar: select it and go into it like Enter in the list (its newest
+    /// message selected, or its message box while it has none).
     fn open_chat_by_id(&mut self, id: &str) -> Out {
         let n = self.active;
         let ns = self.ns_mut(n);
@@ -256,52 +241,67 @@ impl App {
         ns.focus = Focus::List;
         ns.selected = Some(id.to_string());
         self.fix_selection(n, true);
-        self.open_selected(n)
+        self.select_chat(n)
     }
 
-    // ---- `/` in the message box ----
+    // ---- `:` in the message box ----
 
-    /// The Commands popup above the message box while the draft starts with `/word`.
+    /// The list above the message box while the draft starts with `:word`: the matching commands
+    /// first (`commands::typed_matches`), then the matching emoji shortcodes. Enter takes the
+    /// highlighted item; a space or punctuation closes the list and the text stays text.
     pub(super) fn refresh_command_popup(&mut self, query: &str) -> Out {
-        if self
-            .popup
-            .as_ref()
-            .is_some_and(|p| p.title == COMMANDS_TITLE && p.query == query)
-        {
-            return Vec::new();
-        }
-        let items: Vec<PopupItem> = commands::matching(query)
+        // An edit is always text: no commands while one is under way.
+        let editing = matches!(self.active().target(), Some(super::Target::Edit { .. }));
+        let words = if editing {
+            Vec::new()
+        } else {
+            commands::typed_matches(query)
+        };
+        let commands: Vec<PopupItem> = words
             .into_iter()
             .map(|c: &Cmd| PopupItem {
                 // Padded so the docs line up in the list.
-                label: format!("{:<14}", format!("/{}", c.name)),
+                label: format!("{:<14}", format!(":{}", c.name)),
                 detail: c.doc.to_string(),
-                insert: format!("/{}", c.name),
+                insert: String::new(),
                 person: None,
+                command: Some(c.id),
             })
             .collect();
+        let title = if commands.is_empty() {
+            "Emoji"
+        } else {
+            COMMANDS_TITLE
+        };
+        if self
+            .popup
+            .as_ref()
+            .is_some_and(|p| p.title == title && p.query == query)
+        {
+            return Vec::new();
+        }
+        let mut items = commands;
+        if crate::emoji::shortcode_query(&format!(":{query}")).is_some() {
+            items.extend(super::emoji_items(query));
+        }
         self.popup = if items.is_empty() {
             None
         } else {
-            // The slash plus what was typed after it.
+            // The colon plus what was typed after it.
             let replace = 1 + query.chars().count();
-            Some(Popup::new(items, query.to_string(), replace).titled(COMMANDS_TITLE))
+            Some(Popup::new(items, query.to_string(), replace).titled(title))
         };
         Vec::new()
     }
 
-    /// Enter on a command in the popup: the draft is a command, not a message, so it goes.
-    pub(super) fn run_chosen_command(
-        &mut self,
-        n: chatcli_core::model::Network,
-        chosen: Option<String>,
-    ) -> Out {
-        if let Some(id) = self.ns(n).open.clone() {
-            self.ns_mut(n).drafts.remove(&id);
+    /// Enter on a command in the list: the draft was a command, not a message, so it goes. A
+    /// command that cannot run now keeps it, with the reason.
+    pub(super) fn run_chosen_command(&mut self, n: chatcli_core::model::Network, id: CmdId) -> Out {
+        if self.cmd_refusal(id, None).is_none() {
+            if let Some(chat) = self.ns(n).open.clone() {
+                self.ns_mut(n).drafts.remove(&chat);
+            }
         }
-        match chosen.as_deref().and_then(commands::find) {
-            Some(c) => self.run_cmd(c.id, None),
-            None => Vec::new(),
-        }
+        self.run_cmd(id, None)
     }
 }

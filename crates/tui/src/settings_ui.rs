@@ -7,8 +7,10 @@ use ratatui::widgets::{Clear, Paragraph};
 use ratatui::Frame;
 
 use crate::app::{App, NARROW};
-use crate::settings_view::{fit_top, Kind, PageEdit, Row, RowId, Section, SettingsPage};
-use crate::text::{fit, sw, tail, truncate, wrap};
+use crate::keymap::{Action, Context};
+use crate::list::keep_visible;
+use crate::settings_view::{Kind, PageEdit, Row, RowId, Section, SettingsPage};
+use crate::text::{fit, sw, truncate, wrap};
 use crate::theme::{Panel, Theme};
 use crate::ui::{bold, centered_note, pane};
 
@@ -74,7 +76,7 @@ fn sections_area(g: &Geom, page: &SettingsPage) -> Option<Rect> {
 pub(crate) fn section_at(page: &SettingsPage, g: &Geom, pos: Position) -> Option<Section> {
     let area = sections_area(g, page).filter(|a| a.contains(pos))?;
     let idx = Section::ALL.iter().position(|s| *s == page.section)?;
-    let top = fit_top(0, idx, area.height as usize, Section::ALL.len());
+    let top = keep_visible(0, idx, area.height as usize, Section::ALL.len());
     Section::ALL.get(top + (pos.y - area.y) as usize).copied()
 }
 
@@ -85,7 +87,7 @@ pub(crate) fn row_at(page: &SettingsPage, rows: &[Row], g: &Geom, pos: Position)
         return None;
     }
     let (w, h) = (g.list.width as usize, g.list.height as usize);
-    let top = fit_top(page.top, page.row, h, rows.len());
+    let top = keep_visible(page.top, page.row, h, rows.len());
     let line = (pos.y - g.list.y) as usize;
     row_layout(rows, top, w, h)
         .into_iter()
@@ -145,7 +147,7 @@ fn pane_title(page: &SettingsPage, rows: &[Row], g: &Geom) -> String {
     if page.section != Section::Keys {
         return page.section.title().to_string();
     }
-    let top = fit_top(page.top, page.row, g.list.height as usize, rows.len());
+    let top = keep_visible(page.top, page.row, g.list.height as usize, rows.len());
     match rows[..(top + 1).min(rows.len())]
         .iter()
         .rev()
@@ -162,7 +164,7 @@ fn draw_sections(f: &mut Frame, page: &SettingsPage, area: Rect, t: &Theme, focu
         .iter()
         .position(|s| *s == page.section)
         .unwrap_or(0);
-    let top = fit_top(0, idx, h, Section::ALL.len());
+    let top = keep_visible(0, idx, h, Section::ALL.len());
     for (k, s) in Section::ALL.iter().enumerate().skip(top).take(h) {
         let style = match (*s == page.section, focused) {
             (true, true) => t.selected,
@@ -222,7 +224,8 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
         .unwrap_or(0);
     let show_hint = g.left.is_some() && after_label >= want_w + 1 + longest_hint;
     let value_w = if show_hint { want_w } else { after_label };
-    let top = fit_top(page.top, page.row, h, rows.len());
+    let top = keep_visible(page.top, page.row, h, rows.len());
+    // A problem line wraps over several screen rows: `used` counts the rows drawn.
     for (k, used, lines) in row_layout(rows, top, w, h) {
         let row = &rows[k];
         let y = area.y + used as u16;
@@ -259,8 +262,21 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
             f.render_widget(Paragraph::new(Line::from(spans)).style(base), line_area);
             continue;
         }
+        // Choosing a key to delete: only the chosen key carries the selection colour, so the row
+        // drops its own.
+        if let (Some(PageEdit::Pick { ctx, action, index }), true) = (&page.edit, selected) {
+            let mut spans = vec![
+                Span::styled(fit(&row.label, label_w), bold()),
+                Span::raw(" "),
+            ];
+            spans.extend(pick_spans(
+                app, *ctx, *action, *index, row.custom, value_w, t,
+            ));
+            f.render_widget(Paragraph::new(Line::from(spans)), line_area);
+            continue;
+        }
         let editing = match (&page.edit, selected) {
-            (Some(PageEdit::Text(buf)), true) => Some(buf.as_str()),
+            (Some(PageEdit::Text(buf)), true) => Some(buf.view(value_w)),
             _ => None,
         };
         // A key being captured: the row itself says it is listening.
@@ -269,10 +285,14 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
             (Some(PageEdit::Conflict { key, .. }), true) => {
                 Some(format!("{}? Enter swaps", key.display()))
             }
+            (Some(PageEdit::Add { .. }), true) => Some("press a key to add".to_string()),
+            (Some(PageEdit::AddOverlap { key, .. }), true) => {
+                Some(format!("{}? Enter adds", key.display()))
+            }
             _ => None,
         };
-        let value = match (editing, &listening) {
-            (Some(buf), _) => fit(&tail(buf, value_w.saturating_sub(1)), value_w),
+        let value = match (&editing, &listening) {
+            (Some((shown, _)), _) => fit(shown, value_w),
             (None, Some(text)) => fit(text, value_w),
             _ => fit(&row.value, value_w),
         };
@@ -304,9 +324,8 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
             spans.push(Span::styled(fit(row.hint, hint_w), t.hint));
         }
         f.render_widget(Paragraph::new(Line::from(spans)).style(base), line_area);
-        if let Some(buf) = editing {
-            let shown = tail(buf, value_w.saturating_sub(1));
-            let x = area.x + (label_w + 1 + sw(&shown)) as u16;
+        if let Some((_, col)) = &editing {
+            let x = area.x + (label_w + 1 + col) as u16;
             f.set_cursor_position((x.min(area.x + area.width - 1), y));
         }
     }
@@ -320,6 +339,70 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
         }
     }
     draw_status(f, page, rows, g, t);
+}
+
+/// The value of a key row while one of its keys is chosen for deleting: the keys as on the row,
+/// the chosen one in the selection colour, cut to `w` columns. Sequences show but cannot be
+/// chosen.
+fn pick_spans(
+    app: &App,
+    ctx: Context,
+    action: Action,
+    index: usize,
+    custom: bool,
+    w: usize,
+    t: &Theme,
+) -> Vec<Span<'static>> {
+    let keys = app.keys();
+    let plain = if custom { bold() } else { Style::new() };
+    let mut parts: Vec<(String, Style)> = Vec::new();
+    let mut chosen = None;
+    for (i, k) in keys.keys_in(ctx, action).iter().enumerate() {
+        if i > 0 {
+            parts.push((", ".to_string(), plain));
+        }
+        let style = if i == index { t.selected } else { plain };
+        if i == index {
+            chosen = Some(parts.len());
+        }
+        parts.push((k.display(), style));
+    }
+    for s in keys.sequences_in(ctx, action) {
+        parts.push((", ".to_string(), plain));
+        parts.push((s, plain));
+    }
+    if custom {
+        parts.push((" *".to_string(), plain));
+    }
+    // Keys before the chosen one give way (a leading `…`) so the chosen key is always on screen.
+    if let Some(c) = chosen {
+        let width = |ps: &[(String, Style)]| ps.iter().map(|p| sw(&p.0)).sum::<usize>();
+        let mut start = 0;
+        while start < c && width(&parts[start..=c]) + usize::from(start > 0) > w {
+            start += 1;
+        }
+        if start > 0 {
+            parts.drain(..start);
+            if parts.first().is_some_and(|p| p.0 == ", ") {
+                parts.remove(0);
+            }
+            parts.insert(0, ("…".to_string(), plain));
+        }
+    }
+    let mut out = Vec::new();
+    let mut left = w;
+    for (text, style) in parts {
+        if left == 0 {
+            break;
+        }
+        let shown = truncate(&text, left);
+        left -= sw(&shown);
+        out.push(Span::styled(shown, style));
+    }
+    if left > 0 {
+        out.push(Span::raw(" ".repeat(left)));
+    }
+    out
 }
 
 /// The line under the list: the red error, else the chosen row's hint.

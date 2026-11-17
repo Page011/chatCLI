@@ -1,0 +1,21 @@
+ Teams 101 LIVE   WhatsApp CONN…
+┌ Alex Example ────────────────────────┐
+│┌ Files ─────────────────────────────┐│
+││docs/                               ││
+││My Pictures/                        ││
+││notes.txt                           ││
+│└────────────────────────────────────┘│
+└──────────────────────────────────────┘
+╔ Attach file ═════════════════════════╗
+║>                                     ║
+╚══════════════════════════════════════╝
+Type a path  Tab complete
+--- styled runs (everything else is default style) ---
+row 0 cols 0-15: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 18-25: fg=Reset bg=Reset BOLD
+row 0 cols 27-31: fg=Reset bg=Reset BOLD | DIM
+row 3 cols 2-6: fg=Reset bg=Reset BOLD | REVERSED
+row 4 cols 2-13: fg=Reset bg=Reset BOLD
+row 8 cols 1-13: fg=Reset bg=Reset BOLD
+row 9 cols 1-2: fg=Reset bg=Reset BOLD
+row 11 cols 0-24: fg=Reset bg=Reset DIM

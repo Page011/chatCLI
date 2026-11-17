@@ -1,0 +1,44 @@
+ chatcli  Teams 103 LIVE   WhatsApp CONNECTING                                           Ctrl+C quit
+┌ Settings ──────┐╔ Notifications ═════════════════════════════════════════════════════════════════╗
+│Appearance      │║Enabled             on             desktop toasts for new messages              ║
+│Layout          │║Preview             full           off keeps message text out of toasts         ║
+│Notifications   │║Sound               on             play a sound                                 ║
+│Media           │║                                                                                ║
+│Teams           │║                                                                                ║
+│WhatsApp        │║                                                                                ║
+│Keys            │║                                                                                ║
+│About           │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║desktop toasts for new messages                                                 ║
+└────────────────┘╚════════════════════════════════════════════════════════════════════════════════╝
+Up/Down move  Esc close  Left/Right change  Enter edit  r reset  Tab sections
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 89-99: fg=Reset bg=Reset DIM
+row 1 cols 19-33: fg=Reset bg=Reset BOLD
+row 2 cols 19-53: fg=Reset bg=Reset BOLD | REVERSED
+row 2 cols 54-98: fg=Reset bg=Reset BOLD | DIM | REVERSED
+row 3 cols 54-98: fg=Reset bg=Reset DIM
+row 4 cols 1-16: fg=Reset bg=Reset BOLD
+row 4 cols 54-98: fg=Reset bg=Reset DIM
+row 27 cols 19-49: fg=Reset bg=Reset DIM
+row 29 cols 0-76: fg=Reset bg=Reset DIM

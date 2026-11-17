@@ -1,0 +1,97 @@
+ chatcli  Teams 101 LIVE   WhatsApp CONNECTING                                           Ctrl+C quit
+┌ Chats ─────────────────────┐╔ Alex Example - scrolled, PgDn for newer ═══════════════════════════╗
+│     Alex Example      09:15│║                           ---- Today ----                          ║
+│     Alex Example: is the b…│║  Alex Example 09:00                                                ║
+│99+  Project Team      08:02│║  Can you review the draft before Friday?                           ║
+│     Sam Sample: thanks     │║                                                                    ║
+│  1  Sam Sample          Sun│║  You 09:05                                                         ║
+│     You: see you tomorrow  │║  Will do, thanks.                                                  ║
+│     Release Planning f… Fri│║  👍 1                                                              ║
+│     Jordan Placeholder: ag…│║                                                                    ║
+│     田中太郎 (Tar… 05/11/26│║  Alex Example 09:10                                                ║
+│     了解しました           │║  > You: Will do, thanks.                                           ║
+│     Jordan Placeh… 09/10/26│║  Great. The summary page still needs a shorter introduction and    ║
+│     You: thanks            │║  captions for the figures.                                         ║
+│                            │║  👍 3  ❤️ 1                                                        ║
+│                            │║                                                                    ║
+│                            │║  You 09:12                                                         ║
+│                            │║  I shortened the introduction. (edited)                            ║
+│                            │║  [message deleted]                                                 ║
+│                            │║                                                                    ║
+│                            │║  Sam Sample 09:16                                                  ║
+│                            │║  @Demo User can you also check the appendix?                       ║
+│                            │║                                                                    ║
+│                            │║  Alex Example 09:18                                                ║
+│                            │║  > Sam Sample: [original message not available]                    ║
+│                            │╚════════════════════════════════════════════════════════════════════╝
+│                            │┌ Message ───────────────────────────────────────────────────────────┐
+│                            ││i to type                                                           │
+└────────────────────────────┘└────────────────────────────────────────────────────────────────────┘
+Up/Down move  r reply  e react  u link  c edit  x delete  Esc back  : commands  i type  ? help
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 89-99: fg=Reset bg=Reset DIM
+row 1 cols 31-71: fg=Reset bg=Reset BOLD
+row 2 cols 1-28: fg=Reset bg=Reset BOLD | UNDERLINED
+row 2 cols 58-72: fg=DarkGray bg=Reset NONE
+row 3 cols 1-28: fg=Reset bg=Reset BOLD | UNDERLINED
+row 3 cols 33-44: fg=Yellow bg=Reset BOLD
+row 3 cols 46-50: fg=DarkGray bg=Reset NONE
+row 4 cols 1-4: fg=Reset bg=Reset BOLD
+row 4 cols 6-22: fg=Reset bg=Reset BOLD
+row 4 cols 23-28: fg=DarkGray bg=Reset NONE
+row 5 cols 1-23: fg=DarkGray bg=Reset NONE
+row 6 cols 1-4: fg=Reset bg=Reset BOLD
+row 6 cols 6-24: fg=Reset bg=Reset BOLD
+row 6 cols 25-28: fg=DarkGray bg=Reset NONE
+row 6 cols 31-32: fg=Reset bg=Reset BOLD | REVERSED
+row 6 cols 33-35: fg=Cyan bg=Reset BOLD | REVERSED
+row 6 cols 36-36: fg=Reset bg=Reset BOLD | REVERSED
+row 6 cols 37-41: fg=DarkGray bg=Reset BOLD | REVERSED
+row 7 cols 1-26: fg=DarkGray bg=Reset NONE
+row 7 cols 31-48: fg=Reset bg=Reset BOLD | REVERSED
+row 8 cols 1-4: fg=Reset bg=Reset BOLD
+row 8 cols 25-28: fg=DarkGray bg=Reset NONE
+row 8 cols 31-36: fg=Reset bg=Reset BOLD | REVERSED
+row 9 cols 1-28: fg=DarkGray bg=Reset NONE
+row 10 cols 1-4: fg=Reset bg=Reset BOLD
+row 10 cols 20-28: fg=DarkGray bg=Reset NONE
+row 10 cols 33-44: fg=Yellow bg=Reset BOLD
+row 10 cols 46-50: fg=DarkGray bg=Reset NONE
+row 11 cols 1-17: fg=DarkGray bg=Reset NONE
+row 11 cols 33-55: fg=DarkGray bg=Reset NONE
+row 12 cols 1-4: fg=Reset bg=Reset BOLD
+row 12 cols 20-28: fg=DarkGray bg=Reset NONE
+row 13 cols 1-16: fg=DarkGray bg=Reset NONE
+row 14 cols 39-42: fg=Reset bg=Reset BOLD
+row 16 cols 33-35: fg=Cyan bg=Reset BOLD
+row 16 cols 37-41: fg=DarkGray bg=Reset NONE
+row 17 cols 62-70: fg=DarkGray bg=Reset NONE
+row 18 cols 33-49: fg=DarkGray bg=Reset NONE
+row 20 cols 33-42: fg=Magenta bg=Reset BOLD
+row 20 cols 44-48: fg=DarkGray bg=Reset NONE
+row 21 cols 33-75: fg=Reset bg=Reset BOLD
+row 23 cols 33-44: fg=Yellow bg=Reset BOLD
+row 23 cols 46-50: fg=DarkGray bg=Reset NONE
+row 24 cols 33-78: fg=DarkGray bg=Reset NONE
+row 27 cols 31-39: fg=Reset bg=Reset DIM
+row 29 cols 0-11: fg=Reset bg=Reset BOLD
+row 29 cols 12-13: fg=Reset bg=Reset DIM
+row 29 cols 14-20: fg=Reset bg=Reset BOLD
+row 29 cols 21-22: fg=Reset bg=Reset DIM
+row 29 cols 23-29: fg=Reset bg=Reset BOLD
+row 29 cols 30-39: fg=Reset bg=Reset DIM
+row 29 cols 40-45: fg=Reset bg=Reset BOLD
+row 29 cols 46-47: fg=Reset bg=Reset DIM
+row 29 cols 48-55: fg=Reset bg=Reset BOLD
+row 29 cols 56-57: fg=Reset bg=Reset DIM
+row 29 cols 58-65: fg=Reset bg=Reset BOLD
+row 29 cols 66-67: fg=Reset bg=Reset DIM
+row 29 cols 68-77: fg=Reset bg=Reset BOLD
+row 29 cols 78-79: fg=Reset bg=Reset DIM
+row 29 cols 80-85: fg=Reset bg=Reset BOLD
+row 29 cols 86-87: fg=Reset bg=Reset DIM
+row 29 cols 88-93: fg=Reset bg=Reset BOLD

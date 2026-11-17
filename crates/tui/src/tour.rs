@@ -78,7 +78,6 @@ const UP: Act = key(KeyCode::Up);
 const DOWN: Act = key(KeyCode::Down);
 const LEFT: Act = key(KeyCode::Left);
 const RIGHT: Act = key(KeyCode::Right);
-const CTRL_UP: Act = ctrl(KeyCode::Up);
 
 const REFRESH_ROW: RowId = RowId::KeyAction(Context::List, Action::Refresh);
 
@@ -92,7 +91,7 @@ pub(crate) const STEPS: &[Step] = &[
         acts: &[TAB, Act::Wait(1500), TAB],
     },
     Step {
-        caption: "/ opens the command bar. /signin signs in (demo: no browser).",
+        caption: ": opens the command bar. :signin signs in (demo: no browser).",
         acts: &[Act::Cmd("signin"), Act::Until(Cond::Online(Network::Teams))],
     },
     Step {
@@ -107,16 +106,16 @@ pub(crate) const STEPS: &[Step] = &[
         ],
     },
     Step {
-        caption: "Enter opens the chat and moves to the message box.",
-        acts: &[ENTER, Act::Until(Cond::ChatLoaded)],
+        caption: "i opens the chat's message box (Enter goes into the chat to select messages).",
+        acts: &[ch('i'), Act::Until(Cond::ChatLoaded)],
     },
     Step {
         caption: "Type a message.",
         acts: &[Act::Type("Hello from the tour ")],
     },
     Step {
-        caption: "Emoji shortcode: type :thu, then Tab inserts the emoji.",
-        acts: &[Act::Type(":thu"), Act::Wait(900), TAB],
+        caption: "Emoji shortcode: type :thu, then Enter inserts the emoji.",
+        acts: &[Act::Type(":thu"), Act::Wait(900), ENTER],
     },
     Step {
         caption: "Enter sends.",
@@ -134,8 +133,8 @@ pub(crate) const STEPS: &[Step] = &[
         ],
     },
     Step {
-        caption: "Ctrl+Up selects a message.",
-        acts: &[CTRL_UP, Act::Wait(600), UP, UP],
+        caption: "Esc from the box selects a message; k and j move, i goes back to the box.",
+        acts: &[ESC, Act::Wait(600), ch('k'), ch('k')],
     },
     Step {
         caption: "r replies with a quote.",
@@ -143,26 +142,25 @@ pub(crate) const STEPS: &[Step] = &[
     },
     Step {
         caption: "e reacts to the selected message.",
-        acts: &[CTRL_UP, UP, ch('e'), Act::Wait(900), ENTER],
+        acts: &[ESC, UP, ch('e'), Act::Wait(900), ENTER],
     },
     Step {
-        caption: "E edits your own message.",
+        caption: "c changes (edits) your own message.",
+        // Still selecting after the reaction.
         acts: &[
-            CTRL_UP,
-            ch('E'),
+            ch('c'),
             ctrl(KeyCode::Char('u')),
             Act::Type("Edited by the tour"),
             ENTER,
         ],
     },
     Step {
-        caption: "d deletes your message for everyone, after y/n.",
-        acts: &[CTRL_UP, ch('d'), Act::Wait(1200), ch('y')],
+        caption: "d (or x) deletes your message for everyone, after y/n.",
+        acts: &[ESC, ch('d'), Act::Wait(1200), ch('y')],
     },
     Step {
-        caption: "Attachments show as chips. v shows a picture.",
+        caption: "Attachments show as chips. v shows a picture, o opens it in its app.",
         acts: &[
-            CTRL_UP,
             Act::SelectMsg("[image] sunset"),
             Act::Wait(1200),
             ch('v'),
@@ -192,9 +190,20 @@ pub(crate) const STEPS: &[Step] = &[
         ],
     },
     Step {
-        caption: "/ lists every command; typing filters commands and chats.",
+        caption: "/ filters the chat list; Esc clears the filter.",
         acts: &[
+            Act::ToList,
             ch('/'),
+            Act::Wait(900),
+            Act::Type("sam"),
+            Act::Wait(1500),
+            ESC,
+        ],
+    },
+    Step {
+        caption: ": lists every command; typing filters commands and chats.",
+        acts: &[
+            ch(':'),
             Act::Wait(1200),
             Act::Type("se"),
             Act::Wait(1500),
@@ -202,7 +211,7 @@ pub(crate) const STEPS: &[Step] = &[
         ],
     },
     Step {
-        caption: "/settings: changes apply at once and save (demo: temp copy).",
+        caption: ":settings: changes apply at once and save (demo: temp copy).",
         acts: &[Act::Cmd("settings"), Act::Wait(1200)],
     },
     Step {
@@ -220,7 +229,7 @@ pub(crate) const STEPS: &[Step] = &[
         ],
     },
     Step {
-        caption: "/layout: density compact fits more chats.",
+        caption: ":layout: density compact fits more chats.",
         acts: &[
             Act::Cmd("layout"),
             Act::Row(RowId::Density),
@@ -236,7 +245,7 @@ pub(crate) const STEPS: &[Step] = &[
         ],
     },
     Step {
-        caption: "/keys: Enter on an action, then press the new key.",
+        caption: ":keys: Enter on an action, then press the new key.",
         acts: &[
             Act::Cmd("keys"),
             Act::Row(REFRESH_ROW),
@@ -259,18 +268,6 @@ pub(crate) const STEPS: &[Step] = &[
         ],
     },
     Step {
-        caption: "The vim preset adds Normal and Insert modes.",
-        acts: &[
-            Act::Cmd("keys"),
-            Act::Row(RowId::KeyPreset),
-            RIGHT,
-            Act::Wait(2000),
-            LEFT,
-            Act::Wait(800),
-            ESC,
-        ],
-    },
-    Step {
         caption: "? opens help: commands first, then every key.",
         acts: &[
             Act::ToList,
@@ -287,7 +284,7 @@ pub(crate) const STEPS: &[Step] = &[
         ],
     },
     Step {
-        caption: "Tour done. Type / for commands. Ctrl+C quits.",
+        caption: "Tour done. Press : for commands. Ctrl+C quits.",
         acts: &[],
     },
 ];
@@ -332,7 +329,7 @@ pub(crate) fn unroll(i: usize) -> VecDeque<Prim> {
                 }
             }
             Act::Cmd(name) => {
-                q.push_back(Prim::Key(KeyCode::Char('/'), NONE));
+                q.push_back(Prim::Key(KeyCode::Char(':'), NONE));
                 q.push_back(Prim::Wait(i64::from(CMD_OPEN_MS)));
                 for c in name.chars() {
                     q.push_back(Prim::Key(KeyCode::Char(c), NONE));
@@ -442,7 +439,7 @@ mod tests {
     }
 
     #[test]
-    fn a_command_is_slash_name_enter() {
+    fn a_command_is_colon_name_enter() {
         let keys: Vec<KeyCode> = unroll(2)
             .iter()
             .filter_map(|p| match p {
@@ -458,7 +455,7 @@ mod tests {
                 _ => '?',
             })
             .collect();
-        assert_eq!(text, "/signin\n");
+        assert_eq!(text, ":signin\n");
     }
 
     #[test]
@@ -466,7 +463,10 @@ mod tests {
         for s in STEPS {
             for a in s.acts {
                 if let Act::Cmd(name) = a {
-                    assert!(crate::commands::find(name).is_some(), "/{name}");
+                    assert!(
+                        crate::commands::COMMANDS.iter().any(|c| c.name == *name),
+                        ":{name}"
+                    );
                 }
             }
         }

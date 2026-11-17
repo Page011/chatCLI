@@ -1,0 +1,64 @@
+ chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
+╔ Commands ════════════════════════════════════════════════════════════════════╗
+║:type a command or chat name                                                  ║
+║Commands                                                                      ║
+║:help            keys and commands                                            ║
+║:settings        theme, layout, keys and more                                 ║
+║:keys            change key bindings                                          ║
+║:theme           colours                                                      ║
+║:layout          sidebar, density, time format                                ║
+║:notifications   desktop notifications                                        ║
+║:search          search every stored message                                  ║
+║:refresh         reload the chat list                                         ║
+║:readall         mark every chat read, after y/n                              ║
+║:signin          Already signed in to Teams                                   ║
+║:signout         sign out, after y/n                                          ║
+║:about           version, data folder, log                                    ║
+║:tour            TOUR - run chatcli --demo --tour                             ║
+║:quit            quit chatcli                                                 ║
+║                                                                              ║
+║                                                                              ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+Up/Down choose  Esc close  Enter run  Type to filter
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 69-79: fg=Reset bg=Reset DIM
+row 1 cols 1-10: fg=Reset bg=Reset BOLD
+row 2 cols 1-1: fg=Reset bg=Reset BOLD
+row 2 cols 2-28: fg=DarkGray bg=Reset NONE
+row 3 cols 1-8: fg=Reset bg=Reset BOLD
+row 4 cols 1-17: fg=Reset bg=Reset BOLD | REVERSED
+row 4 cols 18-34: fg=Reset bg=Reset BOLD | DIM | REVERSED
+row 4 cols 35-78: fg=Reset bg=Reset BOLD | REVERSED
+row 5 cols 1-16: fg=Reset bg=Reset BOLD
+row 5 cols 18-45: fg=Reset bg=Reset DIM
+row 6 cols 1-16: fg=Reset bg=Reset BOLD
+row 6 cols 18-36: fg=Reset bg=Reset DIM
+row 7 cols 1-16: fg=Reset bg=Reset BOLD
+row 7 cols 18-24: fg=Reset bg=Reset DIM
+row 8 cols 1-16: fg=Reset bg=Reset BOLD
+row 8 cols 18-46: fg=Reset bg=Reset DIM
+row 9 cols 1-16: fg=Reset bg=Reset BOLD
+row 9 cols 18-38: fg=Reset bg=Reset DIM
+row 10 cols 1-16: fg=Reset bg=Reset BOLD
+row 10 cols 18-44: fg=Reset bg=Reset DIM
+row 11 cols 1-16: fg=Reset bg=Reset BOLD
+row 11 cols 18-37: fg=Reset bg=Reset DIM
+row 12 cols 1-16: fg=Reset bg=Reset BOLD
+row 12 cols 18-48: fg=Reset bg=Reset DIM
+row 13 cols 1-16: fg=DarkGray bg=Reset NONE
+row 13 cols 18-43: fg=DarkGray bg=Reset NONE
+row 14 cols 1-16: fg=Reset bg=Reset BOLD
+row 14 cols 18-36: fg=Reset bg=Reset DIM
+row 15 cols 1-16: fg=Reset bg=Reset BOLD
+row 15 cols 18-42: fg=Reset bg=Reset DIM
+row 16 cols 1-16: fg=DarkGray bg=Reset NONE
+row 16 cols 18-49: fg=DarkGray bg=Reset NONE
+row 17 cols 1-16: fg=Reset bg=Reset BOLD
+row 17 cols 18-29: fg=Reset bg=Reset DIM
+row 23 cols 0-51: fg=Reset bg=Reset DIM

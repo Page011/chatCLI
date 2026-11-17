@@ -1,0 +1,37 @@
+ chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
+┌ Settings ──────┐╔ Keys - Message selection ══════════════════════════════════╗
+│Appearance      │║Top                 Home                                    ║
+│Layout          │║Bottom              End                                     ║
+│Notifications   │║Screen middle       M                                       ║
+│Media           │║Reply               r                                       ║
+│Teams           │║React               e                                       ║
+│WhatsApp        │║Edit                c                                       ║
+│Keys            │║Delete              x, d                                    ║
+│About           │║Open link           u                                       ║
+│                │║Open media          o                                       ║
+│                │║View image          v                                       ║
+│                │║Copy                y                                       ║
+│                │║Jump back           Ctrl+O                                  ║
+│                │║Confirm (link, delete, mark read)                           ║
+│                │║Confirm yes         y                                       ║
+│                │║Confirm no          n                                       ║
+│                │║This help                                                   ║
+│                │║Top                 Home                                    ║
+│                │║Bottom              End                                     ║
+│                │║Reset all keys                                              ║
+│                │║Enter removes every key you set, after y/n                  ║
+└────────────────┘╚════════════════════════════════════════════════════════════╝
+Reset every key to its default? y/n
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 69-79: fg=Reset bg=Reset DIM
+row 1 cols 19-44: fg=Reset bg=Reset BOLD
+row 8 cols 1-16: fg=Reset bg=Reset BOLD
+row 14 cols 19-51: fg=Reset bg=Reset BOLD
+row 17 cols 19-27: fg=Reset bg=Reset BOLD
+row 20 cols 19-78: fg=Reset bg=Reset BOLD | REVERSED
+row 21 cols 19-60: fg=Reset bg=Reset DIM
+row 23 cols 0-34: fg=Reset bg=Reset BOLD

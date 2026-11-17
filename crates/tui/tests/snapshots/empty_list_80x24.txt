@@ -1,0 +1,59 @@
+ chatcli  Teams LIVE   WhatsApp CONNECTING                           Ctrl+C quit
+╔ Chats ═══════════════════╗┌ Conversation ────────────────────────────────────┐
+║                          ║│                                                  │
+║                          ║│                                                  │
+║                          ║│                                                  │
+║                          ║│                                                  │
+║                          ║│                                                  │
+║                          ║│     Select a chat and press Enter to open it.    │
+║       No chats yet       ║│    Press : for commands: help, settings, keys    │
+║                          ║│                                                  │
+║                          ║│                                                  │
+║                          ║│                                                  │
+║                          ║│                                                  │
+║                          ║│                                                  │
+║                          ║│                                                  │
+║                          ║│                                                  │
+║                          ║│                                                  │
+║                          ║│                                                  │
+║                          ║│                                                  │
+║                          ║└──────────────────────────────────────────────────┘
+║                          ║┌ Message ─────────────────────────────────────────┐
+║                          ║│Open a chat to type                               │
+╚══════════════════════════╝└──────────────────────────────────────────────────┘
+Up/Down chat  Enter open  i type  / filter  : commands  ? help  Tab network
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-20: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 23-30: fg=Reset bg=Reset BOLD
+row 0 cols 32-41: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 69-79: fg=Reset bg=Reset DIM
+row 1 cols 1-7: fg=Reset bg=Reset BOLD
+row 7 cols 29-78: fg=Reset bg=Reset DIM
+row 8 cols 1-26: fg=Reset bg=Reset DIM
+row 8 cols 29-78: fg=Reset bg=Reset DIM
+row 9 cols 1-26: fg=Reset bg=Reset DIM
+row 9 cols 29-78: fg=Reset bg=Reset DIM
+row 10 cols 1-26: fg=Reset bg=Reset DIM
+row 10 cols 29-78: fg=Reset bg=Reset DIM
+row 11 cols 1-26: fg=Reset bg=Reset DIM
+row 11 cols 29-78: fg=Reset bg=Reset DIM
+row 12 cols 1-26: fg=Reset bg=Reset DIM
+row 12 cols 29-78: fg=Reset bg=Reset DIM
+row 13 cols 1-26: fg=Reset bg=Reset DIM
+row 13 cols 29-78: fg=Reset bg=Reset DIM
+row 14 cols 1-26: fg=Reset bg=Reset DIM
+row 14 cols 29-78: fg=Reset bg=Reset DIM
+row 15 cols 1-26: fg=Reset bg=Reset DIM
+row 15 cols 29-78: fg=Reset bg=Reset DIM
+row 16 cols 1-26: fg=Reset bg=Reset DIM
+row 16 cols 29-78: fg=Reset bg=Reset DIM
+row 17 cols 1-26: fg=Reset bg=Reset DIM
+row 17 cols 29-78: fg=Reset bg=Reset DIM
+row 18 cols 1-26: fg=Reset bg=Reset DIM
+row 18 cols 29-78: fg=Reset bg=Reset DIM
+row 19 cols 1-26: fg=Reset bg=Reset DIM
+row 20 cols 1-26: fg=Reset bg=Reset DIM
+row 21 cols 1-26: fg=Reset bg=Reset DIM
+row 21 cols 29-47: fg=Reset bg=Reset DIM
+row 23 cols 0-74: fg=Reset bg=Reset DIM

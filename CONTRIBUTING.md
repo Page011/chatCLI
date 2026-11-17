@@ -18,7 +18,7 @@ Use obvious fake data (`Alex Example`, `Sam Sample`, `example.invalid`). Securit
 cargo run -p chatcli -- --demo
 ```
 
-`--demo` shows the full screen on fake data. No Teams or WhatsApp account and no network is needed. Press `Ctrl+C` to leave. Every feature you add must work in `--demo`: give the demo backend (`crates/tui/src/demo.rs`) a sample of it and a test in `crates/tui/tests/demo.rs`. `--demo --keys vim` shows the vim preset.
+`--demo` shows the full screen on fake data. No Teams or WhatsApp account and no network is needed. Press `Ctrl+C` to leave. Every feature you add must work in `--demo`: give the demo backend (`crates/tui/src/demo.rs`) a sample of it and a test in `crates/tui/tests/demo.rs`.
 
 ## Build and check
 
@@ -51,7 +51,7 @@ bun run test:e2e
 
 ## UI snapshots
 
-Two screens (the chat list with an open chat, and a group chat with avatars) are checked against stored snapshots in `crates/tui/tests/snapshots`. If you change those screens on purpose, rewrite the two files and read the diff before you commit. Other UI behaviour is covered by assertion tests, not snapshots:
+Screens are checked against stored snapshots in `crates/tui`. If you change the UI on purpose, rewrite them and read the diff before you commit:
 
 ```
 UPDATE_SNAPSHOTS=1 cargo test -p chatcli-tui

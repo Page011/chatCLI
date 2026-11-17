@@ -1,0 +1,64 @@
+TOUR 1/26 - Welcome to the chatcli demo: fake chats, nothing is sent.
+ chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
+╔ Chats ═══════════════════╗┌ Conversation ────────────────────────────────────┐
+║  2  Alex Example    09:15║│                                                  │
+║     Alex Example: is the…║│                                                  │
+║99+  Project Team    08:02║│                                                  │
+║     Sam Sample: thanks   ║│                                                  │
+║  1  Sam Sample        Sun║│                                                  │
+║     You: see you tomorrow║│     Select a chat and press Enter to open it.    │
+║     Release Planning… Fri║│    Press : for commands: help, settings, keys    │
+║     Jordan Placeholder: …║│                                                  │
+║     田中太郎 (T… 05/11/26║│                                                  │
+║     了解しました         ║│                                                  │
+║     Jordan Plac… 09/10/26║│                                                  │
+║     You: thanks          ║│                                                  │
+║                          ║│                                                  │
+║                          ║│                                                  │
+║                          ║│                                                  │
+║                          ║│                                                  │
+║                          ║└──────────────────────────────────────────────────┘
+║                          ║┌ Message ─────────────────────────────────────────┐
+║                          ║│Open a chat to type                               │
+╚══════════════════════════╝└──────────────────────────────────────────────────┘
+Space pause  n next  Esc end
+--- styled runs (everything else is default style) ---
+row 0 cols 0-68: fg=Cyan bg=Reset BOLD
+row 1 cols 0-8: fg=Reset bg=Reset BOLD
+row 1 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 1 cols 27-34: fg=Reset bg=Reset BOLD
+row 1 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 1 cols 69-79: fg=Reset bg=Reset DIM
+row 2 cols 1-7: fg=Reset bg=Reset BOLD
+row 3 cols 1-26: fg=Reset bg=Reset BOLD | REVERSED
+row 4 cols 1-26: fg=Reset bg=Reset BOLD | REVERSED
+row 5 cols 1-4: fg=Reset bg=Reset BOLD
+row 5 cols 6-20: fg=Reset bg=Reset BOLD
+row 5 cols 21-26: fg=DarkGray bg=Reset NONE
+row 6 cols 1-23: fg=DarkGray bg=Reset NONE
+row 7 cols 1-4: fg=Reset bg=Reset BOLD
+row 7 cols 6-22: fg=Reset bg=Reset BOLD
+row 7 cols 23-26: fg=DarkGray bg=Reset NONE
+row 8 cols 1-26: fg=DarkGray bg=Reset NONE
+row 8 cols 29-78: fg=Reset bg=Reset DIM
+row 9 cols 1-4: fg=Reset bg=Reset BOLD
+row 9 cols 23-26: fg=DarkGray bg=Reset NONE
+row 9 cols 29-78: fg=Reset bg=Reset DIM
+row 10 cols 1-26: fg=DarkGray bg=Reset NONE
+row 10 cols 29-78: fg=Reset bg=Reset DIM
+row 11 cols 1-4: fg=Reset bg=Reset BOLD
+row 11 cols 18-26: fg=DarkGray bg=Reset NONE
+row 11 cols 29-78: fg=Reset bg=Reset DIM
+row 12 cols 1-17: fg=DarkGray bg=Reset NONE
+row 12 cols 29-78: fg=Reset bg=Reset DIM
+row 13 cols 1-4: fg=Reset bg=Reset BOLD
+row 13 cols 18-26: fg=DarkGray bg=Reset NONE
+row 13 cols 29-78: fg=Reset bg=Reset DIM
+row 14 cols 1-16: fg=DarkGray bg=Reset NONE
+row 14 cols 29-78: fg=Reset bg=Reset DIM
+row 15 cols 29-78: fg=Reset bg=Reset DIM
+row 16 cols 29-78: fg=Reset bg=Reset DIM
+row 17 cols 29-78: fg=Reset bg=Reset DIM
+row 18 cols 29-78: fg=Reset bg=Reset DIM
+row 21 cols 29-47: fg=Reset bg=Reset DIM
+row 23 cols 0-27: fg=Reset bg=Reset DIM

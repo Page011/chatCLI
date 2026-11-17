@@ -1,0 +1,66 @@
+ chatcli  Teams 101 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
+┌ Chats ───────────────────┐┌ Alex Example ────────────────────────────────────┐
+│     Alex Example    09:15││                                                  │
+│     Alex Example: is the…││  Alex Example 09:10                              │
+│99+  Project Team    08:02││  > You: Will do, thanks.                         │
+│     Sam Sample: thanks   ││  Great. The summary page still needs a shorter   │
+│  1  Sam Sample        Sun││  introduction and captions for the figures.      │
+│     You: see you tomorrow││  👍 3  ❤️ 1                                      │
+│     Release Planning… Fri││                                                  │
+│     Jordan Placeholder: …││  You 09:12                                       │
+│     田中太郎 (T… 05/11/26││  I shortened the introduction. (edited)          │
+│     了解しました         ││  [message deleted]                               │
+│     Jordan Plac… 09/10/26││                                                  │
+│     You: thanks          ││  Sam Sample 09:16                                │
+│                          ││  @Demo User can you also check the appendix?     │
+│                          ││                                                  │
+│                          ││  Alex Example 09:18                              │
+│                          ││  > Sam Sample: [original message not available]  │
+│                          ││  Which one did you mean?                         │
+│                          │└──────────────────────────────────────────────────┘
+│                          │╔ Message ═════════════════════════════════════════╗
+│                          │║>                                                 ║
+└──────────────────────────┘╚══════════════════════════════════════════════════╝
+Enter send  : commands  F1 help  Esc back  Ctrl+J newline  Ctrl+E emoji
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 69-79: fg=Reset bg=Reset DIM
+row 2 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
+row 3 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
+row 3 cols 31-42: fg=Yellow bg=Reset BOLD
+row 3 cols 44-48: fg=DarkGray bg=Reset NONE
+row 4 cols 1-4: fg=Reset bg=Reset BOLD
+row 4 cols 6-20: fg=Reset bg=Reset BOLD
+row 4 cols 21-26: fg=DarkGray bg=Reset NONE
+row 4 cols 31-53: fg=DarkGray bg=Reset NONE
+row 5 cols 1-23: fg=DarkGray bg=Reset NONE
+row 6 cols 1-4: fg=Reset bg=Reset BOLD
+row 6 cols 6-22: fg=Reset bg=Reset BOLD
+row 6 cols 23-26: fg=DarkGray bg=Reset NONE
+row 7 cols 1-26: fg=DarkGray bg=Reset NONE
+row 7 cols 37-40: fg=Reset bg=Reset BOLD
+row 8 cols 1-4: fg=Reset bg=Reset BOLD
+row 8 cols 23-26: fg=DarkGray bg=Reset NONE
+row 9 cols 1-26: fg=DarkGray bg=Reset NONE
+row 9 cols 31-33: fg=Cyan bg=Reset BOLD
+row 9 cols 35-39: fg=DarkGray bg=Reset NONE
+row 10 cols 1-4: fg=Reset bg=Reset BOLD
+row 10 cols 18-26: fg=DarkGray bg=Reset NONE
+row 10 cols 60-68: fg=DarkGray bg=Reset NONE
+row 11 cols 1-17: fg=DarkGray bg=Reset NONE
+row 11 cols 31-47: fg=DarkGray bg=Reset NONE
+row 12 cols 1-4: fg=Reset bg=Reset BOLD
+row 12 cols 18-26: fg=DarkGray bg=Reset NONE
+row 13 cols 1-16: fg=DarkGray bg=Reset NONE
+row 13 cols 31-40: fg=Magenta bg=Reset BOLD
+row 13 cols 42-46: fg=DarkGray bg=Reset NONE
+row 14 cols 31-73: fg=Reset bg=Reset BOLD
+row 16 cols 31-42: fg=Yellow bg=Reset BOLD
+row 16 cols 44-48: fg=DarkGray bg=Reset NONE
+row 17 cols 31-76: fg=DarkGray bg=Reset NONE
+row 20 cols 29-37: fg=Reset bg=Reset BOLD
+row 21 cols 29-30: fg=Reset bg=Reset BOLD
+row 23 cols 0-70: fg=Reset bg=Reset DIM

@@ -19,9 +19,9 @@
 ║                          ║│      meeting moved to 10                         │
 ║                          ║└──────────────────────────────────────────────────┘
 ║                          ║┌ Message ─────────────────────────────────────────┐
-║                          ║│Enter on a chat to type                           │
+║                          ║│i to type                                         │
 ╚══════════════════════════╝└──────────────────────────────────────────────────┘
-Up/Down chat  Enter type  / commands  ? help  Tab network  r refresh  q quit
+Up/Down chat  Enter open  i type  / filter  : commands  ? help  Tab network
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -66,5 +66,5 @@ row 17 cols 29-32: fg=Black bg=LightMagenta BOLD
 row 17 cols 35-44: fg=LightMagenta bg=Reset BOLD
 row 17 cols 46-50: fg=DarkGray bg=Reset NONE
 row 18 cols 29-32: fg=Black bg=LightMagenta BOLD
-row 21 cols 29-51: fg=Reset bg=Reset DIM
-row 23 cols 0-75: fg=Reset bg=Reset DIM
+row 21 cols 29-37: fg=Reset bg=Reset DIM
+row 23 cols 0-74: fg=Reset bg=Reset DIM

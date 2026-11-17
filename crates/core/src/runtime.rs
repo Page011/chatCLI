@@ -56,8 +56,6 @@ pub struct UiCtx {
     pub store: Store,
     pub media: MediaCache,
     pub notifier: Arc<dyn Notifier>,
-    /// `--keys <preset>` from the command line; wins over the `[keys]` preset.
-    pub keys_preset: Option<String>,
     pub demo: bool,
     /// The file the settings screen saves to. None = changes are not saved (tests). The demo
     /// points this at its own temp copy, never the user's file.
@@ -75,7 +73,6 @@ impl UiCtx {
             store,
             media,
             notifier: Arc::new(NoNotifier),
-            keys_preset: None,
             demo: false,
             settings_path: None,
             tour: false,
@@ -93,7 +90,7 @@ mod tests {
         let media = MediaCache::open(&dir, &Settings::default().media).unwrap();
         let ctx = UiCtx::new(Store::open_in_memory().unwrap(), media);
         assert_eq!(*ctx.settings, Settings::default());
-        assert!(ctx.startup_notices.is_empty() && ctx.keys_preset.is_none() && !ctx.demo);
+        assert!(ctx.startup_notices.is_empty() && !ctx.demo);
         assert!(ctx.settings_path.is_none() && !ctx.tour);
         let toast = Toast {
             title: "t".into(),

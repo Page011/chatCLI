@@ -7,8 +7,13 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
-# Clipboard image for "paste image" (issue 20). Default features: the image-data reader.
-arboard = "3.7"
+# Clipboard image for "paste image" (issue 20), and `y` copies. Default features: the image-data
+# reader. `wayland-data-control`: the native Wayland clipboard (wlroots compositors such as
+# Hyprland and sway, KDE); without it arboard goes through XWayland, where Wayland apps never see
+# what it copies and it cannot read pictures.
+arboard = { version = "3.7", features = ["wayland-data-control"] }
+# OSC 52: `y` copies through the terminal over SSH, where no local clipboard can be reached.
+base64.workspace = true
 chatcli-core.workspace = true
 chrono.workspace = true
 crossterm.workspace = true

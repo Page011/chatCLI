@@ -1,0 +1,42 @@
+ chatcli  Teams 103 LIVE   WhatsApp CONNECTING                                           Ctrl+C quit
+┌ Settings ──────┐╔ Keys - Everywhere ═════════════════════════════════════════════════════════════╗
+│Appearance      │║Screen bottom       L                                                           ║
+│Layout          │║Accept              Enter                                                       ║
+│Notifications   │║Back                Esc                                                         ║
+│Media           │║Cursor left         Left                                                        ║
+│Teams           │║Cursor right        Right                                                       ║
+│WhatsApp        │║Word left           Ctrl+Left                                                   ║
+│Keys            │║Word right          Ctrl+Right                                                  ║
+│About           │║Line start          Home                                                        ║
+│                │║Line end            End                                                         ║
+│                │║Delete back         Backspace                                                   ║
+│                │║Delete forward      Delete                                                      ║
+│                │║Delete word back    Ctrl+W, Ctrl+Backspace                                      ║
+│                │║Clear line          Ctrl+U                                                      ║
+│                │║Chat list                                                                       ║
+│                │║Accept              l, Right                                                    ║
+│                │║Compose             i                                                           ║
+│                │║Top                 Home                                                        ║
+│                │║Bottom              End                                                         ║
+│                │║Refresh             p? Enter swaps                                              ║
+│                │║Next unread         n                                                           ║
+│                │║Prev unread         N                                                           ║
+│                │║Mark read           R                                                           ║
+│                │║Pin                 p                                                           ║
+│                │║Mute                m                                                           ║
+│                │║Hide                z                                                           ║
+│                │║ask the network for a fresh chat list                                           ║
+└────────────────┘╚════════════════════════════════════════════════════════════════════════════════╝
+p is already Pin. Enter: Pin gets Refresh's old key (or none), Esc cancels
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 89-99: fg=Reset bg=Reset DIM
+row 1 cols 19-37: fg=Reset bg=Reset BOLD
+row 8 cols 1-16: fg=Reset bg=Reset BOLD
+row 15 cols 19-27: fg=Reset bg=Reset BOLD
+row 20 cols 19-98: fg=Reset bg=Reset BOLD | REVERSED
+row 27 cols 19-55: fg=Reset bg=Reset DIM
+row 29 cols 0-73: fg=Reset bg=Reset BOLD

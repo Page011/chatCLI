@@ -25,7 +25,7 @@ const ALREADY_RUNNING: &str = "chatcli is already running";
 
 /// What a command that changes sign-in state says when the full client holds the lock.
 const COMMAND_BLOCKED: &str =
-    "chatcli is running: quit it (q or Ctrl+C), then run this command again.";
+    "chatcli is running: quit it (Ctrl+C or :quit), then run this command again.";
 
 /// Holds an exclusive OS file lock while this chatcli runs, so a second one stops. The OS frees
 /// the lock when the process dies, so a crash never leaves a stale lock.
@@ -75,28 +75,25 @@ fn require_terminal() -> Result<()> {
     }
 }
 
-/// The options of the full-screen client: `chatcli [--demo] [--tour] [--keys default|vim]`, any order.
+/// The options of the full-screen client: `chatcli [--demo] [--tour]`, any order.
 #[derive(Debug, Default, PartialEq, Eq)]
 struct RunArgs {
     demo: bool,
-    keys: Option<String>,
     /// `--tour`: the guided tour. Implies the demo.
     tour: bool,
 }
 
 /// None = these arguments are not the full-screen client's (a subcommand, or a typo: the usage
-/// text is printed). The preset name is checked by the TUI, which reports an unknown one.
+/// text is printed).
 fn parse_run_args(args: &[&str]) -> Option<RunArgs> {
     let mut out = RunArgs::default();
-    let mut rest = args.iter();
-    while let Some(arg) = rest.next() {
+    for arg in args {
         match *arg {
             "--demo" => out.demo = true,
             "--tour" => {
                 out.tour = true;
                 out.demo = true;
             }
-            "--keys" => out.keys = Some(rest.next()?.to_string()),
             _ => return None,
         }
     }
@@ -107,8 +104,8 @@ fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
 
-/// One start-up notice per `settings.toml` problem from core. The TUI adds its own `[keys]`,
-/// `[theme]` and `--keys` problems and folds everything into one notice line.
+/// One start-up notice per `settings.toml` problem from core. The TUI adds its own `[keys]`
+/// and `[theme]` problems and folds everything into one notice line.
 fn startup_notices(problems: &[SettingsProblem]) -> Vec<StartupNotice> {
     problems
         .iter()
@@ -131,7 +128,7 @@ fn housekeeping(cache: &MediaCache) {
     }
 }
 
-async fn full_client(keys: Option<String>) -> Result<()> {
+async fn full_client() -> Result<()> {
     let report = settings::load();
     let settings = Arc::new(report.settings.clone());
     let db = paths::store_db()?;
@@ -170,7 +167,6 @@ async fn full_client(keys: Option<String>) -> Result<()> {
         store: ui_store,
         media: cache,
         notifier: toast::system_notifier(),
-        keys_preset: keys,
         demo: false,
         settings_path: (!report.path.as_os_str().is_empty()).then(|| report.path.clone()),
         tour: false,
@@ -205,7 +201,7 @@ fn demo_settings_text(tour: bool, real: Option<String>) -> String {
 /// folder that is deleted on exit. It only ever reads the real `settings.toml`: changes made on
 /// the settings screen go to the copy. It never touches the real store, the real cache or the
 /// network.
-async fn demo(keys: Option<String>, tour: bool) -> Result<()> {
+async fn demo(tour: bool) -> Result<()> {
     let real_path = settings::load().path;
     let dir = std::env::temp_dir().join(format!("chatcli-demo-{}", std::process::id()));
     std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
@@ -224,7 +220,6 @@ async fn demo(keys: Option<String>, tour: bool) -> Result<()> {
         store,
         media: cache,
         notifier: Arc::new(NoNotifier),
-        keys_preset: keys,
         demo: true,
         settings_path: Some(copy),
         tour,
@@ -261,13 +256,13 @@ async fn main() {
             std::process::exit(1);
         }
         let result = if run.demo {
-            demo(run.keys, run.tour).await
+            demo(run.tour).await
         } else {
             let _lock = single_instance().unwrap_or_else(|e| {
                 eprintln!("{e}");
                 std::process::exit(1);
             });
-            full_client(run.keys).await
+            full_client().await
         };
         if let Err(e) = result {
             fail(&e);
@@ -311,28 +306,14 @@ mod tests {
     }
 
     #[test]
-    fn run_args_accept_the_flags_in_any_order() {
-        let keys = |s: &str| Some(s.to_string());
+    fn run_args_accept_the_flags() {
         assert_eq!(parse_run_args(&[]), Some(RunArgs::default()));
         assert_eq!(
             parse_run_args(&["--demo"]),
             Some(RunArgs {
                 demo: true,
-                keys: None,
                 tour: false
             })
-        );
-        assert_eq!(
-            parse_run_args(&["--keys", "vim", "--demo"]),
-            Some(RunArgs {
-                demo: true,
-                keys: keys("vim"),
-                tour: false
-            })
-        );
-        assert_eq!(
-            parse_run_args(&["--demo", "--keys", "vim"]),
-            parse_run_args(&["--keys", "vim", "--demo"])
         );
     }
 
@@ -353,30 +334,21 @@ density = \"compact\"
 
     #[test]
     fn the_tour_flag_implies_the_demo_in_any_order() {
-        let tour = |keys: Option<&str>| {
-            Some(RunArgs {
-                demo: true,
-                keys: keys.map(str::to_string),
-                tour: true,
-            })
-        };
-        assert_eq!(parse_run_args(&["--tour"]), tour(None));
-        assert_eq!(parse_run_args(&["--demo", "--tour"]), tour(None));
-        assert_eq!(parse_run_args(&["--tour", "--demo"]), tour(None));
-        assert_eq!(
-            parse_run_args(&["--tour", "--keys", "vim"]),
-            tour(Some("vim"))
-        );
-        assert_eq!(
-            parse_run_args(&["--keys", "vim", "--tour"]),
-            tour(Some("vim"))
-        );
+        let tour = Some(RunArgs {
+            demo: true,
+            tour: true,
+        });
+        assert_eq!(parse_run_args(&["--tour"]), tour);
+        assert_eq!(parse_run_args(&["--demo", "--tour"]), tour);
+        assert_eq!(parse_run_args(&["--tour", "--demo"]), tour);
         assert_eq!(parse_run_args(&["--tour", "extra"]), None);
     }
 
     #[test]
     fn run_args_reject_everything_else() {
+        // Key presets are gone, and with them `--keys`.
         assert_eq!(parse_run_args(&["--keys"]), None);
+        assert_eq!(parse_run_args(&["--keys", "vim"]), None);
         assert_eq!(parse_run_args(&["--demo", "extra"]), None);
         assert_eq!(parse_run_args(&["doctor"]), None);
         assert_eq!(parse_run_args(&["teams", "login"]), None);

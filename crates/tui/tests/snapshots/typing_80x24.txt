@@ -1,0 +1,51 @@
+ chatcli  Teams CONNECTING   WhatsApp LIVE                           Ctrl+C quit
+┌ Chats ───────────────────┐┌ Riley Sample ────────────────────────────────────┐
+│     Riley Sample    09:20││                                                  │
+│     Riley Sample is typi…││                                                  │
+│     Family Group    08:00││                                                  │
+│     Sam Sample and Jorda…││                                                  │
+│                          ││                                                  │
+│                          ││                Loading messages...               │
+│                          ││                                                  │
+│                          ││                                                  │
+│                          ││                                                  │
+│                          ││                                                  │
+│                          ││                                                  │
+│                          ││                                                  │
+│                          ││                                                  │
+│                          ││                                                  │
+│                          ││                                                  │
+│                          ││                                                  │
+│                          ││                                                  │
+│                          │└──────────────────────────────────────────────────┘
+│                          │╔ Message ══════════════ Riley Sample is typing... ╗
+│                          │║>                                                 ║
+└──────────────────────────┘╚══════════════════════════════════════════════════╝
+Enter send  : commands  F1 help  Esc back  Ctrl+J newline  Ctrl+E emoji
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 10-14: fg=Reset bg=Reset BOLD
+row 0 cols 16-25: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 28-42: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 69-79: fg=Reset bg=Reset DIM
+row 2 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
+row 3 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
+row 4 cols 1-4: fg=Reset bg=Reset BOLD
+row 4 cols 21-26: fg=DarkGray bg=Reset NONE
+row 5 cols 1-26: fg=Cyan bg=Reset NONE
+row 7 cols 29-78: fg=Reset bg=Reset DIM
+row 8 cols 29-78: fg=Reset bg=Reset DIM
+row 9 cols 29-78: fg=Reset bg=Reset DIM
+row 10 cols 29-78: fg=Reset bg=Reset DIM
+row 11 cols 29-78: fg=Reset bg=Reset DIM
+row 12 cols 29-78: fg=Reset bg=Reset DIM
+row 13 cols 29-78: fg=Reset bg=Reset DIM
+row 14 cols 29-78: fg=Reset bg=Reset DIM
+row 15 cols 29-78: fg=Reset bg=Reset DIM
+row 16 cols 29-78: fg=Reset bg=Reset DIM
+row 17 cols 29-78: fg=Reset bg=Reset DIM
+row 18 cols 29-78: fg=Reset bg=Reset DIM
+row 20 cols 29-37: fg=Reset bg=Reset BOLD
+row 20 cols 52-78: fg=Cyan bg=Reset NONE
+row 21 cols 29-30: fg=Reset bg=Reset BOLD
+row 23 cols 0-70: fg=Reset bg=Reset DIM

@@ -1,8 +1,7 @@
-//! Screen tests: each scenario is rendered into a TestBackend (16 ANSI colours only is asserted
-//! on every render). Two screens (chat_list_and_open_chat, group_messages_show_avatars_and_runs)
-//! are also stored as plain-text snapshots. A changed screen fails the test.
-//! `UPDATE_SNAPSHOTS=1 cargo test -p chatcli-tui` rewrites the two files under tests/snapshots;
-//! read the diff before keeping it.
+//! Screen snapshots: each scenario is rendered into a TestBackend and written as plain text
+//! (the screen, then a list of styled runs so colour and reverse video are visible too).
+//! A changed screen fails the test. `UPDATE_SNAPSHOTS=1 cargo test -p chatcli-tui` rewrites
+//! the files under tests/snapshots; read the diff before keeping it.
 //!
 //! Time is fixed: "now" is Monday 2026-11-16 09:30 in a +10:00 zone.
 
@@ -15,7 +14,9 @@ use chatcli_core::model::{
 use chatcli_core::settings::Settings;
 use chatcli_tui::{draw, App, Clock};
 use chrono::{FixedOffset, TimeZone};
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+use crossterm::event::{
+    KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers, MouseEvent, MouseEventKind,
+};
 use ratatui::backend::TestBackend;
 use ratatui::style::Color;
 use ratatui::text::Span;
@@ -41,13 +42,6 @@ fn new_app() -> App {
     })
 }
 
-/// An app with the vim preset (as `preset = "vim"` or `--keys vim` would give).
-fn new_vim_app() -> App {
-    let mut s = Settings::default();
-    s.keys.preset = "vim".into();
-    new_app_with(s)
-}
-
 fn new_app_with(settings: Settings) -> App {
     App::with_settings(
         Clock {
@@ -55,7 +49,6 @@ fn new_app_with(settings: Settings) -> App {
             tz: Some(zone()),
         },
         &settings,
-        None,
     )
 }
 
@@ -195,7 +188,7 @@ fn open_chat_in(mut app: App) -> App {
         Status::NeedsLogin { reason: None },
     ));
     app.handle_event(Event::Chats(Network::Teams, teams_chats()));
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('i'));
     app.handle_event(Event::Messages {
         network: Network::Teams,
         chat_id: "alex".into(),
@@ -309,10 +302,12 @@ fn check(name: &str, w: u16, h: u16, got: &str) {
     );
 }
 
-/// One screen at the standard 80x24; narrow sizes are listed where their layout differs.
-fn std_size(name: &str, mut build: impl FnMut() -> App) {
-    let got = render(&mut build(), 80, 24);
-    check(name, 80, 24, &got);
+fn both_sizes(name: &str, mut build: impl FnMut() -> App) {
+    for (w, h) in [(100, 30), (80, 24)] {
+        let mut app = build();
+        let got = render(&mut app, w, h);
+        check(name, w, h, &got);
+    }
 }
 
 fn qr_app() -> App {
@@ -336,8 +331,56 @@ fn qr_app() -> App {
 }
 
 #[test]
+fn teams_sign_in() {
+    both_sizes("teams_sign_in", || {
+        let mut app = new_app();
+        app.handle_event(Event::Status(
+            Network::Teams,
+            Status::NeedsLogin { reason: None },
+        ));
+        app.handle_event(Event::Status(
+            Network::WhatsApp,
+            Status::NeedsLogin { reason: None },
+        ));
+        app
+    });
+}
+
+#[test]
+fn whatsapp_qr() {
+    both_sizes("whatsapp_qr", qr_app);
+}
+
+#[test]
 fn chat_list_and_open_chat() {
-    std_size("chat_list_and_open_chat", open_chat_app);
+    both_sizes("chat_list_and_open_chat", open_chat_app);
+}
+
+#[test]
+fn filter_no_matches() {
+    both_sizes("filter_no_matches", || {
+        // `/` opens the command bar: the plain filter needs a binding of its own.
+        let mut settings = Settings::default();
+        settings
+            .keys
+            .bindings
+            .entry("list".into())
+            .or_default()
+            .insert("f".into(), "filter_start".into());
+        settings.keys.lines.insert(("list".into(), "f".into()), 1);
+        let mut app = new_app_with(settings);
+        app.handle_event(Event::Status(
+            Network::Teams,
+            Status::Online {
+                live: true,
+                detail: None,
+            },
+        ));
+        app.handle_event(Event::Chats(Network::Teams, teams_chats()));
+        press(&mut app, KeyCode::Char('f'));
+        type_str(&mut app, "zzz");
+        app
+    });
 }
 
 fn error_app() -> App {
@@ -371,12 +414,92 @@ fn error_app() -> App {
 }
 
 #[test]
+fn error_notice() {
+    both_sizes("error_notice", error_app);
+}
+
+fn status_app(teams: Status, whatsapp: Status) -> App {
+    let mut app = new_app();
+    app.handle_event(Event::Status(Network::Teams, teams));
+    app.handle_event(Event::Status(Network::WhatsApp, whatsapp));
+    app
+}
+
+#[test]
+fn signing_in_and_linking_panels() {
+    both_sizes("signing_in_panel", || {
+        status_app(Status::LoggingIn, Status::LoggingIn)
+    });
+}
+
+#[test]
+fn sign_in_needed_with_reason() {
+    both_sizes("sign_in_needed_reason", || {
+        let mut app = status_app(
+            Status::NeedsLogin {
+                reason: Some("Teams sign-in was rejected. Sign in again.".into()),
+            },
+            Status::NeedsLogin {
+                reason: Some("WhatsApp unlinked this device. Press Enter to link again.".into()),
+            },
+        );
+        press(&mut app, KeyCode::Tab);
+        app
+    });
+}
+
+#[test]
+fn empty_and_loading_lists() {
+    both_sizes("empty_list", || {
+        status_app(
+            Status::Online {
+                live: true,
+                detail: None,
+            },
+            Status::Connecting,
+        )
+    });
+    both_sizes("loading_list", || {
+        status_app(Status::Connecting, Status::Connecting)
+    });
+}
+
+#[test]
+fn whatsapp_not_live_phone_offline() {
+    both_sizes("whatsapp_not_live", || {
+        let mut app = status_app(
+            Status::Online {
+                live: true,
+                detail: None,
+            },
+            Status::Online {
+                live: false,
+                detail: Some("phone is offline".into()),
+            },
+        );
+        press(&mut app, KeyCode::Tab);
+        app
+    });
+}
+
+#[test]
 fn narrow_layout_list_and_open_conversation() {
     let mut app = open_chat_app();
     let list = render(&mut app, 50, 20);
+    // Esc: the message box to selection, then selection to the chat list.
+    press(&mut app, KeyCode::Esc);
     press(&mut app, KeyCode::Esc);
     let list_again = render(&mut app, 50, 20);
     assert_eq!(list_again.lines().next(), list.lines().next());
+    check("narrow_convo", 50, 20, &list);
+    check("narrow_list", 50, 20, &list_again);
+}
+
+#[test]
+fn tiny_terminal() {
+    let mut app = error_app();
+    let got = render(&mut app, 40, 12);
+    check("tiny_terminal", 40, 12, &got);
 }
 
 #[test]
@@ -414,6 +537,49 @@ fn no_panic_at_any_size() {
     render(&mut app, 45, 20);
 }
 
+/// Cursor in the list on a chat whose messages are already held: the pane shows it, focus stays
+/// in the list (double border on the sidebar), the hint says "Enter reply".
+#[test]
+fn list_focus_with_preview() {
+    both_sizes("list_preview", || {
+        let mut app = new_app();
+        app.handle_event(Event::Status(
+            Network::Teams,
+            Status::Online {
+                live: true,
+                detail: None,
+            },
+        ));
+        app.handle_event(Event::Chats(Network::Teams, teams_chats()));
+        app.handle_event(Event::Messages {
+            network: Network::Teams,
+            chat_id: "alex".into(),
+            messages: alex_history(),
+        });
+        press(&mut app, KeyCode::Down);
+        press(&mut app, KeyCode::Up);
+        app
+    });
+}
+
+/// Preview of a chat whose messages have not arrived yet.
+#[test]
+fn list_preview_loading() {
+    both_sizes("list_preview_loading", || {
+        let mut app = new_app();
+        app.handle_event(Event::Status(
+            Network::Teams,
+            Status::Online {
+                live: true,
+                detail: None,
+            },
+        ));
+        app.handle_event(Event::Chats(Network::Teams, teams_chats()));
+        press(&mut app, KeyCode::Down);
+        app
+    });
+}
+
 fn online_in(mut app: App) -> App {
     app.handle_event(Event::Status(
         Network::Teams,
@@ -440,43 +606,14 @@ fn press_mod(app: &mut App, code: KeyCode, mods: KeyModifiers) {
     });
 }
 
-fn error_app_in(mut app: App) -> App {
-    app.handle_event(Event::Status(
-        Network::Teams,
-        Status::Error {
-            message: "Teams refused the saved sign-in: run chatcli teams login.".into(),
-        },
-    ));
-    app.handle_event(Event::Chats(Network::Teams, teams_chats()));
-    app
-}
-
-/// The mode label must stay visible when a problem takes the only footer row.
 #[test]
-fn vim_mode_label_survives_a_one_row_footer() {
-    let mut app = error_app_in(new_vim_app());
-    let got = render(&mut app, 40, 12);
-    let footer = got.lines().nth(11).unwrap();
-    assert!(footer.starts_with("-- NORMAL --"), "{got}");
-}
-
-#[test]
-fn help_overlay_default_preset() {
+fn help_overlay() {
     for (w, h) in [(80, 24), (40, 12)] {
         let mut app = online_in(new_app());
         press(&mut app, KeyCode::Char('?'));
         let got = render(&mut app, w, h);
-        assert!(got.contains("default preset, no user bindings"), "{got}");
-    }
-}
-
-#[test]
-fn help_overlay_vim_preset() {
-    for (w, h) in [(80, 24), (40, 12)] {
-        let mut app = online_in(new_vim_app());
-        press(&mut app, KeyCode::Char('?'));
-        let got = render(&mut app, w, h);
-        assert!(got.contains("vim preset, no user bindings"), "{got}");
+        assert!(got.contains("No user bindings"), "{got}");
+        check("help_default", w, h, &got);
     }
 }
 
@@ -492,7 +629,8 @@ fn help_overlay_scrolls() {
     }
     let end = render(&mut app, 40, 12);
     assert_ne!(top, end);
-    assert!(end.contains("Close help"), "{end}");
+    assert!(end.contains("This help"), "{end}");
+    check("help_default_end", 40, 12, &end);
 }
 
 #[test]
@@ -506,7 +644,7 @@ fn help_too_small_says_so() {
         "{got}"
     );
     // The close key still works there.
-    press(&mut app, KeyCode::Char('?'));
+    press(&mut app, KeyCode::Esc);
     let got = render(&mut app, 32, 9);
     assert!(!got.contains("too small for help"), "{got}");
 }
@@ -516,30 +654,22 @@ fn help_too_small_says_so() {
 fn rebinding_changes_help_and_footer() {
     let mut s = Settings::default();
     s.keys.bindings.entry("list".into()).or_default().extend([
-        ("ctrl+n".to_string(), "list_down".to_string()),
-        ("ctrl+p".to_string(), "list_up".to_string()),
-        ("q".to_string(), "unbound".to_string()),
+        ("ctrl+n".to_string(), "down".to_string()),
+        ("ctrl+p".to_string(), "up".to_string()),
         ("ctrl+q".to_string(), "quit".to_string()),
     ]);
     let mut app = online_in(new_app_with(s));
     let list = render(&mut app, 100, 30);
     let footer = list.lines().nth(29).unwrap();
     assert!(
-        footer.contains("Ctrl+P/Ctrl+N chat") && footer.contains("Ctrl+Q quit"),
-        "{footer}"
-    );
-    assert!(
-        !footer.contains("Up/Down") && !footer.contains(" q quit"),
+        footer.contains("Ctrl+P/Ctrl+N chat") && !footer.contains("Up/Down"),
         "{footer}"
     );
     press(&mut app, KeyCode::Char('?'));
-    let help = render(&mut app, 100, 40);
-    assert!(help.contains("Ctrl+N, Down"), "{help}");
-    assert!(help.contains("default preset, 4 user bindings"), "{help}");
-    // The unbound `q` quits no more, Ctrl+Q does.
+    let help = render(&mut app, 100, 60);
+    assert!(help.contains("Ctrl+N"), "{help}");
+    assert!(help.contains("3 user bindings"), "{help}");
     press(&mut app, KeyCode::Esc);
-    press(&mut app, KeyCode::Char('q'));
-    assert!(!app.should_quit());
     press_mod(&mut app, KeyCode::Char('q'), KeyModifiers::CONTROL);
     assert!(app.should_quit());
 }
@@ -590,7 +720,7 @@ fn render_cursor(app: &mut App, w: u16, h: u16) -> String {
 /// Teams, Alex Example open with the message box focused and an empty draft.
 fn typing_app() -> App {
     let mut app = online_in(new_app());
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('i'));
     app
 }
 
@@ -598,9 +728,23 @@ fn alt_enter(app: &mut App) {
     press_mod(app, KeyCode::Enter, KeyModifiers::ALT);
 }
 
-/// Alex Example open in the pane, focus back on the list (what `u` reads).
+/// A `[keys]` table with one binding.
+fn one_binding(ctx: &str, key: &str, action: &str) -> Settings {
+    let mut s = Settings::default();
+    s.keys
+        .bindings
+        .entry(ctx.into())
+        .or_default()
+        .insert(key.into(), action.into());
+    s
+}
+
+/// Alex Example open in the pane, focus back on the list (what `u` reads: `open_link` has no
+/// default key in the chat list, so u is bound here).
 fn chat_open_list_focus() -> App {
-    let mut app = typing_app();
+    // Enter goes into the chat (message selection), Esc back to the list.
+    let mut app = online_in(new_app_with(one_binding("list", "u", "open_link")));
+    press(&mut app, KeyCode::Enter);
     press(&mut app, KeyCode::Esc);
     app
 }
@@ -634,6 +778,7 @@ fn sidebar_with_emoji_stays_aligned() {
         let sym = buf[(27, y)].symbol();
         assert!(sym == "\u{2551}" || sym == "\u{2502}", "row {y}: {sym:?}");
     }
+    check("emoji_sidebar", 80, 24, &dump(&term));
 }
 
 /// The cursor sits on the right column with wide characters and emoji before it.
@@ -647,10 +792,30 @@ fn composer_cursor_column_with_wide_text() {
     let got = render_cursor(&mut app, 80, 24);
     // Layout: sidebar 28, box border 1, prompt 2; text "\u{4f60}\u{597d} " (5 cols) + family (2) + flag (2).
     assert!(got.contains("cursor: 40,"), "{got}");
+    check("composer_wide_cursor", 80, 24, &got);
     // One Left moves over the whole flag: 2 columns back.
     press(&mut app, KeyCode::Left);
     let got = render_cursor(&mut app, 80, 24);
     assert!(got.contains("cursor: 38,"), "{got}");
+}
+
+/// Three lines: the box grows by two rows and the conversation gives them up.
+#[test]
+fn composer_multiline_grows() {
+    let mut app = typing_app();
+    type_str(&mut app, "first line");
+    alt_enter(&mut app);
+    type_str(&mut app, "second line");
+    alt_enter(&mut app);
+    type_str(&mut app, "third");
+    both_sizes_cursor("composer_multiline", &mut app);
+}
+
+fn both_sizes_cursor(name: &str, app: &mut App) {
+    for (w, h) in [(100, 30), (80, 24)] {
+        let got = render_cursor(app, w, h);
+        check(name, w, h, &got);
+    }
 }
 
 /// More than six lines: six rows are shown, scrolled to the cursor.
@@ -663,6 +828,7 @@ fn composer_scrolls_after_six_rows() {
             alt_enter(&mut app);
         }
     }
+    both_sizes_cursor("composer_six_rows", &mut app);
     // Cursor moved to the first line: the view scrolls back up with it.
     for _ in 0..8 {
         press(&mut app, KeyCode::Home);
@@ -670,6 +836,28 @@ fn composer_scrolls_after_six_rows() {
     }
     let got = render_cursor(&mut app, 80, 24);
     assert!(got.contains("> line 1"), "{got}");
+    check("composer_six_rows_top", 80, 24, &got);
+}
+
+/// A long single line wraps inside the box instead of scrolling sideways.
+#[test]
+fn composer_wraps_a_long_line() {
+    let mut app = typing_app();
+    type_str(
+        &mut app,
+        "this is a long message that needs more than one row in the message box so it wraps at a space",
+    );
+    both_sizes_cursor("composer_wrap", &mut app);
+}
+
+#[test]
+fn composer_multiline_on_a_narrow_terminal() {
+    let mut app = typing_app();
+    type_str(&mut app, "one");
+    alt_enter(&mut app);
+    type_str(&mut app, "two");
+    let got = render_cursor(&mut app, 50, 20);
+    check("composer_multiline_narrow", 50, 20, &got);
 }
 
 /// Pasting three lines inserts them and sends nothing.
@@ -679,6 +867,54 @@ fn paste_three_lines() {
     app.handle_paste("alpha\r\nbeta\ngamma");
     let got = render_cursor(&mut app, 80, 24);
     assert!(got.contains("> alpha") && got.contains("  gamma"), "{got}");
+    check("paste_three_lines", 80, 24, &got);
+}
+
+/// `:thu` opens the list above the box.
+#[test]
+fn shortcode_popup() {
+    let mut app = typing_app();
+    type_str(&mut app, "nice :thu");
+    both_sizes_cursor("shortcode_popup", &mut app);
+    press(&mut app, KeyCode::Down);
+    let got = render_cursor(&mut app, 80, 24);
+    check("shortcode_popup_second", 80, 24, &got);
+}
+
+/// The popup squeezes into a short conversation pane without overflowing.
+#[test]
+fn shortcode_popup_in_a_small_terminal() {
+    let mut app = typing_app();
+    type_str(&mut app, ":sm");
+    let got = render_cursor(&mut app, 60, 14);
+    check("shortcode_popup_small", 60, 14, &got);
+}
+
+#[test]
+fn emoji_picker_from_the_composer() {
+    let mut app = typing_app();
+    type_str(&mut app, "hi ");
+    ctrl_key(&mut app, 'e');
+    for (w, h) in [(80, 24), (60, 20)] {
+        let got = render_cursor(&mut app, w, h);
+        check("emoji_picker", w, h, &got);
+    }
+}
+
+#[test]
+fn emoji_picker_selection_and_scroll() {
+    let mut app = typing_app();
+    ctrl_key(&mut app, 'e');
+    for _ in 0..12 {
+        press(&mut app, KeyCode::Down);
+    }
+    press(&mut app, KeyCode::Right);
+    let got = render_cursor(&mut app, 80, 24);
+    check("emoji_picker_scrolled", 80, 24, &got);
+    press(&mut app, KeyCode::PageDown);
+    press(&mut app, KeyCode::PageDown);
+    let got = render_cursor(&mut app, 80, 24);
+    check("emoji_picker_category", 80, 24, &got);
 }
 
 #[test]
@@ -688,9 +924,11 @@ fn emoji_picker_search_and_empty_results() {
     type_str(&mut app, "heart");
     let got = render_cursor(&mut app, 80, 24);
     assert!(got.contains("Search results"), "{got}");
+    check("emoji_picker_search", 80, 24, &got);
     type_str(&mut app, "zzzz");
     let got = render_cursor(&mut app, 80, 24);
     assert!(got.contains("No emoji match"), "{got}");
+    check("emoji_picker_no_match", 80, 24, &got);
 }
 
 /// Opened for a reaction (the selection mode will call this): same grid, other title.
@@ -698,9 +936,20 @@ fn emoji_picker_search_and_empty_results() {
 fn emoji_picker_for_reactions_has_its_own_title() {
     let mut app = typing_app();
     press(&mut app, KeyCode::Esc);
+    press(&mut app, KeyCode::Esc);
     app.open_reaction_picker("alex", "m4");
     let got = render_cursor(&mut app, 80, 24);
     assert!(got.contains(" React "), "{got}");
+    check("emoji_picker_react", 80, 24, &got);
+}
+
+/// The smallest screen the app draws (30x8 body of 6 rows): one grid row, still usable.
+#[test]
+fn emoji_picker_on_the_smallest_screen() {
+    let mut app = typing_app();
+    ctrl_key(&mut app, 'e');
+    let got = render_cursor(&mut app, 32, 8);
+    check("emoji_picker_smallest", 32, 8, &got);
 }
 
 /// 60x20: the grid, search row and status fit inside the screen.
@@ -739,6 +988,7 @@ fn link_is_underlined_across_wrapped_lines() {
     });
     let got = render(&mut app, 80, 24);
     assert!(got.contains("UNDERLINED"), "{got}");
+    check("link_underline", 80, 24, &got);
 }
 
 #[test]
@@ -758,6 +1008,7 @@ fn link_confirm_line_shows_the_host() {
     press(&mut app, KeyCode::Char('u'));
     let got = render(&mut app, 80, 24);
     assert!(got.contains("Open docs.example.invalid? y/n"), "{got}");
+    check("link_confirm", 80, 24, &got);
 }
 
 #[test]
@@ -780,6 +1031,7 @@ fn link_pick_line_lists_hosts() {
         got.contains("1 one.example.invalid  2 two.example.invalid"),
         "{got}"
     );
+    check("link_pick", 100, 30, &got);
 }
 
 /// A lookalike host is flagged on the confirm line.
@@ -861,6 +1113,7 @@ fn link_prompt_beats_a_problem_on_a_one_row_footer() {
             .contains("Open docs.example.invalid? y/n"),
         "{got}"
     );
+    check("link_prompt_one_row", 40, 12, &got);
 }
 
 /// Ctrl+J is the newline key where the terminal keeps Alt+Enter and does not report Shift+Enter.
@@ -887,13 +1140,14 @@ fn help_lists_the_editing_popup_and_link_keys() {
         "Clear line",
         "Insert newline",
         "Emoji picker",
-        "Popup accept",
+        "Accept",
         "Open link",
         "Confirm yes",
     ] {
         assert!(got.contains(name), "{name} missing:\n{got}");
     }
-    assert!(got.contains("Ctrl+J, Alt+Enter, Shift+Enter"), "{got}");
+    assert!(got.contains("Shift+Enter, Ctrl+J, Alt+Enter"), "{got}");
+    check("help_default_tall", 100, 140, &got);
 }
 
 // ---- message selection, replies, reactions, edit and delete, mentions (issues 11, 12, 13, 27, 28) ----
@@ -1009,7 +1263,7 @@ fn rich_in(mut app: App, caps: bool) -> App {
             caps: Capabilities::all(),
         });
     }
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('i'));
     app.handle_event(Event::Messages {
         network: Network::Teams,
         chat_id: "alex".into(),
@@ -1018,8 +1272,9 @@ fn rich_in(mut app: App, caps: bool) -> App {
     app
 }
 
-fn ctrl_up(app: &mut App) {
-    press_mod(app, KeyCode::Up, KeyModifiers::CONTROL);
+/// From the message box into message selection: Esc.
+fn to_selection(app: &mut App) {
+    press(app, KeyCode::Esc);
 }
 
 /// Selection on `id`: from the newest, Up past the messages that can be selected (the deleted
@@ -1030,18 +1285,59 @@ fn select_msg(app: &mut App, id: &str) {
         .iter()
         .position(|m| *m == id)
         .expect("a selectable id");
-    ctrl_up(app);
+    to_selection(app);
     for _ in 0..order.len() - 1 - at {
         press(app, KeyCode::Up);
     }
 }
 
 #[test]
-fn select_in_the_vim_preset_says_select() {
-    let mut app = rich_in(new_vim_app(), true);
-    ctrl_up(&mut app);
+fn conversation_shows_quotes_reactions_edited_deleted_and_mentions() {
+    both_sizes("rich_conversation", || rich_app(true));
+}
+
+#[test]
+fn select_newest_message() {
+    both_sizes("select_newest", || {
+        let mut app = rich_app(true);
+        to_selection(&mut app);
+        app
+    });
+}
+
+/// A message of yours with a reaction of yours: reply, react, edit and delete all apply.
+#[test]
+fn select_own_message_all_actions_apply() {
+    let mut app = rich_app(true);
+    select_msg(&mut app, "m2");
     let got = render(&mut app, 100, 30);
-    assert!(got.contains("-- SELECT --"), "{got}");
+    check("select_own", 100, 30, &got);
+}
+
+/// Someone else's message: edit and delete are dimmed in the footer.
+#[test]
+fn select_other_message_dims_edit_and_delete() {
+    let mut app = rich_app(true);
+    select_msg(&mut app, "m3");
+    let got = render(&mut app, 100, 30);
+    check("select_other", 100, 30, &got);
+}
+
+/// Before the backend has sent its Capabilities every action is dimmed, but still works.
+#[test]
+fn select_before_capabilities_dims_everything() {
+    let mut app = rich_app(false);
+    select_msg(&mut app, "m2");
+    let got = render(&mut app, 100, 30);
+    check("select_no_caps", 100, 30, &got);
+}
+
+#[test]
+fn select_on_a_narrow_terminal() {
+    let mut app = rich_app(true);
+    select_msg(&mut app, "m3");
+    let got = render(&mut app, 40, 12);
+    check("select_narrow", 40, 12, &got);
 }
 
 #[test]
@@ -1051,6 +1347,28 @@ fn select_a_long_message_highlights_every_line() {
     let got = render(&mut app, 60, 20);
     // The wrapped message is reverse video on each of its rows.
     assert!(got.matches("REVERSED").count() >= 3, "{got}");
+    check("select_wrapped", 60, 20, &got);
+}
+
+#[test]
+fn reply_line_above_the_message_box() {
+    both_sizes_cursor_app("reply_target", || {
+        let mut app = rich_app(true);
+        select_msg(&mut app, "m3");
+        press(&mut app, KeyCode::Char('r'));
+        type_str(&mut app, "agreed");
+        app
+    });
+}
+
+#[test]
+fn edit_line_above_the_message_box() {
+    both_sizes_cursor_app("edit_target", || {
+        let mut app = rich_app(true);
+        select_msg(&mut app, "m4");
+        press(&mut app, KeyCode::Char('c'));
+        app
+    });
 }
 
 #[test]
@@ -1060,6 +1378,7 @@ fn delete_question_on_the_footer() {
     press(&mut app, KeyCode::Char('d'));
     let got = render(&mut app, 100, 30);
     assert!(got.contains("Delete for everyone? y/n"), "{got}");
+    check("select_delete_confirm", 100, 30, &got);
 }
 
 #[test]
@@ -1069,13 +1388,22 @@ fn reaction_picker_opens_from_selection() {
     press(&mut app, KeyCode::Char('e'));
     let got = render_cursor(&mut app, 80, 24);
     assert!(got.contains(" React "), "{got}");
+    check("select_react_picker", 80, 24, &got);
+}
+
+fn both_sizes_cursor_app(name: &str, mut build: impl FnMut() -> App) {
+    for (w, h) in [(100, 30), (80, 24)] {
+        let mut app = build();
+        let got = render_cursor(&mut app, w, h);
+        check(name, w, h, &got);
+    }
 }
 
 /// The group "Project Team" open with its members known.
 fn group_app() -> App {
     let mut app = online_in(new_app());
     press(&mut app, KeyCode::Down);
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('i'));
     app.handle_event(Event::Messages {
         network: Network::Teams,
         chat_id: "proj".into(),
@@ -1104,6 +1432,15 @@ fn group_app() -> App {
         error: None,
     });
     app
+}
+
+#[test]
+fn mention_list_in_a_group() {
+    both_sizes_cursor_app("mention_popup", || {
+        let mut app = group_app();
+        type_str(&mut app, "hello @al");
+        app
+    });
 }
 
 /// The project group with a run of messages: two from Sam within five minutes (one name row),
@@ -1215,6 +1552,7 @@ fn chat_row_shows_that_unread_messages_mention_you() {
     app.handle_event(Event::Chats(Network::Teams, chats));
     let got = render(&mut app, 80, 24);
     assert!(got.contains("99+@"), "{got}");
+    check("chat_row_mentions", 80, 24, &got);
 }
 
 #[test]
@@ -1229,7 +1567,7 @@ fn message_actions_never_panic_at_any_size() {
         let _ = render_cursor(&mut app, w, h);
         press(&mut app, KeyCode::Esc);
         select_msg(&mut app, "m4");
-        press(&mut app, KeyCode::Char('E'));
+        press(&mut app, KeyCode::Char('c'));
         let _ = render_cursor(&mut app, w, h);
         press(&mut app, KeyCode::Esc);
         select_msg(&mut app, "m4");
@@ -1373,7 +1711,7 @@ fn open_media_in(mut app: App, depth: Depth) -> App {
         caps: Capabilities::all(),
     });
     app.handle_event(Event::Chats(Network::Teams, teams_chats()));
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('i'));
     app
 }
 
@@ -1381,7 +1719,7 @@ fn open_media_in(mut app: App, depth: Depth) -> App {
 fn select_media(app: &mut App, id: &str) {
     let order = ["m1", "m2", "m3", "m4", "m5", "m6"];
     let at = order.iter().position(|m| *m == id).expect("an id");
-    ctrl_up(app);
+    to_selection(app);
     for _ in 0..order.len() - 1 - at {
         press(app, KeyCode::Up);
     }
@@ -1411,8 +1749,7 @@ fn render_media(app: &mut App, w: u16, h: u16) -> String {
 fn attachment_chips_and_their_states() {
     let dir = media_dir("chips");
     let png = sample_png(&dir);
-    {
-        let (w, h) = (80, 24);
+    for (w, h) in [(100, 30), (80, 24)] {
         let mut app = media_app(Depth::True);
         // m3: download and open (the file arrives, the OS opens it).
         select_media(&mut app, "m3");
@@ -1421,10 +1758,14 @@ fn attachment_chips_and_their_states() {
         let jobs = app.take_open_files();
         assert_eq!(jobs.len(), 1);
         app.open_done(&jobs[0], Ok(()));
-        // m4: the link has expired.
-        press(&mut app, KeyCode::Esc);
+        // m4: the link has expired. i leaves selection for the message box (select_media starts there).
+        press(&mut app, KeyCode::Char('i'));
         select_media(&mut app, "m4");
-        press(&mut app, KeyCode::Char('o'));
+        let out = press_out(&mut app, KeyCode::Char('o'));
+        assert!(
+            matches!(&out[..], [(_, Command::FetchMedia { .. })]),
+            "o on m4 asks for it: {out:?}"
+        );
         app.handle_event(Event::MediaFailed {
             network: Network::Teams,
             chat_id: "alex".into(),
@@ -1433,12 +1774,13 @@ fn attachment_chips_and_their_states() {
             reason: "MEDIA EXPIRED".into(),
             fallback_url: None,
         });
-        // m2: still downloading.
-        press(&mut app, KeyCode::Esc);
+        // m2: still downloading. i leaves selection for the message box.
+        press(&mut app, KeyCode::Char('i'));
         select_media(&mut app, "m2");
         let out = press_out(&mut app, KeyCode::Char('o'));
         assert!(matches!(out[0].1, Command::FetchMedia { .. }));
-        let _ = render_media(&mut app, w, h);
+        let got = render_media(&mut app, w, h);
+        check("media_chips", w, h, &got);
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -1461,6 +1803,7 @@ fn an_executable_is_refused_with_a_reason() {
     assert!(out.is_empty());
     let got = render_media(&mut app, 100, 30);
     assert!(got.contains("BLOCKED: executable"), "{got}");
+    check("media_blocked", 100, 30, &got);
 }
 
 /// `v` draws the thumbnail under the message, in the highlight too (never in reverse video).
@@ -1468,8 +1811,7 @@ fn an_executable_is_refused_with_a_reason() {
 fn thumbnail_under_an_image() {
     let dir = media_dir("thumb");
     let png = sample_png(&dir);
-    {
-        let (w, h) = (80, 24);
+    for (w, h) in [(100, 30), (80, 24)] {
         let mut app = media_app(Depth::True);
         select_media(&mut app, "m2");
         let out = press_out(&mut app, KeyCode::Char('v'));
@@ -1479,6 +1821,7 @@ fn thumbnail_under_an_image() {
         decode_now(&mut app);
         let got = render_media(&mut app, w, h);
         assert!(got.contains('\u{2580}'), "half blocks are drawn:\n{got}");
+        check("media_thumbnail", w, h, &got);
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -1495,6 +1838,53 @@ fn thumbnail_in_a_256_colour_terminal() {
     let got = render_media(&mut app, 80, 24);
     assert!(got.contains("Indexed("), "palette colours, not RGB");
     assert!(!got.contains("Rgb("));
+    check("media_thumbnail_256", 80, 24, &got);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A thumbnail partly scrolled out of the pane is cut with the lines: nothing is drawn outside.
+#[test]
+fn thumbnail_clips_when_scrolled_partly_out() {
+    let dir = media_dir("clip");
+    let png = sample_png(&dir);
+    // The wheel moves the pane three lines a step: the thumbnail goes through the top edge, then
+    // the bottom edge. Whatever is cut, nothing is drawn outside the pane.
+    for steps in [0usize, 1, 2, 3, 4, 5] {
+        let mut a = media_app(Depth::True);
+        select_media(&mut a, "m2");
+        press(&mut a, KeyCode::Char('v'));
+        media_ready(&mut a, "m2", &png);
+        decode_now(&mut a);
+        // Leave selection (for the message box): while a message is selected a resize keeps it
+        // in view.
+        press(&mut a, KeyCode::Char('i'));
+        a.resize(80, 16);
+        for _ in 0..steps {
+            a.handle_mouse(MouseEvent {
+                kind: MouseEventKind::ScrollUp,
+                column: 50,
+                row: 8,
+                modifiers: KeyModifiers::NONE,
+            });
+        }
+        let got = render_media(&mut a, 80, 16);
+        check(&format!("media_thumbnail_scrolled{steps}"), 80, 16, &got);
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Resizing narrower rescales the thumbnail to the pane; it never draws outside it.
+#[test]
+fn thumbnail_rescales_on_a_narrow_terminal() {
+    let dir = media_dir("narrow");
+    let png = sample_png(&dir);
+    let mut app = media_app(Depth::True);
+    select_media(&mut app, "m2");
+    press(&mut app, KeyCode::Char('v'));
+    media_ready(&mut app, "m2", &png);
+    decode_now(&mut app);
+    let got = render_media(&mut app, 50, 20);
+    check("media_thumbnail_narrow", 50, 20, &got);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -1511,6 +1901,7 @@ fn thumbnail_failure_shows_on_the_chip() {
     decode_now(&mut app);
     let got = render_media(&mut app, 100, 30);
     assert!(got.contains("PREVIEW FAILED"), "{got}");
+    check("media_thumbnail_failed", 100, 30, &got);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -1530,6 +1921,7 @@ fn inline_images_off_keeps_the_chip_only() {
     assert!(out.is_empty());
     let got = render_media(&mut app, 100, 30);
     assert!(got.contains("INLINE IMAGES OFF"), "{got}");
+    check("media_inline_off", 100, 30, &got);
 }
 
 // ---- choosing a file ----
@@ -1554,10 +1946,36 @@ fn path_prompt_lists_folders_first() {
     let mut app = media_app(Depth::True);
     app.set_attach_dir(dir.clone());
     ctrl_o(&mut app);
+    let got = render(&mut app, 100, 30);
+    check("attach_prompt", 100, 30, &got);
     // Typing narrows the list; names with spaces complete.
     type_str(&mut app, "my p");
     let got = render(&mut app, 80, 24);
     assert!(got.contains("My Pictures/"), "{got}");
+    check("attach_prompt_typed", 80, 24, &got);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn path_prompt_with_nothing_matching() {
+    let dir = attach_dir("path_prompt_with_nothing");
+    let mut app = media_app(Depth::True);
+    app.set_attach_dir(dir.clone());
+    ctrl_o(&mut app);
+    type_str(&mut app, "zzz");
+    let got = render(&mut app, 80, 24);
+    check("attach_prompt_nothing", 80, 24, &got);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn path_prompt_on_a_narrow_terminal() {
+    let dir = attach_dir("path_prompt_on_a_narrow_");
+    let mut app = media_app(Depth::True);
+    app.set_attach_dir(dir.clone());
+    ctrl_o(&mut app);
+    let got = render(&mut app, 40, 12);
+    check("attach_prompt_narrow", 40, 12, &got);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -1576,12 +1994,13 @@ fn chip_above_the_message_box() {
     let dir = attach_dir("chip_above_the_message_b");
     let mut app = attached_app(&dir, "photo.png");
     type_str(&mut app, "look at this");
-    {
-        let (w, h) = (80, 24);
+    for (w, h) in [(100, 30), (80, 24)] {
         let got = render(&mut app, w, h);
         assert!(got.contains("[photo.png 1 B]"), "{got}");
+        check("attach_chip", w, h, &got);
     }
-    let _ = render(&mut app, 40, 12);
+    let got = render(&mut app, 40, 12);
+    check("attach_chip_narrow", 40, 12, &got);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -1594,11 +2013,13 @@ fn confirm_lines_before_a_file_goes() {
     assert!(out.is_empty());
     let got = render(&mut app, 100, 30);
     assert!(got.contains("Upload plan.pdf to your OneDrive?"), "{got}");
+    check("attach_confirm_onedrive", 100, 30, &got);
     std::fs::write(dir.join("setup.exe"), b"x").unwrap();
     let mut app = attached_app(&dir, "setup.exe");
     press(&mut app, KeyCode::Enter);
     let got = render(&mut app, 100, 30);
     assert!(got.contains("EXECUTABLE setup.exe"), "{got}");
+    check("attach_confirm_executable", 100, 30, &got);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -1623,10 +2044,10 @@ fn upload_progress_on_the_message_and_in_the_footer() {
         done: 1_350_000,
         total: 3_000_000,
     });
-    {
-        let (w, h) = (80, 24);
+    for (w, h) in [(100, 30), (80, 24)] {
         let got = render(&mut app, w, h);
         assert!(got.contains("[sending 45%]"), "{got}");
+        check("upload_progress", w, h, &got);
     }
     // And a failure: the reason on the message, the footer back to the hints.
     app.handle_event(Event::MessageFailed {
@@ -1637,25 +2058,7 @@ fn upload_progress_on_the_message_and_in_the_footer() {
     });
     let got = render(&mut app, 100, 30);
     assert!(got.contains("NOT SENT - IMAGE OVER 4 MB"), "{got}");
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
-/// Vim preset: the chip, the path prompt and `o` / `v` all work from Insert and Select.
-#[test]
-fn vim_preset_has_the_attachment_keys() {
-    let dir = attach_dir("vim_preset_has_the_attac");
-    let mut app = open_media_in(new_vim_app(), Depth::True);
-    app.set_attach_dir(dir.clone());
-    app.handle_event(Event::Messages {
-        network: Network::Teams,
-        chat_id: "alex".into(),
-        messages: media_history(),
-    });
-    ctrl_o(&mut app);
-    type_str(&mut app, "notes.txt");
-    press(&mut app, KeyCode::Enter);
-    let got = render(&mut app, 100, 30);
-    assert!(got.contains("[notes.txt 1 B]"), "{got}");
+    check("upload_failed", 100, 30, &got);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -1697,7 +2100,7 @@ fn themed(settings: Settings) -> App {
             detail: Some("phone is offline".into()),
         },
     ));
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('i'));
     type_str(&mut app, "this one will fail");
     press(&mut app, KeyCode::Enter);
     app.handle_event(Event::MessageFailed {
@@ -1707,26 +2110,35 @@ fn themed(settings: Settings) -> App {
         error: "demo: this chat refuses messages".into(),
     });
     press(&mut app, KeyCode::Esc);
+    press(&mut app, KeyCode::Esc);
     app
 }
 
 #[test]
 fn theme_default_is_exactly_the_screen_without_a_theme() {
-    {
-        let (w, h) = (80, 24);
+    for (w, h) in [(100, 30), (80, 24)] {
         let plain = render(&mut themed(Settings::default()), w, h);
         let named = render(&mut themed(theme_settings("default", &[])), w, h);
         assert_eq!(plain, named, "name = \"default\" changes nothing");
+        check("theme_default", w, h, &named);
     }
 }
 
 #[test]
 fn theme_high_contrast() {
-    {
-        let (w, h) = (80, 24);
+    for (w, h) in [(100, 30), (80, 24)] {
         let got = render(&mut themed(theme_settings("high-contrast", &[])), w, h);
         // No grey and no dim text anywhere.
         assert!(!got.contains("DarkGray") && !got.contains("DIM"), "{got}");
+        check("theme_high_contrast", w, h, &got);
+    }
+}
+
+#[test]
+fn theme_light_and_dark() {
+    for name in ["light", "dark"] {
+        let got = render(&mut themed(theme_settings(name, &[])), 100, 30);
+        check(&format!("theme_{name}"), 100, 30, &got);
     }
 }
 
@@ -1752,6 +2164,7 @@ fn a_role_override_changes_only_that_role() {
     assert_ne!(base, changed);
     // Only the colour of the "You" label moved: same text, same cells, Cyan became Green.
     assert_eq!(base.replace("Cyan", "Green"), changed);
+    check("theme_override_own_name", 100, 30, &changed);
 }
 
 #[test]
@@ -1763,14 +2176,14 @@ fn rgb_and_index_overrides_are_fixed_colours() {
     term.draw(|f| draw(f, &app)).unwrap();
     let got = dump_with(&term, true);
     assert!(got.contains("Rgb(128, 128, 128)"), "{got}");
+    check("theme_override_rgb", 100, 30, &got);
 }
 
 #[test]
 fn no_color_removes_every_colour_and_keeps_bold_dim_and_reverse() {
     let (theme, problems) = Theme::from_settings(&Settings::default().theme, true);
     assert!(problems.is_empty());
-    {
-        let (w, h) = (80, 24);
+    for (w, h) in [(100, 30), (80, 24)] {
         let mut app = themed(Settings::default());
         app.set_theme(theme.clone());
         app.resize(w, h);
@@ -1795,6 +2208,7 @@ fn no_color_removes_every_colour_and_keeps_bold_dim_and_reverse() {
         );
         assert!(got.contains("DIM"), "secondary text is dim, not coloured");
         assert!(got.contains("NOT SENT"), "status stays text");
+        check("theme_no_color", w, h, &got);
     }
 }
 
@@ -1825,6 +2239,7 @@ fn a_bad_theme_value_names_the_role_in_the_notice_bar() {
         got.contains("[theme] dim:") && got.contains("banana"),
         "{got}"
     );
+    check("theme_bad_value", 100, 30, &got);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -1835,7 +2250,23 @@ fn layout_app(f: impl FnOnce(&mut Settings)) -> App {
 }
 
 #[test]
+fn layout_sidebar_width_in_columns_and_percent() {
+    both_sizes("layout_sidebar_cols", || {
+        layout_app(|s| s.layout.sidebar_width = Some(SidebarWidth::Columns(20)))
+    });
+    both_sizes("layout_sidebar_percent", || {
+        layout_app(|s| s.layout.sidebar_width = Some(SidebarWidth::Percent(50)))
+    });
+}
+
+#[test]
 fn layout_twelve_hour_times_and_date_orders() {
+    both_sizes("layout_12h", || {
+        layout_app(|s| s.layout.time_format = TimeFormat::H12)
+    });
+    both_sizes("layout_mdy", || {
+        layout_app(|s| s.layout.date_order = DateOrder::Mdy)
+    });
     let got = render(
         &mut layout_app(|s| {
             s.layout.date_order = DateOrder::Ymd;
@@ -1845,12 +2276,28 @@ fn layout_twelve_hour_times_and_date_orders() {
         30,
     );
     assert!(got.contains("2026-11-05"), "{got}");
+    check("layout_ymd_12h", 100, 30, &got);
+}
+
+#[test]
+fn layout_compact_density_and_no_previews() {
+    both_sizes("layout_compact", || {
+        layout_app(|s| s.layout.density = Density::Compact)
+    });
+    both_sizes("layout_no_previews", || {
+        layout_app(|s| s.layout.show_previews = false)
+    });
+    // Narrow: the list alone, still one row per chat.
+    let mut app = online_in(new_app_with(settings_with(|s| {
+        s.layout.density = Density::Compact
+    })));
+    let got = render(&mut app, 50, 20);
+    check("layout_compact_narrow", 50, 20, &got);
 }
 
 #[test]
 fn default_layout_settings_give_todays_screen() {
-    {
-        let (w, h) = (80, 24);
+    for (w, h) in [(100, 30), (80, 24)] {
         let today = render(&mut open_chat_app(), w, h);
         let explicit = render(
             &mut layout_app(|s| {
@@ -1894,6 +2341,12 @@ fn flagged_app() -> App {
 
 #[test]
 fn pinned_muted_and_hidden_chats() {
+    both_sizes("chat_flags", flagged_app);
+    both_sizes("chat_flags_hidden_shown", || {
+        let mut app = flagged_app();
+        press(&mut app, KeyCode::Char('Z'));
+        app
+    });
     // The tab total leaves the muted 100 and the hidden chat out: 2 (Alex) + 1 (Sam).
     let got = render(&mut flagged_app(), 100, 30);
     assert!(got.contains("Teams 3"), "{got}");
@@ -1901,20 +2354,38 @@ fn pinned_muted_and_hidden_chats() {
 
 // ---- unread ----
 
+/// `:readall`, which asks y/n.
+fn readall(app: &mut App) {
+    press(app, KeyCode::Char(':'));
+    type_str(app, "readall");
+    press(app, KeyCode::Enter);
+}
+
 #[test]
 fn jump_to_the_next_unread_chat_and_mark_all_read() {
+    both_sizes("unread_jump", || {
+        let mut app = online_in(new_app());
+        press(&mut app, KeyCode::Char('n'));
+        app
+    });
+    both_sizes("mark_all_read_prompt", || {
+        let mut app = online_in(new_app());
+        readall(&mut app);
+        app
+    });
     let mut app = online_in(new_app());
-    press(&mut app, KeyCode::Char('M'));
+    readall(&mut app);
     press(&mut app, KeyCode::Char('y'));
     let got = render(&mut app, 100, 30);
     assert!(!got.contains("Teams 3"), "the tab total is gone: {got}");
+    check("mark_all_read_done", 100, 30, &got);
 }
 
 // ---- older history ----
 
 fn many_messages_app() -> App {
     let mut app = online_in(new_app());
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, KeyCode::Char('i'));
     let msgs: Vec<ChatMessage> = (0..40)
         .map(|i| {
             msg(
@@ -1954,7 +2425,9 @@ fn loading_older_shows_a_line_at_the_top_and_the_start_says_so() {
     );
     let got = render(&mut app, 100, 30);
     assert!(got.contains("loading older..."), "{got}");
-    let _ = render(&mut app, 80, 24);
+    check("older_loading", 100, 30, &got);
+    let got80 = render(&mut app, 80, 24);
+    check("older_loading", 80, 24, &got80);
 
     let older: Vec<ChatMessage> = (0..5)
         .map(|i| {
@@ -1977,6 +2450,7 @@ fn loading_older_shows_a_line_at_the_top_and_the_start_says_so() {
     let got = render(&mut app, 100, 30);
     assert!(got.contains("start of conversation"), "{got}");
     assert!(!got.contains("loading older"), "{got}");
+    check("older_start", 100, 30, &got);
 }
 
 #[test]
@@ -1991,6 +2465,7 @@ fn a_failed_older_load_is_a_notice() {
     let got = render(&mut app, 100, 30);
     assert!(got.contains("Teams is busy"), "{got}");
     assert!(!got.contains("loading older"), "{got}");
+    check("older_failed", 100, 30, &got);
 }
 
 // ---- search ----
@@ -2056,11 +2531,35 @@ fn ctrl_f(app: &mut App) {
 
 #[test]
 fn search_box_empty_with_hits_and_without() {
+    both_sizes("search_empty", || {
+        let mut app = search_app();
+        ctrl_f(&mut app);
+        app
+    });
+    both_sizes("search_hits", || {
+        let mut app = search_app();
+        ctrl_f(&mut app);
+        type_str(&mut app, "budget");
+        press(&mut app, KeyCode::Down);
+        app
+    });
     let mut app = search_app();
     ctrl_f(&mut app);
     type_str(&mut app, "zzzz");
     let got = render(&mut app, 80, 24);
     assert!(got.contains("No messages match"), "{got}");
+    check("search_no_match", 80, 24, &got);
+}
+
+#[test]
+fn search_box_on_small_screens() {
+    let mut app = search_app();
+    ctrl_f(&mut app);
+    type_str(&mut app, "budget");
+    let got = render(&mut app, 40, 12);
+    check("search_hits_narrow", 40, 12, &got);
+    let got = render(&mut app, 30, 8);
+    check("search_hits_tiny", 30, 8, &got);
 }
 
 #[test]
@@ -2087,7 +2586,8 @@ fn search_enter_opens_the_chat_of_the_hit() {
             ),
         ]
     );
-    let _ = render(&mut app, 100, 30);
+    let got = render(&mut app, 100, 30);
+    check("search_opened_chat", 100, 30, &got);
 }
 
 // ---- typing ----
@@ -2136,6 +2636,29 @@ fn wa_typing_app() -> App {
 
 #[test]
 fn someone_typing_shows_on_the_sidebar_row_and_above_the_message_box() {
+    both_sizes("typing", || {
+        let mut app = wa_typing_app();
+        press(&mut app, KeyCode::Char('i'));
+        app.handle_event(Event::Typing {
+            network: Network::WhatsApp,
+            chat_id: "riley".into(),
+            sender: "Riley Sample".into(),
+            active: true,
+        });
+        app.handle_event(Event::Typing {
+            network: Network::WhatsApp,
+            chat_id: "fam".into(),
+            sender: "Sam Sample".into(),
+            active: true,
+        });
+        app.handle_event(Event::Typing {
+            network: Network::WhatsApp,
+            chat_id: "fam".into(),
+            sender: "Jordan Placeholder".into(),
+            active: true,
+        });
+        app
+    });
     // Compact rows have no preview line: the word goes after the title.
     let mut app = new_app_with(settings_with(|s| s.layout.density = Density::Compact));
     app.handle_event(Event::Status(
@@ -2155,6 +2678,7 @@ fn someone_typing_shows_on_the_sidebar_row_and_above_the_message_box() {
     });
     let got = render(&mut app, 100, 30);
     assert!(got.contains("typing"), "{got}");
+    check("typing_compact", 100, 30, &got);
 }
 
 /// The new screens at many sizes: search, a loading chat, flags, typing, compact rows and a wide
@@ -2176,12 +2700,12 @@ fn everyday_screens_never_panic_at_any_size() {
         }),
         ("flags", || {
             let mut app = flagged_app();
-            press(&mut app, KeyCode::Char('H'));
+            press(&mut app, KeyCode::Char('Z'));
             app
         }),
         ("mark all read prompt", || {
             let mut app = online_in(new_app());
-            press(&mut app, KeyCode::Char('M'));
+            readall(&mut app);
             app
         }),
         ("loading older", || {
@@ -2191,7 +2715,7 @@ fn everyday_screens_never_panic_at_any_size() {
         }),
         ("typing", || {
             let mut app = wa_typing_app();
-            press(&mut app, KeyCode::Enter);
+            press(&mut app, KeyCode::Char('i'));
             app.handle_event(Event::Typing {
                 network: Network::WhatsApp,
                 chat_id: "riley".into(),
@@ -2235,37 +2759,111 @@ fn select_other_message_in_high_contrast_still_marks_what_does_not_apply() {
         .find(|l| l.starts_with("row 29 "))
         .expect("a style run on the footer row");
     assert!(last.contains("BOLD"), "{last}");
+    check("select_other_high_contrast", 100, 30, &got);
 }
 
 // ---- commands: the / bar, slash in the message box, prompts, F2 (S2) ----
 
-/// Teams online with chats, the `/` bar open with `text` typed.
+fn at_sizes(name: &str, sizes: &[(u16, u16)], mut build: impl FnMut() -> App) {
+    for &(w, h) in sizes {
+        let mut app = build();
+        let got = render(&mut app, w, h);
+        check(name, w, h, &got);
+    }
+}
+
+/// Teams online with chats, the `:` bar open with `text` typed.
 fn bar_app(text: &str) -> App {
     let mut app = online_in(new_app());
-    press(&mut app, KeyCode::Char('/'));
+    press(&mut app, KeyCode::Char(':'));
     type_str(&mut app, text);
     app
+}
+
+#[test]
+fn command_bar_empty() {
+    at_sizes(
+        "command_bar_empty",
+        &[(100, 30), (80, 24), (40, 12)],
+        || bar_app(""),
+    );
+}
+
+#[test]
+fn command_bar_filtered() {
+    at_sizes(
+        "command_bar_filtered",
+        &[(100, 30), (80, 24), (40, 12)],
+        || bar_app("se"),
+    );
+}
+
+#[test]
+fn command_bar_lists_chats_after_commands() {
+    // "e" matches several commands and chats: both sections show.
+    at_sizes("command_bar_chats", &[(100, 30), (80, 24)], || {
+        bar_app("sam")
+    });
+}
+
+#[test]
+fn command_bar_no_match() {
+    at_sizes("command_bar_no_match", &[(80, 24)], || bar_app("zzzz"));
 }
 
 #[test]
 fn command_bar_scrolls_with_the_selection() {
     let mut app = bar_app("");
     app.resize(40, 12);
-    for _ in 0..12 {
+    for _ in 0..13 {
         press(&mut app, KeyCode::Down);
     }
     let got = render(&mut app, 40, 12);
     // The last command is chosen and on screen.
-    assert!(got.contains("/quit"), "{got}");
+    assert!(got.contains(":quit"), "{got}");
+    check("command_bar_scrolled", 40, 12, &got);
+}
+
+/// The bar's prompt is its key: `:` by default, the user's own one-character key when rebound.
+#[test]
+fn command_bar_prompt_is_its_key() {
+    let got = render(&mut bar_app(""), 80, 24);
+    assert!(got.contains(":type a command or chat name"), "{got}");
+    let mut app = online_in(new_app_with(one_binding("common", ";", "command_bar")));
+    press(&mut app, KeyCode::Char(';'));
+    let got = render(&mut app, 80, 24);
+    assert!(got.contains(";type a command or chat name"), "{got}");
 }
 
 #[test]
 fn command_bar_dims_what_cannot_run() {
-    // Signed in: /signin cannot run and is drawn dim.
+    // Signed in: :signin cannot run and is drawn dim.
     let mut app = bar_app("sign");
     let got = render(&mut app, 80, 24);
-    assert!(got.contains("/signin"), "{got}");
+    assert!(got.contains(":signin"), "{got}");
     assert!(got.contains("DIM"), "{got}");
+}
+
+#[test]
+/// `:se` at the start of the message box: the matching commands, then the matching emoji.
+fn composer_colon_popup() {
+    at_sizes("composer_colon_popup", &[(100, 30), (80, 24)], || {
+        let mut app = online_in(new_app());
+        press(&mut app, KeyCode::Char('i'));
+        type_str(&mut app, ":se");
+        app
+    });
+}
+
+#[test]
+fn signout_prompt() {
+    at_sizes("signout_prompt", &[(80, 24)], || {
+        let mut app = online_in(new_app());
+        press(&mut app, KeyCode::Char(':'));
+        type_str(&mut app, "signout");
+        press(&mut app, KeyCode::Enter);
+        app
+    });
 }
 
 fn demo_app() -> App {
@@ -2290,6 +2888,7 @@ fn demo_app() -> App {
 
 #[test]
 fn demo_sign_in_panel() {
+    at_sizes("demo_sign_in_panel", &[(80, 24)], demo_app);
     let got = render(&mut demo_app(), 80, 24);
     assert!(got.contains("demo: no browser"), "{got}");
     assert!(!got.contains("opens browser"), "{got}");
@@ -2301,13 +2900,16 @@ fn demo_sign_in_panel() {
     ));
     let got = render(&mut real, 80, 24);
     assert!(got.contains("opens browser"), "{got}");
-    assert!(got.contains("Type / for commands"), "{got}");
+    assert!(got.contains("Press : for commands"), "{got}");
 }
 
 #[test]
 fn empty_pane_points_at_commands() {
+    at_sizes("empty_pane_commands_hint", &[(100, 30)], || {
+        online_in(new_app())
+    });
     let got = render(&mut online_in(new_app()), 100, 30);
-    assert!(got.contains("Type / for commands"), "{got}");
+    assert!(got.contains("Press : for commands"), "{got}");
 }
 
 /// The footer tells a new user how to find commands and help, in every screen that has one.
@@ -2323,23 +2925,22 @@ fn footers_point_at_commands_and_help() {
     };
     let select = || {
         let mut app = open_chat_app();
-        press_mod(&mut app, KeyCode::Up, KeyModifiers::CONTROL);
+        to_selection(&mut app);
         app
     };
-    let screens: [(&str, App, &str); 5] = [
-        ("list", online_in(new_app()), "? help"),
-        ("composer", typing_app(), "F1 help"),
-        ("panel", panel(), "? help"),
+    let screens: [(&str, App, &str, &str); 4] = [
+        ("list", online_in(new_app()), ": commands", "? help"),
+        ("composer", typing_app(), ": commands", "F1 help"),
+        ("panel", panel(), ": commands", "? help"),
         // 80 columns keep the way out (Esc back) and the bar; help follows on wider screens.
-        ("select", select(), "Esc back"),
-        ("vim list", online_in(new_vim_app()), "? help"),
+        ("select", select(), ": commands", "Esc back"),
     ];
-    for (what, mut app, help) in screens {
+    for (what, mut app, commands, help) in screens {
         let got = render(&mut app, 80, 24);
         // The screen is the first 24 lines of the dump: the footer is the last two.
         let screen: Vec<&str> = got.lines().take(24).collect();
         let footer = screen[22..].join(" ");
-        assert!(footer.contains("/ commands"), "{what}:\n{got}");
+        assert!(footer.contains(commands), "{what}:\n{got}");
         assert!(footer.contains(help), "{what}:\n{got}");
     }
 }
@@ -2367,80 +2968,241 @@ fn settings_app(downs: usize, in_rows: bool) -> App {
     app
 }
 
+#[test]
+fn settings_appearance() {
+    at_sizes(
+        "settings_appearance",
+        &[(100, 30), (80, 24), (40, 12)],
+        || settings_app(0, true),
+    );
+}
+
+#[test]
+fn settings_layout() {
+    both_sizes("settings_layout", || settings_app(1, true));
+}
+
+#[test]
+fn settings_notifications() {
+    both_sizes("settings_notifications", || settings_app(2, true));
+}
+
+#[test]
+fn settings_media() {
+    both_sizes("settings_media", || settings_app(3, true));
+}
+
+#[test]
+fn settings_teams() {
+    both_sizes("settings_teams", || settings_app(4, true));
+}
+
+#[test]
+fn settings_whatsapp() {
+    both_sizes("settings_whatsapp", || settings_app(5, true));
+}
+
 /// The Keys page with the cursor on the Chat list `refresh` row (a Down count: the capture
 /// tests below check the footer names `refresh`, so a reordered page fails loudly).
 fn keys_app() -> App {
     let mut app = settings_app(6, true);
-    for _ in 0..20 {
+    for _ in 0..*REFRESH_ROW_DOWNS.get_or_init(refresh_row_downs) {
         press(&mut app, KeyCode::Down);
     }
     app
 }
 
+/// How many Down presses take the keys page from its first row to the chat list's Refresh row:
+/// found once by trying, so adding or removing an action above it needs no recount.
+static REFRESH_ROW_DOWNS: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+
+fn refresh_row_downs() -> usize {
+    (0..200)
+        .find(|&n| {
+            let mut app = settings_app(6, true);
+            for _ in 0..n {
+                press(&mut app, KeyCode::Down);
+            }
+            press(&mut app, KeyCode::Enter);
+            render(&mut app, 100, 30).contains("Press the new key for Refresh ")
+        })
+        .expect("the Refresh row of the chat list")
+}
+
+#[test]
+fn settings_keys() {
+    at_sizes("settings_keys", &[(100, 30), (80, 24), (40, 12)], keys_app);
+}
+
+/// `/` on the Keys page: the actions that match, under their context, while the filter is typed
+/// and after Enter keeps it.
+#[test]
+fn keys_filtered() {
+    at_sizes("keys_filtering", &[(80, 24)], || {
+        let mut app = settings_app(6, true);
+        press(&mut app, KeyCode::Char('/'));
+        type_str(&mut app, "ctrl+");
+        app
+    });
+    at_sizes("keys_filtered", &[(80, 24)], || {
+        let mut app = settings_app(6, true);
+        press(&mut app, KeyCode::Char('/'));
+        type_str(&mut app, "unread");
+        press(&mut app, KeyCode::Enter);
+        app
+    });
+}
+
+/// Waiting for the new key: the footer asks, Esc cancels.
+#[test]
+fn key_capture() {
+    at_sizes("key_capture", &[(100, 30), (80, 24), (40, 12)], || {
+        let mut app = keys_app();
+        press(&mut app, KeyCode::Enter);
+        let got = render(&mut app, 100, 30);
+        assert!(got.contains("Press the new key for Refresh"), "{got}");
+        app
+    });
+}
+
+/// `p` already pins: Enter swaps, Esc cancels.
+#[test]
+fn key_conflict() {
+    at_sizes("key_conflict", &[(100, 30), (80, 24)], || {
+        let mut app = keys_app();
+        press(&mut app, KeyCode::Enter);
+        press(&mut app, KeyCode::Char('p'));
+        let got = render(&mut app, 100, 30);
+        assert!(got.contains("p is already Pin"), "{got}");
+        app
+    });
+}
+
+/// `a` then F5 and F6: Refresh has three keys.
+fn keys_app_three_keys() -> App {
+    let mut app = keys_app();
+    for k in [KeyCode::F(5), KeyCode::F(6)] {
+        press(&mut app, KeyCode::Char('a'));
+        press(&mut app, k);
+    }
+    app
+}
+
+/// `a`: waiting for a key to add.
+#[test]
+fn key_add() {
+    at_sizes("key_add", &[(100, 30), (80, 24)], || {
+        let mut app = keys_app();
+        press(&mut app, KeyCode::Char('a'));
+        let got = render(&mut app, 100, 30);
+        assert!(got.contains("Press a key to add to Refresh"), "{got}");
+        app
+    });
+}
+
+/// `d` then Right: the second of three keys is chosen, in the selection colour only.
+#[test]
+fn key_pick() {
+    at_sizes("key_pick", &[(100, 30), (80, 24), (40, 12)], || {
+        let mut app = keys_app_three_keys();
+        press(&mut app, KeyCode::Char('d'));
+        press(&mut app, KeyCode::Right);
+        let got = render(&mut app, 100, 30);
+        assert!(got.contains("F5, F6, r *"), "{got}");
+        app
+    });
+    // More keys than the 40-column value fits: the chosen last key is still on screen.
+    at_sizes("key_pick_far", &[(40, 12)], || {
+        let mut app = keys_app_three_keys();
+        for k in [KeyCode::F(7), KeyCode::F(8), KeyCode::F(9)] {
+            press(&mut app, KeyCode::Char('a'));
+            press(&mut app, k);
+        }
+        press(&mut app, KeyCode::Char('d'));
+        press(&mut app, KeyCode::Left);
+        let got = render(&mut app, 40, 12);
+        assert!(got.contains("…") && got.contains(", r"), "{got}");
+        app
+    });
+}
+
+fn no_colour(mut app: App) -> App {
+    app.set_theme(Theme::from_settings(&Settings::default().theme, true).0);
+    app
+}
+
+fn high_contrast(mut app: App) -> App {
+    app.set_theme(Theme::builtin("high-contrast").unwrap());
+    app
+}
+
+/// Selection must survive NO_COLOR and high contrast on the new screens: reverse video is
+/// the only signal left.
+#[test]
+fn the_new_screens_under_no_colour_and_high_contrast() {
+    at_sizes("settings_appearance_no_color", &[(80, 24)], || {
+        no_colour(settings_app(0, true))
+    });
+    at_sizes("settings_keys_no_color", &[(80, 24)], || {
+        no_colour(keys_app())
+    });
+    at_sizes("command_bar_no_color", &[(80, 24)], || {
+        no_colour(bar_app("se"))
+    });
+    at_sizes("key_pick_no_color", &[(80, 24)], || {
+        let mut app = no_colour(keys_app_three_keys());
+        press(&mut app, KeyCode::Char('d'));
+        press(&mut app, KeyCode::Right);
+        app
+    });
+    at_sizes("key_conflict_high_contrast", &[(80, 24)], || {
+        let mut app = high_contrast(keys_app());
+        press(&mut app, KeyCode::Enter);
+        press(&mut app, KeyCode::Char('p'));
+        app
+    });
+}
+
 /// A key the capture refuses: the red line says why and the footer keeps asking.
 #[test]
 fn key_capture_refused() {
-    let mut app = settings_app(6, true);
-    press(&mut app, KeyCode::Down); // first Everywhere row (quit)
-    press(&mut app, KeyCode::Enter);
-    press(&mut app, KeyCode::Char('x'));
-    let got = render(&mut app, 80, 24);
-    assert!(got.contains("x types text here"), "{got}");
+    at_sizes("key_capture_refused", &[(80, 24)], || {
+        // The first Everywhere row (quit), and a key settings.toml has no name for.
+        let mut app = settings_app(6, true);
+        press(&mut app, KeyCode::Down);
+        press(&mut app, KeyCode::Enter);
+        press(&mut app, KeyCode::Null);
+        let got = render(&mut app, 80, 24);
+        assert!(got.contains("This key cannot be saved"), "{got}");
+        app
+    });
 }
 
 #[test]
 fn keys_reset_all_prompt() {
-    let mut app = settings_app(6, true);
-    press(&mut app, KeyCode::Up);
-    press(&mut app, KeyCode::Enter);
-    let got = render(&mut app, 80, 24);
-    assert!(got.contains("Reset every key to the preset? y/n"), "{got}");
+    at_sizes("keys_reset_all_prompt", &[(80, 24)], || {
+        let mut app = settings_app(6, true);
+        press(&mut app, KeyCode::Up);
+        press(&mut app, KeyCode::Enter);
+        let got = render(&mut app, 80, 24);
+        assert!(got.contains("Reset every key to its default? y/n"), "{got}");
+        app
+    });
 }
 
-/// The WhatsApp QR is fixed black on white, quiet zone included, and fits 80x24.
+/// The footer of the chat list follows the new key at once.
 #[test]
-fn whatsapp_qr() {
-    let got = render(&mut qr_app(), 80, 24);
-    assert!(got.contains("WHATSAPP: SCAN QR"), "{got}");
-    assert!(
-        !got.contains("Make the window larger"),
-        "QR must fit 80x24: {got}"
-    );
-    assert_eq!(
-        got.lines()
-            .filter(|l| l.contains("fg=Black bg=White"))
-            .count(),
-        19,
-        "whole QR, quiet zone included, fixed black on white: {got}"
-    );
-}
-
-/// NO_COLOR removes every colour on the new screens; reverse video is the only selection signal.
-#[test]
-fn the_new_screens_under_no_colour_and_high_contrast() {
-    for mut app in [settings_app(0, true), keys_app(), bar_app("se")] {
-        app.set_theme(Theme::from_settings(&Settings::default().theme, true).0);
-        app.resize(80, 24);
-        let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
-        term.draw(|f| draw(f, &app)).unwrap();
-        let buf = term.backend().buffer();
-        for y in 0..24 {
-            for x in 0..80 {
-                let c = &buf[(x, y)];
-                assert!(
-                    c.fg == Color::Reset && c.bg == Color::Reset,
-                    "colour at {x},{y}"
-                );
-            }
-        }
-        let got = dump(&term);
-        assert!(
-            got.lines().any(|l| l.starts_with("row ")
-                && !l.starts_with("row 0 ")
-                && l.contains("REVERSED")),
-            "the selected row below the tab bar is reverse video: {got}"
-        );
-    }
+fn key_rebound_footer() {
+    at_sizes("key_rebound_footer", &[(80, 24)], || {
+        let mut app = keys_app();
+        press(&mut app, KeyCode::Enter);
+        press(&mut app, KeyCode::F(5));
+        press(&mut app, KeyCode::Esc);
+        // Refresh is far down the chat list's footer: a wide screen shows it.
+        let got = render(&mut app, 160, 24);
+        assert!(got.contains("F5 refresh"), "{got}");
+        app
+    });
 }
 
 /// Capture, swap and refusal draw at every size without a panic.
@@ -2456,7 +3218,7 @@ fn keys_ui_survives_every_terminal_size() {
                         press(&mut app, KeyCode::Char('p'));
                     }
                     2 => {
-                        press(&mut app, KeyCode::Char('x'));
+                        press(&mut app, KeyCode::Char('z'));
                     }
                     3 => {
                         press(&mut app, KeyCode::F(5));
@@ -2467,6 +3229,100 @@ fn keys_ui_survives_every_terminal_size() {
             }
         }
     }
+}
+
+#[test]
+fn settings_about() {
+    both_sizes("settings_about", || settings_app(7, false));
+}
+
+#[test]
+fn settings_sections_narrow() {
+    at_sizes("settings_sections_narrow", &[(50, 20)], || {
+        settings_app(0, false)
+    });
+}
+
+/// A number refused: the red line says why and the box stays open.
+#[test]
+fn settings_number_error() {
+    at_sizes("settings_number_error", &[(80, 24)], || {
+        let mut app = settings_app(3, true);
+        press(&mut app, KeyCode::Enter);
+        for _ in 0..3 {
+            press(&mut app, KeyCode::Backspace);
+        }
+        type_str(&mut app, "0");
+        press(&mut app, KeyCode::Enter);
+        app
+    });
+}
+
+/// A colour being typed on a role row (nothing applied yet).
+#[test]
+fn settings_colour_entry() {
+    at_sizes("settings_colour_entry", &[(80, 24)], || {
+        let mut app = settings_app(0, true);
+        // Past Theme, Palette, the four panel outline and fill pairs and the two bar fills:
+        // the first colour role.
+        for _ in 0..12 {
+            press(&mut app, KeyCode::Down);
+        }
+        press(&mut app, KeyCode::Enter);
+        type_str(&mut app, "#12ab");
+        app
+    });
+}
+
+#[test]
+fn settings_problems() {
+    at_sizes("settings_problems", &[(100, 30)], || {
+        let mut app = settings_app(1, true);
+        app.settings_saved(vec![
+            "settings.toml line 12: [layout] density: use \"cozy\" or \"compact\". Using the defaults for [layout]."
+                .into(),
+            "settings.toml line 20: [theme] dim: \"banana\" is not a colour.".into(),
+        ]);
+        app
+    });
+}
+
+#[test]
+fn settings_problems_about() {
+    at_sizes("settings_problems_about", &[(100, 30)], || {
+        let mut app = settings_app(7, false);
+        app.settings_saved(vec![
+            "settings.toml line 12: [layout] density: use \"cozy\" or \"compact\". Using the defaults for [layout]."
+                .into(),
+            "settings.toml line 20: [theme] dim: \"banana\" is not a colour.".into(),
+        ]);
+        app
+    });
+}
+
+#[test]
+fn settings_save_failed() {
+    at_sizes("settings_save_failed", &[(80, 24)], || {
+        let mut app = settings_app(1, true);
+        press(&mut app, KeyCode::Down);
+        press(&mut app, KeyCode::Right);
+        app.settings_save_failed(
+            "NOT SAVED - settings.toml line 3 has a syntax error: fix it in a text editor",
+        );
+        app
+    });
+}
+
+/// The page closed after switching to the light theme: the whole app is in the new theme.
+#[test]
+fn theme_live_light() {
+    at_sizes("theme_live_light", &[(100, 30)], || {
+        let mut app = settings_app(0, true);
+        press(&mut app, KeyCode::Right);
+        press(&mut app, KeyCode::Right);
+        press(&mut app, KeyCode::Esc);
+        app
+    });
 }
 
 /// Every page, in the rows, typing and with errors, draws at every size without a panic.
@@ -2505,8 +3361,12 @@ fn commands_ui_survives_every_terminal_size() {
         }),
         ("popup", || {
             let mut app = online_in(new_app());
-            press(&mut app, KeyCode::Enter);
-            type_str(&mut app, "/");
+            press(&mut app, KeyCode::Char('i'));
+            type_str(&mut app, ":");
+            assert!(
+                render(&mut app, 80, 24).contains("Commands"),
+                "the commands list"
+            );
             app
         }),
     ];
@@ -2521,3 +3381,41 @@ fn commands_ui_survives_every_terminal_size() {
 }
 
 // ---- the tour (S5) ----
+
+/// Teams online with chats, the tour at step 1.
+fn tour_app() -> App {
+    let mut app = online_in(new_app());
+    app.start_tour();
+    app
+}
+
+#[test]
+fn tour_caption() {
+    at_sizes("tour_caption", &[(100, 30), (80, 24), (40, 12)], tour_app);
+}
+
+#[test]
+fn tour_paused() {
+    at_sizes("tour_paused", &[(80, 24)], || {
+        let mut app = tour_app();
+        press(&mut app, KeyCode::Char(' '));
+        app
+    });
+}
+
+#[test]
+fn tour_done() {
+    at_sizes("tour_done", &[(80, 24)], || {
+        let mut app = tour_app();
+        let start = ts(2026, 11, 16, 9, 30);
+        for round in 1..=4000 {
+            if app.tour_done() {
+                break;
+            }
+            app.tick(start + round * 250);
+            let _ = app.fire_timers();
+        }
+        assert!(app.tour_done(), "the tour did not reach its last step");
+        app
+    });
+}

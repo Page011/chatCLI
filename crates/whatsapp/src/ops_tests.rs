@@ -2265,6 +2265,14 @@ fn typing_on() -> Settings {
     s
 }
 
+/// Own typing and read receipts both off (they default to on).
+fn quiet() -> Settings {
+    let mut s = Settings::default();
+    s.whatsapp.send_typing = false;
+    s.whatsapp.send_read_receipts = false;
+    s
+}
+
 fn typing_cmd(chat: &str, active: bool) -> Command {
     Command::Typing {
         chat_id: chat.into(),
@@ -2274,7 +2282,7 @@ fn typing_cmd(chat: &str, active: bool) -> Command {
 
 #[tokio::test]
 async fn with_send_typing_off_no_chat_state_stanza_is_ever_sent() {
-    let (mut b, _erx, _rx) = backend();
+    let (mut b, _erx, _rx) = backend_with(quiet());
     let fake = linked(&mut b);
     for active in [true, false, true] {
         b.on_command(typing_cmd(ALEX, active)).await;
@@ -2308,16 +2316,15 @@ async fn with_send_typing_on_composing_goes_out_once_per_five_seconds_per_chat()
 
 #[tokio::test(start_paused = true)]
 async fn a_changed_setting_applies_without_a_restart() {
-    let (mut b, _erx, _rx) = backend();
+    let (mut b, _erx, _rx) = backend_with(quiet());
     let fake = linked(&mut b);
     b.on_command(typing_cmd(ALEX, true)).await;
-    assert!(fake.calls().is_empty(), "send_typing starts off");
+    assert!(fake.calls().is_empty(), "send_typing is off here");
     b.on_command(Command::Settings(Arc::new(typing_on()))).await;
     b.on_command(typing_cmd(ALEX, true)).await;
     assert!(matches!(&fake.calls()[..], [Call::Typing(j, true)] if j == &jid(ALEX)));
     // And back off: the next chat's composing is dropped again.
-    b.on_command(Command::Settings(Arc::new(Settings::default())))
-        .await;
+    b.on_command(Command::Settings(Arc::new(quiet()))).await;
     b.on_command(typing_cmd(SAM, true)).await;
     assert_eq!(fake.calls().len(), 1);
 }
@@ -2498,8 +2505,8 @@ fn unread_chat(b: &Backend) {
 }
 
 #[tokio::test]
-async fn reading_a_chat_marks_it_read_on_the_phone_without_receipts_by_default() {
-    let (mut b, mut erx, mut rx) = backend();
+async fn with_receipts_off_a_read_chat_is_marked_read_on_the_phone_without_receipts() {
+    let (mut b, mut erx, mut rx) = backend_with(quiet());
     let fake = linked(&mut b);
     unread_chat(&b);
     b.on_command(Command::MarkRead {
@@ -2522,10 +2529,8 @@ async fn reading_a_chat_marks_it_read_on_the_phone_without_receipts_by_default()
 }
 
 #[tokio::test]
-async fn read_receipts_go_out_only_when_the_setting_is_on() {
-    let mut s = Settings::default();
-    s.whatsapp.send_read_receipts = true;
-    let (mut b, mut erx, mut rx) = backend_with(s);
+async fn read_receipts_go_out_by_default() {
+    let (mut b, mut erx, mut rx) = backend();
     let fake = linked(&mut b);
     unread_chat(&b);
     b.on_command(Command::MarkRead {

@@ -1,0 +1,27 @@
+ Teams 103 LIVE   WhatsApp CONN…
+╔ Search ══════════════════════════════╗
+║/budget                               ║
+║T Project … budget review moved to Th…║
+║T Alex Exa… The budget notes: the sum…║
+║W Riley Sa… did you see the BUDGET fi…║
+║                                      ║
+║                                      ║
+║                                      ║
+║1 of 3 hits                           ║
+╚══════════════════════════════════════╝
+Type to search  Up/Down choose
+--- styled runs (everything else is default style) ---
+row 0 cols 0-15: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 18-25: fg=Reset bg=Reset BOLD
+row 0 cols 27-31: fg=Reset bg=Reset BOLD | DIM
+row 1 cols 1-8: fg=Reset bg=Reset BOLD
+row 2 cols 1-1: fg=Reset bg=Reset BOLD
+row 3 cols 1-12: fg=Reset bg=Reset BOLD | REVERSED
+row 3 cols 13-18: fg=Reset bg=Reset BOLD | UNDERLINED | REVERSED
+row 3 cols 19-38: fg=Reset bg=Reset BOLD | REVERSED
+row 4 cols 3-11: fg=Reset bg=Reset BOLD
+row 4 cols 17-22: fg=Reset bg=Reset BOLD
+row 5 cols 3-11: fg=Reset bg=Reset BOLD
+row 5 cols 29-34: fg=Reset bg=Reset BOLD
+row 9 cols 1-11: fg=Reset bg=Reset DIM
+row 11 cols 0-29: fg=Reset bg=Reset DIM

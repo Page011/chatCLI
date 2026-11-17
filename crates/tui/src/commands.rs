@@ -1,5 +1,5 @@
-//! The command registry: every `/command` (command bar, message box) and `:command` (vim
-//! box) is one entry here. Pure: `App::run_cmd` does the work, `ui` draws the lists.
+//! The command registry: every command of the `:` command bar and of `:command` at the start of
+//! the message box is one entry here. Pure: `App::run_cmd` does the work, `ui` draws the lists.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CmdId {
@@ -11,6 +11,7 @@ pub(crate) enum CmdId {
     Notifications,
     Search,
     Refresh,
+    ReadAll,
     SignIn,
     SignOut,
     About,
@@ -71,6 +72,12 @@ pub(crate) const COMMANDS: &[Cmd] = &[
     ),
     cmd(CmdId::Refresh, "refresh", &[], "reload the chat list"),
     cmd(
+        CmdId::ReadAll,
+        "readall",
+        &["markallread"],
+        "mark every chat read, after y/n",
+    ),
+    cmd(
         CmdId::SignIn,
         "signin",
         &["login"],
@@ -96,18 +103,10 @@ pub(crate) const COMMANDS: &[Cmd] = &[
 pub(crate) const COMMANDS_TITLE: &str = "Commands";
 
 /// The one-line pointer in the empty message pane and the sign-in panel.
-pub(crate) const COMMANDS_HINT: &str = "Type / for commands: /help /settings /keys";
+pub(crate) const COMMANDS_HINT: &str = "Press : for commands: help, settings, keys";
 
 fn bare(word: &str) -> &str {
-    word.trim_start_matches('/')
-}
-
-/// The command a word names: exact name or alias, ASCII-case-insensitive, leading `/` ignored.
-pub(crate) fn find(word: &str) -> Option<&'static Cmd> {
-    let w = bare(word);
-    COMMANDS.iter().find(|c| {
-        c.name.eq_ignore_ascii_case(w) || c.aliases.iter().any(|a| a.eq_ignore_ascii_case(w))
-    })
+    word.trim_start_matches(':')
 }
 
 /// Commands that match what was typed, best first: name prefix, alias prefix, name contains,
@@ -141,36 +140,38 @@ pub(crate) fn matching(query: &str) -> Vec<&'static Cmd> {
     hits.into_iter().map(|h| h.1).collect()
 }
 
-/// What the user typed in the message box.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Typed<'a> {
-    /// An ordinary message.
-    Text,
-    /// `//rest`: send `/rest` as text.
-    Escaped(&'a str),
-    /// `/word args`: a command (or an unknown word). `args` is trimmed.
-    Command(&'a str, &'a str),
+/// The command word being typed at the start of the draft: the text after the `:`, while the
+/// text before the cursor has no space and no second colon. `None` otherwise.
+pub(crate) fn colon_query(before: &str) -> Option<&str> {
+    let body = before.strip_prefix(':')?;
+    (!body.contains(|c: char| c.is_whitespace() || c == ':')).then_some(body)
 }
 
-/// Reads a trimmed draft: `//x` is text, a lone leading `/` is a command word.
-pub(crate) fn parse_typed(text: &str) -> Typed<'_> {
-    let Some(body) = text.strip_prefix('/') else {
-        return Typed::Text;
-    };
-    if body.starts_with('/') {
-        return Typed::Escaped(body);
+/// The commands `:word` at the start of the message box offers, best first. Stricter than the
+/// command bar, so an emoticon stays text: the word must be lower case, and it must be a whole
+/// name or alias (`:q`) or at least two letters of the start of one (`:he`). `:P` and `:D` are
+/// never commands. A lone `:` lists them all.
+pub(crate) fn typed_matches(word: &str) -> Vec<&'static Cmd> {
+    if word.chars().any(|c| c.is_uppercase()) {
+        return Vec::new();
     }
-    match body.split_once(char::is_whitespace) {
-        Some((word, args)) => Typed::Command(word, args.trim()),
-        None => Typed::Command(body, ""),
-    }
-}
-
-/// The command word being typed at the start of the draft: the text after the `/`, while the
-/// text before the cursor has no space and does not start with `//`. `None` otherwise.
-pub(crate) fn slash_query(before: &str) -> Option<&str> {
-    let body = before.strip_prefix('/')?;
-    (!body.starts_with('/') && !body.contains(char::is_whitespace)).then_some(body)
+    let whole = |w: &str| w == word;
+    let start = |w: &str| word.chars().count() >= 2 && w.starts_with(word);
+    let mut hits: Vec<(u8, &'static Cmd)> = COMMANDS
+        .iter()
+        .filter_map(|c| {
+            let names = || std::iter::once(c.name).chain(c.aliases.iter().copied());
+            if word.is_empty() || whole(c.name) || start(c.name) {
+                Some((0, c))
+            } else if names().any(|w| whole(w) || start(w)) {
+                Some((1, c))
+            } else {
+                None
+            }
+        })
+        .collect();
+    hits.sort_by_key(|h| h.0);
+    hits.into_iter().map(|h| h.1).collect()
 }
 
 #[cfg(test)]
@@ -191,22 +192,11 @@ mod tests {
     }
 
     #[test]
-    fn find_takes_name_alias_case_and_slash() {
-        assert_eq!(find("settings").map(|c| c.id), Some(CmdId::Settings));
-        assert_eq!(find("/Settings").map(|c| c.id), Some(CmdId::Settings));
-        assert_eq!(find("PREFS").map(|c| c.id), Some(CmdId::Settings));
-        assert_eq!(find("?").map(|c| c.id), Some(CmdId::Help));
-        assert_eq!(find("q").map(|c| c.id), Some(CmdId::Quit));
-        assert!(find("sett").is_none());
-        assert!(find("").is_none());
-    }
-
-    #[test]
     fn matching_lists_everything_for_an_empty_query_in_order() {
         let all: Vec<_> = matching("").iter().map(|c| c.id).collect();
         let table: Vec<_> = COMMANDS.iter().map(|c| c.id).collect();
         assert_eq!(all, table);
-        assert_eq!(matching("/").len(), COMMANDS.len());
+        assert_eq!(matching(":").len(), COMMANDS.len());
     }
 
     #[test]
@@ -228,26 +218,40 @@ mod tests {
     }
 
     #[test]
-    fn typed_text_is_text_a_command_or_an_escape() {
-        assert_eq!(parse_typed("hello /x"), Typed::Text);
-        assert_eq!(parse_typed("//hi"), Typed::Escaped("/hi"));
-        assert_eq!(parse_typed("/help"), Typed::Command("help", ""));
-        assert_eq!(parse_typed("/keys   vim "), Typed::Command("keys", "vim"));
-        assert_eq!(parse_typed("/"), Typed::Command("", ""));
-        assert_eq!(slash_query("/se"), Some("se"));
-        assert_eq!(slash_query("/"), Some(""));
-        assert_eq!(slash_query("//se"), None);
-        assert_eq!(slash_query("/keys v"), None);
-        assert_eq!(slash_query("hi /se"), None);
+    fn colon_query_is_the_word_after_a_leading_colon() {
+        assert_eq!(colon_query(":se"), Some("se"));
+        assert_eq!(colon_query(":"), Some(""));
+        assert_eq!(colon_query("::se"), None);
+        assert_eq!(colon_query(":thumbsup:"), None);
+        assert_eq!(colon_query(":keys v"), None);
+        assert_eq!(colon_query("hi :se"), None);
+        assert_eq!(colon_query("se"), None);
+    }
+
+    #[test]
+    fn typed_matches_leave_emoticons_alone() {
+        let ids = |w: &str| -> Vec<CmdId> { typed_matches(w).iter().map(|c| c.id).collect() };
+        assert_eq!(ids("").len(), COMMANDS.len());
+        assert_eq!(ids("he"), [CmdId::Help]);
+        assert_eq!(ids("se"), [CmdId::Settings, CmdId::Search]);
+        // Whole aliases, one letter or more.
+        assert_eq!(ids("q"), [CmdId::Quit]);
+        assert_eq!(ids("h"), [CmdId::Help]);
+        assert_eq!(ids("lo"), [CmdId::SignIn, CmdId::SignOut]);
+        // Emoticons and their lower-case twins: no command.
+        for face in ["P", "D", "p", "d", "o", "x", "3", "(", ")", "/", "Q", "He"] {
+            assert!(ids(face).is_empty(), "{face}");
+        }
+        // Only the start of a name or alias, never the middle or the doc.
+        assert!(ids("out").is_empty());
+        assert!(ids("sidebar").is_empty());
     }
 
     #[test]
     fn the_hint_names_real_commands() {
-        for word in COMMANDS_HINT
-            .split_whitespace()
-            .filter(|w| w.len() > 1 && w.starts_with('/'))
-        {
-            assert!(find(word).is_some(), "{word}");
+        let (_, names) = COMMANDS_HINT.split_once("commands: ").expect("the list");
+        for word in names.split(", ") {
+            assert_eq!(typed_matches(word).first().map(|c| c.name), Some(word));
         }
     }
 }

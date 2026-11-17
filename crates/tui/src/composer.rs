@@ -1,27 +1,38 @@
-//! The message draft: text plus a cursor, and the editing keys that move it. Pure and tested
-//! without a terminal.
-//!
-//! The cursor is an index in grapheme clusters, so it can never sit inside an emoji or between a
-//! letter and its accent, and one Backspace removes one whole flag, skin-tone emoji or ZWJ
-//! family. Byte offsets exist only inside this file, converted on the way in and out.
+//! The message draft: a `TextInput` (text, cursor and the editing keys) plus the `@mentions`
+//! chosen into it, and how it wraps in the message box. Pure and tested without a terminal.
+
+use std::ops::{Deref, DerefMut};
 
 use chatcli_core::model::PersonRef;
 use unicode_segmentation::UnicodeSegmentation;
 
+use crate::input::{class, TextInput};
 use crate::text::{cluster_width, graphemes};
 
 /// Rows the message box grows to before it scrolls.
 pub const MAX_ROWS: usize = 6;
 
-/// A draft being typed.
+/// A draft being typed. Edits through its `TextInput`, which it derefs to.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Composer {
-    text: String,
-    /// In grapheme clusters, 0..=count.
-    cursor: usize,
+    input: TextInput,
     /// People chosen from the `@` list, one entry per token inserted. Each stands for an
     /// `@name` in the text; a token the user later edited away is dropped at send time.
     pub mentions: Vec<PersonRef>,
+}
+
+impl Deref for Composer {
+    type Target = TextInput;
+
+    fn deref(&self) -> &TextInput {
+        &self.input
+    }
+}
+
+impl DerefMut for Composer {
+    fn deref_mut(&mut self) -> &mut TextInput {
+        &mut self.input
+    }
 }
 
 /// One screen row of a wrapped draft. `start..end` are grapheme indexes into the draft (the
@@ -33,164 +44,7 @@ pub struct Row {
     pub text: String,
 }
 
-/// How a character counts for word movement: spaces, word characters, everything else.
-fn class(g: &str) -> u8 {
-    match g.chars().next() {
-        _ if g.trim().is_empty() => 0,
-        Some(c) if c.is_alphanumeric() || c == '_' => 1,
-        _ => 2,
-    }
-}
-
 impl Composer {
-    pub fn text(&self) -> &str {
-        &self.text
-    }
-
-    /// Cursor position in grapheme clusters.
-    #[cfg(test)]
-    pub fn cursor(&self) -> usize {
-        self.cursor
-    }
-
-    fn count(&self) -> usize {
-        self.text.graphemes(true).count()
-    }
-
-    /// Byte offset of grapheme index `g` (the end of the text when past it).
-    fn byte_at(&self, g: usize) -> usize {
-        self.text
-            .grapheme_indices(true)
-            .nth(g)
-            .map_or(self.text.len(), |(i, _)| i)
-    }
-
-    /// Text before the cursor, for what completion looks at.
-    pub fn before_cursor(&self) -> &str {
-        &self.text[..self.byte_at(self.cursor)]
-    }
-
-    /// Replaces the draft; the cursor goes to the end.
-    #[cfg(test)]
-    pub fn set(&mut self, text: &str) {
-        self.text = text.to_string();
-        self.cursor = self.count();
-    }
-
-    /// Inserts already-cleaned text at the cursor (the caller strips control characters; only
-    /// `\n` is kept). The cursor ends after what was inserted, even when it joined the cluster
-    /// before it (a ZWJ, a skin tone, an accent).
-    pub fn insert_str(&mut self, s: &str) {
-        let at = self.byte_at(self.cursor);
-        self.text.insert_str(at, s);
-        self.cursor = self.text[..at + s.len()].graphemes(true).count();
-    }
-
-    pub fn insert_char(&mut self, c: char) {
-        let mut buf = [0u8; 4];
-        self.insert_str(c.encode_utf8(&mut buf));
-    }
-
-    pub fn left(&mut self) {
-        self.cursor = self.cursor.saturating_sub(1);
-    }
-
-    pub fn right(&mut self) {
-        self.cursor = (self.cursor + 1).min(self.count());
-    }
-
-    /// Start of the word before the cursor: skips spaces, then one run of one kind of character.
-    fn word_start(&self) -> usize {
-        let gs: Vec<&str> = graphemes(&self.text).collect();
-        let mut i = self.cursor.min(gs.len());
-        while i > 0 && class(gs[i - 1]) == 0 {
-            i -= 1;
-        }
-        if i > 0 {
-            let c = class(gs[i - 1]);
-            while i > 0 && class(gs[i - 1]) == c {
-                i -= 1;
-            }
-        }
-        i
-    }
-
-    pub fn word_left(&mut self) {
-        self.cursor = self.word_start();
-    }
-
-    /// To the start of the next word: past the run under the cursor, then past spaces.
-    pub fn word_right(&mut self) {
-        let gs: Vec<&str> = graphemes(&self.text).collect();
-        let mut i = self.cursor.min(gs.len());
-        if i < gs.len() && class(gs[i]) != 0 {
-            let c = class(gs[i]);
-            while i < gs.len() && class(gs[i]) == c {
-                i += 1;
-            }
-        }
-        while i < gs.len() && class(gs[i]) == 0 {
-            i += 1;
-        }
-        self.cursor = i;
-    }
-
-    /// Grapheme range of the line (up to `\n`) the cursor is on.
-    fn line_range(&self) -> (usize, usize) {
-        let gs: Vec<&str> = graphemes(&self.text).collect();
-        let at = self.cursor.min(gs.len());
-        let start = gs[..at]
-            .iter()
-            .rposition(|g| *g == "\n")
-            .map_or(0, |i| i + 1);
-        let end = gs[at..]
-            .iter()
-            .position(|g| *g == "\n")
-            .map_or(gs.len(), |i| at + i);
-        (start, end)
-    }
-
-    pub fn line_start(&mut self) {
-        self.cursor = self.line_range().0;
-    }
-
-    pub fn line_end(&mut self) {
-        self.cursor = self.line_range().1;
-    }
-
-    /// Removes graphemes `from..to`; the cursor goes to `from`.
-    fn remove(&mut self, from: usize, to: usize) {
-        if from < to {
-            let (a, b) = (self.byte_at(from), self.byte_at(to));
-            self.text.replace_range(a..b, "");
-        }
-        self.cursor = from;
-    }
-
-    /// Backspace: the whole cluster before the cursor.
-    pub fn delete_back(&mut self) {
-        if self.cursor > 0 {
-            self.remove(self.cursor - 1, self.cursor);
-        }
-    }
-
-    pub fn delete_forward(&mut self) {
-        if self.cursor < self.count() {
-            self.remove(self.cursor, self.cursor + 1);
-        }
-    }
-
-    /// Ctrl+W: from the start of the word before the cursor to the cursor.
-    pub fn delete_word_back(&mut self) {
-        self.remove(self.word_start(), self.cursor);
-    }
-
-    /// Ctrl+U: empties the line the cursor is on (the whole draft when it is one line).
-    pub fn clear_line(&mut self) {
-        let (a, b) = self.line_range();
-        self.remove(a, b);
-    }
-
     /// Backspace on a mention token the `@` list inserted (`@Name` with the space completion adds,
     /// or without it): removes the whole token and its entry. False when the cursor is not right
     /// after such a token, so the caller falls back to one character.
@@ -217,7 +71,8 @@ impl Composer {
             return false;
         };
         self.mentions.remove(i);
-        self.remove(self.cursor - n, self.cursor);
+        let at = self.cursor();
+        self.input.remove(at - n, at);
         true
     }
 
@@ -245,13 +100,6 @@ impl Composer {
         out
     }
 
-    /// Replaces the `n` clusters before the cursor with `with` (completion).
-    pub fn replace_before_cursor(&mut self, n: usize, with: &str) {
-        let n = n.min(self.cursor);
-        self.remove(self.cursor - n, self.cursor);
-        self.insert_str(with);
-    }
-
     /// Puts the cursor on the character under a click: `row` and `col` are in the wrapped draft
     /// (`layout(width)`), the column counted in display cells. A click past the end of a row
     /// lands at its end; a wide character takes the click on either of its two cells.
@@ -271,23 +119,22 @@ impl Composer {
             at += 1;
         }
         // The cursor at the end of a wrapped row would draw on the next row.
-        self.cursor = if wrapped && at == r.end {
+        let at = if wrapped && at == r.end {
             at.saturating_sub(1).max(r.start)
         } else {
             at
         };
+        self.input.set_cursor(at);
     }
 
     /// The draft wrapped to `width` columns, and the cursor's row and column. One column is kept
     /// free so a cursor at the end of a full row still has a cell.
     pub fn layout(&self, width: usize) -> (Vec<Row>, usize, usize) {
-        let rows = wrap_rows(&self.text, width.saturating_sub(1).max(1));
-        let row = rows
-            .iter()
-            .rposition(|r| r.start <= self.cursor)
-            .unwrap_or(0);
+        let rows = wrap_rows(self.text(), width.saturating_sub(1).max(1));
+        let cursor = self.cursor();
+        let row = rows.iter().rposition(|r| r.start <= cursor).unwrap_or(0);
         let r = &rows[row];
-        let upto = self.cursor.saturating_sub(r.start);
+        let upto = cursor.saturating_sub(r.start);
         let col: usize = graphemes(&r.text).take(upto).map(cluster_width).sum();
         (rows, row, col)
     }
@@ -368,137 +215,6 @@ mod tests {
 
     const FAMILY: &str = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
     const FLAG: &str = "\u{1F1FA}\u{1F1F3}";
-    const THUMB: &str = "\u{1F44D}\u{1F3FD}";
-
-    #[test]
-    fn inserts_at_the_cursor_for_ascii_accents_and_emoji() {
-        let mut d = c("helo");
-        d.left();
-        d.insert_char('l');
-        assert_eq!((d.text(), d.cursor()), ("hello", 4));
-
-        let mut d = c("cafe");
-        d.insert_char('\u{301}');
-        // The accent joined the e: still 4 clusters, cursor after them.
-        assert_eq!((d.text(), d.cursor()), ("cafe\u{301}", 4));
-
-        let mut d = c("ab");
-        d.left();
-        d.insert_str(FAMILY);
-        assert_eq!(d.text(), format!("a{FAMILY}b"));
-        assert_eq!(d.cursor(), 2);
-    }
-
-    #[test]
-    fn backspace_removes_one_whole_emoji() {
-        for emoji in [
-            FAMILY,
-            FLAG,
-            THUMB,
-            "\u{2764}\u{FE0F}",
-            "1\u{FE0F}\u{20E3}",
-            "e\u{301}",
-        ] {
-            let mut d = c(&format!("hi{emoji}"));
-            d.delete_back();
-            assert_eq!(d.text(), "hi", "{emoji:?}");
-            assert_eq!(d.cursor(), 2);
-        }
-        let mut d = c(&format!("{FLAG}x"));
-        d.left();
-        d.delete_forward();
-        assert_eq!(d.text(), FLAG);
-        d.delete_forward();
-        assert_eq!(d.text(), FLAG, "nothing after the cursor");
-        d.left();
-        d.delete_forward();
-        assert_eq!(d.text(), "");
-    }
-
-    #[test]
-    fn delete_at_the_ends_is_harmless() {
-        let mut d = Composer::default();
-        d.delete_back();
-        d.delete_forward();
-        d.left();
-        d.word_left();
-        d.word_right();
-        d.line_start();
-        d.line_end();
-        d.delete_word_back();
-        d.clear_line();
-        assert_eq!((d.text(), d.cursor()), ("", 0));
-    }
-
-    #[test]
-    fn cursor_moves_by_cluster() {
-        let mut d = c(&format!("a{FAMILY}b"));
-        assert_eq!(d.cursor(), 3);
-        d.left();
-        d.left();
-        assert_eq!(d.cursor(), 1);
-        d.right();
-        assert_eq!(d.cursor(), 2);
-        d.right();
-        d.right();
-        assert_eq!(d.cursor(), 3, "stops at the end");
-    }
-
-    #[test]
-    fn word_movement_and_word_delete() {
-        let mut d = c("one two,  three");
-        d.word_left();
-        assert_eq!(d.cursor(), 10);
-        d.word_left();
-        assert_eq!(d.cursor(), 7, "punctuation is its own run");
-        d.word_left();
-        assert_eq!(d.cursor(), 4);
-        d.word_right();
-        assert_eq!(d.cursor(), 7);
-        d.word_right();
-        assert_eq!(d.cursor(), 10);
-        d.word_right();
-        d.word_right();
-        assert_eq!(d.cursor(), 15);
-
-        let mut d = c("say hello world");
-        d.delete_word_back();
-        assert_eq!((d.text(), d.cursor()), ("say hello ", 10));
-        d.delete_word_back();
-        assert_eq!(d.text(), "say ");
-    }
-
-    #[test]
-    fn home_end_and_clear_work_on_the_current_line() {
-        let mut d = c("first\nsecond line\nthird");
-        d.left();
-        d.left();
-        d.left();
-        d.left();
-        d.left();
-        d.left();
-        // Cursor now on the newline that ends "second line" (grapheme 17).
-        d.line_start();
-        assert_eq!(d.cursor(), 6);
-        d.right();
-        d.line_end();
-        assert_eq!(d.cursor(), 17);
-        d.clear_line();
-        assert_eq!(d.text(), "first\n\nthird");
-        assert_eq!(d.cursor(), 6);
-    }
-
-    #[test]
-    fn before_cursor_and_replace() {
-        let mut d = c("hi :thu there");
-        for _ in 0..6 {
-            d.left();
-        }
-        assert_eq!(d.before_cursor(), "hi :thu");
-        d.replace_before_cursor(4, "\u{1F44D}");
-        assert_eq!(d.text(), "hi \u{1F44D} there");
-        assert_eq!(d.cursor(), 4);
-    }
 
     #[test]
     fn wrap_rows_break_after_spaces_and_never_cut_clusters() {

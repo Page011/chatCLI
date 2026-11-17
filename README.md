@@ -12,7 +12,7 @@
 - Teams and WhatsApp direct/group chats in separate tabs
 - Replies, reactions, editing, deleting, mentions and attachments
 - Search, unread counts, notifications, configurable themes and keybindings
-- Optional Vim keybindings, keyboard navigation and local message storage
+- Rebindable keys, keyboard navigation and local message storage
 - Local-first: connect your own accounts; no chatcli-hosted messaging service
 
 ## Get started
@@ -56,14 +56,18 @@ Teams works without a relay; press `r` to refresh chats. For automatic live upda
 | Key | Action |
 | --- | --- |
 | `Tab` | Switch network |
-| `↑` / `↓`, `Enter` | Select and open a chat |
-| `Enter` | Send message |
+| `↑` / `↓` or `j` / `k` | Move through chats or messages |
+| `Enter` | Go into a chat and select a message to reply/react/edit |
+| `i` | Type in the chat's message box |
+| `Esc` | Back out: message box, selection, chat list |
+| `Enter` | Send message (in the message box) |
 | `Ctrl+J` | New line |
-| `Ctrl+Up` | Select a message to reply/react/edit |
+| `/` | Filter chats |
+| `:` | Commands |
 | `Ctrl+O` | Attach a file |
 | `Ctrl+F` | Search saved messages |
 | `F2` | Settings |
-| `F1` / `?` | Help |
+| `?` / `F1` | Help |
 | `Ctrl+C` | Quit |
 
 ## Important notes

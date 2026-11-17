@@ -2,6 +2,7 @@
 //! from the `emojis` crate (static, no network). Pure and tested without a terminal; drawing
 //! lives in `ui`.
 
+use crate::input::TextInput;
 use emojis::{Emoji, Group, SkinTone};
 
 /// Suggestions shown in the `:shortcode` popup at most.
@@ -127,7 +128,7 @@ fn group_of(cat: usize) -> Option<Group> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Picker {
     pub purpose: PickerFor,
-    pub query: String,
+    pub query: TextInput,
     pub cat: usize,
     pub sel: usize,
     pub top: usize,
@@ -137,7 +138,7 @@ impl Picker {
     pub fn new(purpose: PickerFor, has_recents: bool) -> Picker {
         Picker {
             purpose,
-            query: String::new(),
+            query: TextInput::default(),
             // Recent emoji first when there are any; otherwise the first real category.
             cat: usize::from(!has_recents),
             sel: 0,
@@ -149,7 +150,7 @@ impl Picker {
     /// query, otherwise the category (recents come from `recents`, newest first; entries the
     /// table does not know are skipped).
     pub fn items(&self, recents: &[String]) -> Vec<&'static Emoji> {
-        let q = self.query.trim().to_lowercase();
+        let q = self.query.text().trim().to_lowercase();
         if !q.is_empty() {
             let mut hits: Vec<(u8, &'static Emoji)> = base_emojis()
                 .filter_map(|e| {

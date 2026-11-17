@@ -9,7 +9,7 @@ use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::{Margin, Position};
 
 use super::{App, Out, WHEEL_LINES};
-use crate::keymap::Action;
+use crate::keymap::{Action, Context};
 use crate::ui::{self, FooterHit};
 
 /// A click this soon after a click raised a question is ignored by that question.
@@ -114,15 +114,11 @@ impl App {
             // Tab puts the entry in the box; Enter then attaches a file (a folder just opened).
             self.attach_complete();
             if !dir {
-                self.attach_action(n, Action::PopupAccept);
+                self.attach_action(n, Action::Accept);
             }
             return;
         };
-        let key = if up {
-            Action::PopupUp
-        } else {
-            Action::PopupDown
-        };
+        let key = if up { Action::Up } else { Action::Down };
         for _ in 0..WHEEL_LINES {
             self.attach_action(n, key);
         }
@@ -155,7 +151,16 @@ impl App {
         let (net, chat) = (self.active, self.active().open.clone());
         let was_empty = self.active().draft().is_empty();
         let ctx = self.context();
-        let mut out = self.run_action(action, ctx);
+        // The completion list owns Up, Down, Enter and Esc over the message box, as for keys.
+        let list_key = matches!(
+            action,
+            Action::Up | Action::Down | Action::Accept | Action::Back
+        );
+        let mut out = if self.popup.is_some() && ctx == Context::Composer && list_key {
+            self.popup_action(action, ctx)
+        } else {
+            self.run_action(action, ctx)
+        };
         out.extend(self.composing_after(net, chat, was_empty));
         if self.popup_alive {
             out.extend(self.refresh_popup());
@@ -170,7 +175,6 @@ impl App {
 mod tests {
     use super::*;
     use crate::app::Prompt;
-    use crate::keymap::Context;
     use crate::settings_view::{PageEdit, RowId, Section};
     use crate::text::Clock;
     use chatcli_core::model::{ChatSummary, Event, Network, Status};
@@ -411,7 +415,7 @@ mod tests {
         }
         a.settings_fit();
         let p = a.settings_page.as_ref().unwrap();
-        let top = crate::settings_view::fit_top(p.top, p.row, g.list.height as usize, rows.len());
+        let top = crate::list::keep_visible(p.top, p.row, g.list.height as usize, rows.len());
         let at = g.list.y + (k - top) as u16;
         click(&mut a, g.list.x + 1, at);
         assert!(matches!(a.prompt, Some(Prompt::ResetKeys)));
@@ -453,7 +457,7 @@ mod tests {
         let (x, y) = row_y(&a, 0);
         click(&mut a, x, y);
         let p = a.media.attach.as_ref().unwrap();
-        assert!(p.input.starts_with("adir"));
+        assert!(p.input.text().starts_with("adir"));
         // Back to the top level and click the file: it attaches and the prompt closes.
         a.media.attach.as_mut().unwrap().input.clear();
         a.attach_refresh();

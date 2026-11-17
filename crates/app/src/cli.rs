@@ -17,8 +17,7 @@ const SEARCH_LIMIT: u32 = 50;
 pub const USAGE: &[&str] = &[
     "usage:",
     "  chatcli                                  open the full-screen chat client",
-    "  chatcli --keys <default|vim>             open it with a key preset (wins over settings.toml)",
-    "  chatcli --demo [--tour] [--keys <default|vim>]  try the screen with fake data (no store, no network); --tour plays a guided tour",
+    "  chatcli --demo [--tour]                  try the screen with fake data (no store, no network); --tour plays a guided tour",
     "  chatcli --version                        print the version",
     "  chatcli relay setup <url> [--rotate]     make the relay secrets (refuses to replace working ones)",
     "  chatcli relay url <url>                  change the relay URL, keep the secrets",
@@ -539,10 +538,7 @@ files_read = 3
             Path::new("settings.toml"),
         ));
         assert!(
-            report
-                .problems
-                .iter()
-                .any(|p| p.message.contains("list_down")),
+            report.problems.iter().any(|p| p.message.contains("down")),
             "{:?}",
             report.problems
         );

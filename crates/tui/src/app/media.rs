@@ -4,7 +4,7 @@
 //! (`take_open_files`, `take_decodes`, `take_clipboard_request`, `take_trash`) and the run loop
 //! does them and reports back (`open_done`, `thumb_ready`, `clipboard_done`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use chatcli_core::limits;
@@ -16,6 +16,7 @@ use chatcli_core::model::{
 
 use super::{too_long, App, Focus, Out, Prompt};
 use crate::attach::{self, Candidate};
+use crate::input::TextInput;
 use crate::keymap::Action;
 use crate::media_view::{self as mv, Depth, Fetch, MediaKey, Then, Thumb, View};
 use crate::text::{clean_line, truncate};
@@ -23,6 +24,8 @@ use crate::text::{clean_line, truncate};
 const MIB: u64 = 1024 * 1024;
 /// Longest file name shown in a chip or a question.
 const NAME_MAX: usize = 40;
+/// How many of a chat's newest messages get their pictures downloaded by themselves.
+const AUTO_IMAGE_MSGS: usize = 20;
 
 /// A file chosen for the next message of one chat. Nothing is read or sent until Enter.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,7 +53,7 @@ impl Pending {
 /// The path prompt: what is typed and the folder entries that match it.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct AttachPrompt {
-    pub input: String,
+    pub input: TextInput,
     pub cands: Vec<Candidate>,
     pub sel: usize,
 }
@@ -67,6 +70,10 @@ pub struct FileJob {
 pub(crate) struct Ctl {
     /// `[media] inline_images`.
     pub inline: bool,
+    /// `[whatsapp] download_images`.
+    pub auto: bool,
+    /// Pictures already requested by themselves this run: never asked for twice.
+    auto_tried: HashSet<(Network, MediaKey)>,
     /// Largest file a backend downloads (`[media] max_file_mb`).
     pub max_file_bytes: u64,
     /// The media cache folder: a path an event gives that is not inside it is refused.
@@ -87,6 +94,8 @@ impl Default for Ctl {
     fn default() -> Ctl {
         Ctl {
             inline: true,
+            auto: false,
+            auto_tried: HashSet::new(),
             max_file_bytes: 25 * MIB,
             root: None,
             depth: Depth::detect(),
@@ -496,13 +505,19 @@ impl App {
             }
             _ => {}
         }
+        self.begin_view(n, key, &att, &fetch)
+    }
+
+    /// Start showing a picture: decode it when it is cached, else fetch it (shown when it
+    /// arrives). Shared by `v` and the automatic downloads.
+    fn begin_view(&mut self, n: Network, key: MediaKey, att: &Attachment, fetch: &Fetch) -> Out {
         if let Err(e) = self.download_cap(att.size) {
             self.ns_mut(n).media.entry(key).view = View::Failed(mv::TOO_LARGE.to_string());
             self.push_notice(n, mv::TOO_LARGE, true);
             log::error("tui", &format!("image not previewed: {e}"));
             return Vec::new();
         }
-        if let Fetch::Ready(p) = &fetch {
+        if let Fetch::Ready(p) = fetch {
             if p.is_file() {
                 self.ns_mut(n).media.entry(key.clone()).view = View::Decoding;
                 self.media.decodes.push(FileJob {
@@ -517,17 +532,71 @@ impl App {
             self.push_notice(n, "This picture cannot be downloaded: press o.", true);
             return Vec::new();
         }
+        let cmd = Command::FetchMedia {
+            chat_id: key.chat.clone(),
+            message_id: key.msg.clone(),
+            index: key.idx,
+        };
         let item = self.ns_mut(n).media.entry(key);
         item.fetch = Fetch::Downloading(Then::View);
         // No footer notice: the chip under the message already says "downloading...".
-        vec![(
-            n,
-            Command::FetchMedia {
-                chat_id: chat,
-                message_id: msg,
-                index: idx,
-            },
-        )]
+        vec![(n, cmd)]
+    }
+
+    /// `[whatsapp] download_images`: once the open WhatsApp chat counts as read (opened, or
+    /// previewed long enough) or a new message lands in it, fetch the pictures of its newest
+    /// messages and show them as `v` would. Each picture is asked for once per run; a failure
+    /// is retried only by hand with `v`.
+    pub(super) fn auto_images(&mut self, n: Network) -> Out {
+        let ns = self.ns(n);
+        if !self.media.auto
+            || !self.media.inline
+            || n != Network::WhatsApp
+            || !ns.caps.fetch_media
+            || ns.previewing
+            || !self.convo_visible(n)
+        {
+            return Vec::new();
+        }
+        let Some(chat) = ns.open.clone() else {
+            return Vec::new();
+        };
+        let wanted: Vec<(MediaKey, Attachment)> = ns
+            .messages
+            .get(&chat)
+            .into_iter()
+            .flat_map(|ms| ms.iter().rev().take(AUTO_IMAGE_MSGS))
+            .flat_map(|m| {
+                m.attachments
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, a)| a.kind == MediaKind::Image && !a.fetch_ref.is_empty())
+                    .map(|(i, a)| {
+                        let key = MediaKey {
+                            chat: chat.clone(),
+                            msg: m.id.clone(),
+                            idx: i as u32,
+                        };
+                        (key, a.clone())
+                    })
+            })
+            .collect();
+        let mut out = Vec::new();
+        for (key, att) in wanted {
+            let idle = self
+                .ns(n)
+                .media
+                .items
+                .get(&key)
+                .is_none_or(|i| i.fetch == Fetch::Idle && i.view == View::Hidden);
+            if idle
+                && self.download_cap(att.size).is_ok()
+                && self.media.auto_tried.insert((n, key.clone()))
+            {
+                out.extend(self.begin_view(n, key, &att, &Fetch::Idle));
+            }
+        }
+        out
     }
 
     // ---- choosing a file ----
@@ -550,7 +619,7 @@ impl App {
         }
         let cands = attach::complete("", &self.attach_base());
         self.media.attach = Some(AttachPrompt {
-            input: String::new(),
+            input: TextInput::default(),
             cands,
             sel: 0,
         });
@@ -560,7 +629,7 @@ impl App {
     pub(super) fn attach_refresh(&mut self) {
         let base = self.attach_base();
         if let Some(a) = self.media.attach.as_mut() {
-            a.cands = attach::complete(&a.input, &base);
+            a.cands = attach::complete(a.input.text(), &base);
             a.sel = 0;
         }
     }
@@ -569,18 +638,11 @@ impl App {
     pub(super) fn attach_type(&mut self, text: &str) {
         if let Some(a) = self.media.attach.as_mut() {
             // A pasted path is often quoted (a dropped file): the quotes are not part of it.
-            a.input.push_str(if a.input.is_empty() {
+            a.input.insert_str(if a.input.is_empty() {
                 attach::unquote(text)
             } else {
                 text
             });
-        }
-        self.attach_refresh();
-    }
-
-    pub(super) fn attach_backspace(&mut self) {
-        if let Some(a) = self.media.attach.as_mut() {
-            a.input.pop();
         }
         self.attach_refresh();
     }
@@ -593,12 +655,12 @@ impl App {
         };
         // A network path is listed only now, on the user's Tab: typing or pasting one never
         // makes Windows contact that machine.
-        if a.cands.is_empty() && attach::is_network_path(&a.input) {
-            a.cands = attach::scan(&a.input, &base);
+        if a.cands.is_empty() && attach::is_network_path(a.input.text()) {
+            a.cands = attach::scan(a.input.text(), &base);
             a.sel = 0;
         }
         if let Some(c) = a.cands.get(a.sel).cloned() {
-            a.input = attach::apply(&a.input, &c);
+            a.input.set(&attach::apply(a.input.text(), &c));
             self.attach_refresh();
         }
     }
@@ -606,17 +668,17 @@ impl App {
     /// The popup keys inside the path prompt: Up and Down choose, Enter attaches, Esc cancels.
     pub(super) fn attach_action(&mut self, n: Network, action: Action) {
         match action {
-            Action::PopupUp | Action::PopupDown => {
+            Action::Up | Action::Down => {
                 if let Some(a) = self.media.attach.as_mut() {
                     let last = a.cands.len().saturating_sub(1);
-                    a.sel = if action == Action::PopupUp {
+                    a.sel = if action == Action::Up {
                         a.sel.saturating_sub(1)
                     } else {
                         (a.sel + 1).min(last)
                     };
                 }
             }
-            Action::PopupAccept => self.attach_accept(n),
+            Action::Accept => self.attach_accept(n),
             _ => self.media.attach = None,
         }
     }
@@ -627,7 +689,7 @@ impl App {
         let Some(a) = self.media.attach.as_ref() else {
             return;
         };
-        let mut input = a.input.clone();
+        let mut input = a.input.text().to_string();
         if input.trim().is_empty() {
             return;
         }
@@ -655,7 +717,7 @@ impl App {
                 input.push(sep);
             }
             if let Some(a) = self.media.attach.as_mut() {
-                a.input = input;
+                a.input.set(&input);
             }
             self.attach_refresh();
             return;
@@ -902,6 +964,7 @@ mod tests {
     use super::*;
     use crate::text::Clock;
     use chatcli_core::model::{Capabilities, ChatKind, ChatSummary, Event, Status};
+    use chatcli_core::settings::Settings;
     use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
 
     fn clock() -> Clock {
@@ -1003,9 +1066,9 @@ mod tests {
         app
     }
 
-    /// Select the newest message (Ctrl+Up).
+    /// Select the newest message (Esc from the message box).
     fn select(app: &mut App) {
-        app.handle_key(key(KeyCode::Up, KeyModifiers::CONTROL));
+        app.handle_key(key(KeyCode::Esc, KeyModifiers::NONE));
         assert_eq!(app.active().focus, Focus::Select);
     }
 
@@ -1501,9 +1564,18 @@ mod tests {
         ctrl(&mut app, 'o');
         typed(&mut app, "docs");
         press(&mut app, KeyCode::Enter);
-        assert!(app.attach_prompt().unwrap().input.starts_with("docs"));
+        assert!(app
+            .attach_prompt()
+            .unwrap()
+            .input
+            .text()
+            .starts_with("docs"));
         assert!(
-            app.attach_prompt().unwrap().input.ends_with(['/', '\\']),
+            app.attach_prompt()
+                .unwrap()
+                .input
+                .text()
+                .ends_with(['/', '\\']),
             "inside the folder now"
         );
         assert!(pending(&app).is_none(), "a folder is never attached");
@@ -1643,13 +1715,13 @@ mod tests {
         press(&mut app, KeyCode::Backspace);
         assert!(pending(&app).is_none());
         assert_eq!(app.active().draft(), "a");
-        // Esc removes it before it leaves the box.
+        // Esc removes it before it leaves the box for message selection.
         app.attach_or_notice(Network::Teams, "a", f, false);
         press(&mut app, KeyCode::Esc);
         assert!(pending(&app).is_none());
         assert_eq!(app.active().focus, Focus::Composer);
         press(&mut app, KeyCode::Esc);
-        assert_eq!(app.active().focus, Focus::List);
+        assert_eq!(app.active().focus, Focus::Select);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1939,5 +2011,229 @@ mod tests {
         assert!(c.inline);
         assert_eq!(c.max_file_bytes, 25 * MIB);
         assert!(c.root.is_none());
+    }
+
+    // ---- [whatsapp] download_images ----
+
+    fn wa_message(id: &str, ts: i64, att: Vec<Attachment>) -> ChatMessage {
+        ChatMessage {
+            network: Network::WhatsApp,
+            chat_id: "w".into(),
+            id: id.into(),
+            ts,
+            sender: "Alex Example".into(),
+            state: MessageState::Sent,
+            attachments: att,
+            ..ChatMessage::blank(Network::WhatsApp)
+        }
+    }
+
+    fn image(size: u64) -> Attachment {
+        Attachment {
+            size: Some(size),
+            ..attachment(MediaKind::Image, "pic.jpg")
+        }
+    }
+
+    fn fetched(out: &Out) -> Vec<String> {
+        out.iter()
+            .filter_map(|(_, c)| match c {
+                Command::FetchMedia { message_id, .. } => Some(message_id.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// WhatsApp online, chat "w" listed and its messages held, but not opened yet.
+    fn wa_closed(settings: &Settings, caps: Capabilities, messages: Vec<ChatMessage>) -> App {
+        let mut app = App::with_settings(clock(), settings);
+        app.set_color_depth(Depth::True);
+        app.handle_event(Event::Status(
+            Network::WhatsApp,
+            Status::Online {
+                live: true,
+                detail: None,
+            },
+        ));
+        app.handle_event(Event::Capabilities {
+            network: Network::WhatsApp,
+            caps,
+        });
+        app.handle_event(Event::Chats(
+            Network::WhatsApp,
+            vec![
+                ChatSummary {
+                    id: "w".into(),
+                    title: "Alex Example".into(),
+                    kind: ChatKind::Direct,
+                    last_ts: Some(1),
+                    ..ChatSummary::blank(Network::WhatsApp)
+                },
+                ChatSummary {
+                    id: "x".into(),
+                    title: "Sam Sample".into(),
+                    kind: ChatKind::Direct,
+                    last_ts: Some(0),
+                    ..ChatSummary::blank(Network::WhatsApp)
+                },
+            ],
+        ));
+        press(&mut app, KeyCode::Tab);
+        assert_eq!(app.active, Network::WhatsApp);
+        app.handle_event(Event::Messages {
+            network: Network::WhatsApp,
+            chat_id: "w".into(),
+            messages,
+        });
+        app
+    }
+
+    fn a_picture_and_a_file() -> Vec<ChatMessage> {
+        vec![
+            wa_message("p1", 1000, vec![image(2048)]),
+            wa_message("f1", 2000, vec![attachment(MediaKind::Document, "a.pdf")]),
+        ]
+    }
+
+    fn history(app: &mut App) -> Out {
+        app.handle_event(Event::Messages {
+            network: Network::WhatsApp,
+            chat_id: "w".into(),
+            messages: a_picture_and_a_file(),
+        })
+    }
+
+    #[test]
+    fn opening_a_whatsapp_chat_fetches_its_pictures_and_only_once() {
+        let mut app = wa_closed(
+            &Settings::default(),
+            Capabilities::all(),
+            a_picture_and_a_file(),
+        );
+        let out = press(&mut app, KeyCode::Enter);
+        assert_eq!(fetched(&out), ["p1"], "the picture, not the file");
+        let key = MediaKey {
+            chat: "w".into(),
+            msg: "p1".into(),
+            idx: 0,
+        };
+        let item = app.ns(Network::WhatsApp).media.items.get(&key).unwrap();
+        assert_eq!(item.fetch, Fetch::Downloading(Then::View));
+        // History arriving again, or Enter again: never asked twice.
+        assert!(fetched(&history(&mut app)).is_empty());
+        assert!(fetched(&press(&mut app, KeyCode::Enter)).is_empty());
+        // A failure is not retried by itself.
+        app.media_failed(
+            Network::WhatsApp,
+            "w".into(),
+            "p1".into(),
+            0,
+            "gone".into(),
+            None,
+        );
+        assert!(fetched(&history(&mut app)).is_empty());
+    }
+
+    #[test]
+    fn a_picture_arriving_in_the_open_whatsapp_chat_is_fetched() {
+        let mut app = wa_closed(
+            &Settings::default(),
+            Capabilities::all(),
+            a_picture_and_a_file(),
+        );
+        press(&mut app, KeyCode::Enter);
+        let out = app.handle_event(Event::Message(wa_message("p2", 3000, vec![image(10)])));
+        assert_eq!(fetched(&out), ["p2"]);
+        // Our own send is not downloaded back.
+        let mut mine = wa_message("p3", 4000, vec![image(10)]);
+        mine.from_me = true;
+        assert!(fetched(&app.handle_event(Event::Message(mine))).is_empty());
+    }
+
+    #[test]
+    fn only_the_newest_twenty_messages_are_fetched() {
+        let many: Vec<ChatMessage> = (0..21)
+            .map(|i| wa_message(&format!("m{i:02}"), 1000 + i, vec![image(10)]))
+            .collect();
+        let mut app = wa_closed(&Settings::default(), Capabilities::all(), many);
+        let ids = fetched(&press(&mut app, KeyCode::Enter));
+        assert_eq!(ids.len(), 20);
+        assert!(!ids.contains(&"m00".to_string()));
+    }
+
+    #[test]
+    fn pictures_over_the_size_cap_are_skipped() {
+        let big = vec![wa_message("big", 1000, vec![image(26 * MIB)])];
+        let mut app = wa_closed(&Settings::default(), Capabilities::all(), big);
+        assert!(fetched(&press(&mut app, KeyCode::Enter)).is_empty());
+    }
+
+    #[test]
+    fn nothing_is_fetched_when_a_gate_is_closed() {
+        let mut off = Settings::default();
+        off.whatsapp.download_images = false;
+        let mut no_inline = Settings::default();
+        no_inline.media.inline_images = false;
+        let mut no_fetch = Capabilities::all();
+        no_fetch.fetch_media = false;
+        for (s, caps, why) in [
+            (off, Capabilities::all(), "download_images off"),
+            (no_inline, Capabilities::all(), "inline images off"),
+            (Settings::default(), no_fetch, "backend cannot fetch"),
+        ] {
+            let mut app = wa_closed(&s, caps, a_picture_and_a_file());
+            assert!(
+                fetched(&press(&mut app, KeyCode::Enter)).is_empty(),
+                "{why}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_previewed_chat_is_fetched_only_once_the_read_timer_fires() {
+        let mut app = wa_closed(
+            &Settings::default(),
+            Capabilities::all(),
+            a_picture_and_a_file(),
+        );
+        press(&mut app, KeyCode::Down);
+        press(&mut app, KeyCode::Up);
+        assert_eq!(app.ns(Network::WhatsApp).open.as_deref(), Some("w"));
+        assert!(app.ns(Network::WhatsApp).previewing, "only previewed");
+        assert!(
+            fetched(&history(&mut app)).is_empty(),
+            "a passing preview fetches nothing"
+        );
+        let mut got = Vec::new();
+        for _ in 0..10 {
+            let Some(due) = app.next_deadline() else {
+                break;
+            };
+            app.tick(due);
+            got.extend(fetched(&app.fire_timers()));
+        }
+        assert_eq!(got, ["p1"]);
+    }
+
+    #[test]
+    fn teams_is_untouched() {
+        let mut app = app_with(vec![with_attachments(
+            "t1",
+            "",
+            vec![attachment(MediaKind::Image, "a.png")],
+        )]);
+        app.media.auto = true;
+        let out = app.handle_event(Event::Messages {
+            network: Network::Teams,
+            chat_id: "a".into(),
+            messages: vec![with_attachments(
+                "t2",
+                "",
+                vec![attachment(MediaKind::Image, "b.png")],
+            )],
+        });
+        assert!(fetched(&out).is_empty());
+        let out = press(&mut app, KeyCode::Enter);
+        assert!(fetched(&out).is_empty());
     }
 }

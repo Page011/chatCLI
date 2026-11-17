@@ -136,9 +136,13 @@ pub(crate) fn suggest_members(members: &[PersonRef], query: &str, limit: usize) 
             // The trailing space ends the mention, so the list does not reopen on it.
             insert: format!("@{} ", p.name),
             person: Some(p.clone()),
+            command: None,
         })
         .collect()
 }
+
+/// How many places `jump_back` remembers per network.
+const JUMPS_KEPT: usize = 50;
 
 impl App {
     // ---- selection (issue 11) ----
@@ -168,7 +172,8 @@ impl App {
             .find(|m| &m.id == id)
     }
 
-    /// Ctrl+Up (vim `v`): select the newest message of the open chat. From the chat list this
+    /// `select_messages` (no default key; Esc from the message box does the same): select the newest
+    /// message of the open chat. From the chat list this
     /// also opens the chat, like Enter. An empty chat stays as it was, with a notice.
     pub(super) fn enter_select(&mut self, n: Network) -> Out {
         let ids = self.selectable_ids(n);
@@ -187,7 +192,26 @@ impl App {
         out
     }
 
-    /// Back to the message box.
+    /// Highlights the newest message of the open chat. False, and nothing changes, when it has no
+    /// message to select.
+    pub(crate) fn try_select(&mut self, n: Network) -> bool {
+        let Some(newest) = self.selectable_ids(n).last().cloned() else {
+            return false;
+        };
+        let ns = self.ns_mut(n);
+        ns.focus = Focus::Select;
+        ns.sel_msg = Some(newest);
+        self.ensure_sel_visible(n);
+        true
+    }
+
+    /// Back from selection: the chat list, with the chat still shown.
+    pub(crate) fn select_to_list(&mut self, n: Network) {
+        self.leave_select(n);
+        self.back_to_list(n);
+    }
+
+    /// To the message box.
     pub(super) fn leave_select(&mut self, n: Network) {
         let ns = self.ns_mut(n);
         ns.focus = Focus::Composer;
@@ -211,10 +235,36 @@ impl App {
             .and_then(|s| ids.iter().position(|i| i == s))
             .unwrap_or(ids.len() - 1);
         let to = match action {
-            Action::SelectUp => cur.saturating_sub(1),
-            Action::SelectDown => (cur + 1).min(ids.len() - 1),
-            Action::SelectFirst => 0,
-            Action::SelectLast => ids.len() - 1,
+            Action::Up => cur.saturating_sub(1),
+            Action::Down => (cur + 1).min(ids.len() - 1),
+            Action::Top => 0,
+            Action::Bottom => ids.len() - 1,
+            Action::ScreenTop | Action::ScreenMiddle | Action::ScreenBottom => {
+                // The messages whose first line is on screen.
+                let (w, h) = self.convo_size(n);
+                let (lines, spans) = ui::message_layout(self.ns(n), &self.look(), w);
+                let total = lines.len();
+                let bottom = total - self.ns(n).scroll.min(total.saturating_sub(h));
+                let top = bottom.saturating_sub(h);
+                let shown: Vec<usize> = ids
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, id)| {
+                        spans
+                            .iter()
+                            .any(|s| &s.id == *id && s.start >= top && s.start < bottom)
+                    })
+                    .map(|(i, _)| i)
+                    .collect();
+                match (shown.first(), shown.last()) {
+                    (Some(&first), Some(&last)) => match action {
+                        Action::ScreenTop => first,
+                        Action::ScreenBottom => last,
+                        _ => shown[(shown.len() - 1) / 2],
+                    },
+                    _ => cur,
+                }
+            }
             _ => {
                 let (w, h) = self.convo_size(n);
                 let (_, spans) = ui::message_layout(self.ns(n), &self.look(), w);
@@ -226,7 +276,7 @@ impl App {
                 };
                 let budget = h.saturating_sub(1).max(1);
                 let (mut i, mut used) = (cur, 0);
-                if action == Action::SelectPageUp {
+                if action == Action::PageUp {
                     while i > 0 && used < budget {
                         i -= 1;
                         used += height(&ids[i]);
@@ -240,19 +290,91 @@ impl App {
                 i
             }
         };
+        let big = matches!(
+            action,
+            Action::Top
+                | Action::Bottom
+                | Action::ScreenTop
+                | Action::ScreenMiddle
+                | Action::ScreenBottom
+        );
+        if big && to != cur {
+            self.push_jump(n, ids[cur].clone());
+        }
         self.ns_mut(n).sel_msg = Some(ids[to].clone());
         self.ensure_sel_visible(n);
         // Up, page up or first at the oldest message held: the user wants more history.
-        let wants_older = to == 0
-            && matches!(
-                action,
-                Action::SelectUp | Action::SelectPageUp | Action::SelectFirst
-            );
+        let wants_older = to == 0 && matches!(action, Action::Up | Action::PageUp | Action::Top);
         if wants_older {
             self.request_older(n)
         } else {
             Vec::new()
         }
+    }
+
+    /// True while selecting in the open chat `chat_id` with its newest message highlighted: new
+    /// messages then take the highlight with them (`follow_newest`).
+    pub(super) fn selecting_newest(&self, n: Network, chat_id: &str) -> bool {
+        let ns = self.ns(n);
+        ns.focus == Focus::Select
+            && ns.open.as_deref() == Some(chat_id)
+            && ns.sel_msg.is_some()
+            && ns.sel_msg.as_ref() == self.selectable_ids(n).last()
+    }
+
+    /// Highlights the newest message that can be selected, the pane pinned to the bottom like a
+    /// chat that follows (a new message taller than the pane shows its end, not its start).
+    pub(super) fn follow_newest(&mut self, n: Network) {
+        if let Some(last) = self.selectable_ids(n).last().cloned() {
+            let ns = self.ns_mut(n);
+            ns.sel_msg = Some(last);
+            ns.scroll = 0;
+        }
+    }
+
+    /// Message lines below the end of the highlighted message, when one is highlighted in the
+    /// open chat. A change to the messages that alters it is added to `scroll` so the highlight
+    /// stays where it was on screen.
+    pub(super) fn lines_below_selection(&self, n: Network) -> Option<usize> {
+        let ns = self.ns(n);
+        let id = ns.sel_msg.as_ref().filter(|_| ns.focus == Focus::Select)?;
+        let (w, _) = self.convo_size(n);
+        let (lines, spans) = ui::message_layout(ns, &self.look(), w);
+        let sp = spans.iter().find(|s| &s.id == id)?;
+        Some(lines.len().saturating_sub(sp.end))
+    }
+
+    /// Remembers `from` (in the open chat) before a big jump. The list keeps the last 50.
+    fn push_jump(&mut self, n: Network, from: String) {
+        let ns = self.ns_mut(n);
+        let Some(chat) = ns.open.clone() else {
+            return;
+        };
+        ns.jumps.push((chat, from));
+        if ns.jumps.len() > JUMPS_KEPT {
+            ns.jumps.remove(0);
+        }
+    }
+
+    /// `jump_back` (Ctrl+O): the newest remembered place in this chat whose message can still be
+    /// selected. Places in other chats and messages that went away are dropped on the way.
+    pub(super) fn jump_back(&mut self, n: Network) {
+        let ids = self.selectable_ids(n);
+        let Some(open) = self.ns(n).open.clone() else {
+            return;
+        };
+        // This chat's places, newest first; a message that went away is dropped, other chats'
+        // places stay for when that chat is open again.
+        let jumps = &mut self.ns_mut(n).jumps;
+        while let Some(i) = jumps.iter().rposition(|(chat, _)| *chat == open) {
+            let (_, id) = jumps.remove(i);
+            if ids.contains(&id) {
+                self.ns_mut(n).sel_msg = Some(id);
+                self.ensure_sel_visible(n);
+                return;
+            }
+        }
+        self.push_notice(n, "No earlier place to jump back to.", false);
     }
 
     /// Scrolls the message pane just enough to show the highlighted message (its first lines
@@ -366,6 +488,31 @@ impl App {
         }
     }
 
+    /// `y` on the highlighted message: its text, without the attachment markers; for an attachment
+    /// with no caption, its file name. Queued for the run loop, which owns the clipboard.
+    pub(super) fn copy_selected(&mut self, n: Network) {
+        let Some(m) = self.selected_message(n) else {
+            return;
+        };
+        let text = crate::media_view::strip_markers(&m.text, m.attachments.len())
+            .trim()
+            .to_string();
+        let text = if text.is_empty() {
+            m.attachments
+                .iter()
+                .filter_map(|a| a.name.clone())
+                .collect::<Vec<_>>()
+                .join(", ")
+        } else {
+            text
+        };
+        if text.is_empty() {
+            self.push_notice(n, "Nothing to copy in this message.", false);
+        } else {
+            self.copy = Some((n, text));
+        }
+    }
+
     /// `u` on the highlighted message: its links, behind the same "Open host? y/n" line.
     pub(super) fn link_selected(&mut self, n: Network) {
         let urls = self
@@ -382,8 +529,8 @@ impl App {
     // ---- mouse on the main screen ----
 
     /// A click on a message selects it and moves focus to it (from the list the chat is opened
-    /// first, as Ctrl+Up does). On a link it then asks y/n with the host, on an attachment chip
-    /// it runs the `o` flow: a click never does more than the key would.
+    /// first, as Enter on the chat does). On a link it then asks y/n with the host, on an
+    /// attachment chip it runs the `o` flow: a click never does more than the key would.
     pub(super) fn click_message(
         &mut self,
         n: Network,
@@ -456,7 +603,7 @@ impl App {
             MouseEventKind::Down(MouseButton::Left) if g.rows.contains(pos) => {
                 p.selected = g.start + (pos.y - g.rows.y) as usize;
                 // Same path as Enter: typing notice and list refresh included.
-                return Some(self.run_click_action(Action::PopupAccept));
+                return Some(self.run_click_action(Action::Accept));
             }
             MouseEventKind::ScrollUp => p.selected = p.selected.saturating_sub(1),
             MouseEventKind::ScrollDown => {
@@ -613,7 +760,6 @@ fn clean_members(mut members: Vec<PersonRef>) -> Vec<PersonRef> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::keymap::Mode;
     use crate::text::Clock;
     use chatcli_core::model::{Capabilities, ChatKind, ChatSummary, Event, Reaction, Status};
     use crossterm::event::{
@@ -645,8 +791,14 @@ mod tests {
         press(app, KeyCode::Char(c))
     }
 
-    fn ctrl_up(app: &mut App) -> Out {
-        app.handle_key(key_with(KeyCode::Up, KeyModifiers::CONTROL))
+    /// Into message selection from the message box (what `select_messages` does; Esc does it too
+    /// when nothing is being replied to). Nothing happens while already selecting.
+    fn to_selection(app: &mut App) -> Out {
+        if app.active().focus == Focus::Composer {
+            app.enter_select(Network::Teams)
+        } else {
+            Vec::new()
+        }
     }
 
     fn ctrl_u(app: &mut App) {
@@ -869,9 +1021,12 @@ mod tests {
     // ---- selection (issue 11) ----
 
     #[test]
-    fn ctrl_up_selects_the_newest_message() {
+    fn esc_from_the_message_box_selects_the_newest_message() {
         let mut app = app_with(ChatKind::Direct, three());
-        assert!(ctrl_up(&mut app).is_empty());
+        // Shift+Up is no longer a key for it.
+        app.handle_key(key_with(KeyCode::Up, KeyModifiers::SHIFT));
+        assert_eq!(app.active().focus, Focus::Composer);
+        assert!(press(&mut app, KeyCode::Esc).is_empty());
         assert_eq!(app.active().focus, Focus::Select);
         assert_eq!(sel(&app), Some("m3"));
         assert_eq!(app.context(), crate::keymap::Context::Select);
@@ -880,7 +1035,7 @@ mod tests {
     #[test]
     fn an_empty_chat_has_nothing_to_select() {
         let mut app = app_with(ChatKind::Direct, Vec::new());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         assert_eq!(app.active().focus, Focus::Composer);
         assert_eq!(sel(&app), None);
         assert_eq!(
@@ -892,7 +1047,7 @@ mod tests {
     #[test]
     fn first_last_and_the_ends() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         press(&mut app, KeyCode::Home);
         assert_eq!(sel(&app), Some("m1"));
         press(&mut app, KeyCode::Up);
@@ -922,7 +1077,7 @@ mod tests {
             MessageState::Failed("no".into()),
         ));
         let mut app = app_with(ChatKind::Direct, list);
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         assert_eq!(sel(&app), Some("m3"));
         press(&mut app, KeyCode::Down);
         assert_eq!(sel(&app), Some("m3"));
@@ -936,7 +1091,7 @@ mod tests {
     fn the_view_follows_the_highlight() {
         let mut app = app_with(ChatKind::Direct, many(60));
         app.resize(80, 24);
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         assert!(in_view(&app));
         press(&mut app, KeyCode::Home);
         assert_eq!(sel(&app), Some("m0"));
@@ -955,7 +1110,7 @@ mod tests {
     fn page_keys_move_about_a_screen() {
         let mut app = app_with(ChatKind::Direct, many(80));
         app.resize(80, 24);
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         press(&mut app, KeyCode::PageUp);
         let idx = |app: &App| -> usize { sel(app).unwrap()[1..].parse().unwrap() };
         let rows = app.convo_size(Network::Teams).1;
@@ -974,7 +1129,7 @@ mod tests {
     fn selection_survives_an_incoming_message_and_a_resize() {
         let mut app = app_with(ChatKind::Direct, many(40));
         app.resize(80, 24);
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         for _ in 0..6 {
             press(&mut app, KeyCode::Up);
         }
@@ -997,10 +1152,67 @@ mod tests {
     }
 
     #[test]
+    fn on_the_newest_message_the_selection_follows_new_ones() {
+        let mut app = app_with(ChatKind::Direct, many(40));
+        app.resize(80, 24);
+        to_selection(&mut app);
+        assert_eq!(sel(&app), Some("m39"));
+        app.handle_event(Event::Message(msg("new0", 5000, false, "ping")));
+        assert_eq!(sel(&app), Some("new0"));
+        assert!(in_view(&app));
+        assert_eq!(app.active().scroll, 0, "the pane stays at the bottom");
+        // A batch that brings newer messages (a catch-up) follows too.
+        app.handle_event(Event::Messages {
+            network: Network::Teams,
+            chat_id: "a".into(),
+            messages: vec![msg("new1", 5001, false, "a"), msg("new2", 5002, false, "b")],
+        });
+        assert_eq!(sel(&app), Some("new2"));
+        // One up from the newest: it stays where it is.
+        press(&mut app, KeyCode::Up);
+        app.handle_event(Event::Message(msg("new3", 5003, false, "c")));
+        assert_eq!(sel(&app), Some("new1"));
+    }
+
+    #[test]
+    fn a_batch_of_newer_messages_keeps_an_older_selection_where_it_is() {
+        let mut app = app_with(ChatKind::Direct, many(40));
+        app.resize(80, 24);
+        to_selection(&mut app);
+        for _ in 0..4 {
+            press(&mut app, KeyCode::Up);
+        }
+        let held = sel(&app).map(str::to_string);
+        // Rows between the end of the highlight and the bottom of the pane.
+        let row =
+            |app: &App| app.lines_below_selection(Network::Teams).unwrap() - app.active().scroll;
+        let before = row(&app);
+        app.handle_event(Event::Messages {
+            network: Network::Teams,
+            chat_id: "a".into(),
+            messages: vec![msg("new1", 5001, false, "a"), msg("new2", 5002, false, "b")],
+        });
+        assert_eq!(sel(&app).map(str::to_string), held);
+        assert_eq!(row(&app), before, "the highlight did not move on screen");
+        assert!(in_view(&app));
+    }
+
+    #[test]
+    fn following_onto_a_message_taller_than_the_pane_keeps_the_bottom_in_view() {
+        let mut app = app_with(ChatKind::Direct, many(10));
+        app.resize(80, 16);
+        to_selection(&mut app);
+        let tall = vec!["line"; 60].join("\n");
+        app.handle_event(Event::Message(msg("tall", 5000, false, &tall)));
+        assert_eq!(sel(&app), Some("tall"));
+        assert_eq!(app.active().scroll, 0, "the pane stays at the bottom");
+    }
+
+    #[test]
     fn wheel_scrolling_keeps_the_selection() {
         let mut app = app_with(ChatKind::Direct, many(60));
         app.resize(80, 24);
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         let held = sel(&app).map(str::to_string);
         let convo = app.layout_in(Rect::new(0, 0, 80, 24)).convo;
         for _ in 0..4 {
@@ -1017,21 +1229,162 @@ mod tests {
     }
 
     #[test]
-    fn escape_leaves_selection() {
+    fn i_goes_to_the_message_box_and_escape_h_and_left_to_the_chat_list() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
-        press(&mut app, KeyCode::Esc);
+        to_selection(&mut app);
+        ch(&mut app, 'i');
         assert_eq!(app.active().focus, Focus::Composer);
         assert_eq!(sel(&app), None);
         // Typing goes to the message box again.
         typed(&mut app, "hi");
         assert_eq!(app.active().draft(), "hi");
+        for back in [KeyCode::Esc, KeyCode::Char('h'), KeyCode::Left] {
+            to_selection(&mut app);
+            press(&mut app, back);
+            assert_eq!(app.active().focus, Focus::List, "{back:?}");
+            assert_eq!(sel(&app), None);
+            assert_eq!(app.active().open.as_deref(), Some("a"), "still shown");
+            press(&mut app, KeyCode::Char('i'));
+        }
+    }
+
+    #[test]
+    fn escape_from_an_empty_box_goes_to_selection() {
+        let mut app = app_with(ChatKind::Direct, three());
+        press(&mut app, KeyCode::Esc);
+        assert_eq!(app.active().focus, Focus::Select);
+        assert_eq!(sel(&app), Some("m3"));
+        // With nothing to select, it goes to the chat list.
+        let mut app = app_with(ChatKind::Direct, Vec::new());
+        press(&mut app, KeyCode::Esc);
+        assert_eq!(app.active().focus, Focus::List);
+    }
+
+    #[test]
+    fn y_copies_the_text_or_the_file_name() {
+        let mut app = app_with(ChatKind::Direct, three());
+        to_selection(&mut app);
+        ch(&mut app, 'y');
+        assert_eq!(
+            app.take_copy(),
+            Some((
+                Network::Teams,
+                "third https://docs.example.invalid/a".to_string()
+            ))
+        );
+        assert_eq!(app.take_copy(), None, "once");
+        app.copy_done(Network::Teams, Ok("Copied."));
+        assert_eq!(
+            app.current_notice().map(|n| n.text.as_str()),
+            Some("Copied.")
+        );
+        // An attachment: its caption without the marker, or its name when there is none.
+        let file = |text: &str| {
+            let mut m = msg("f", 4000, false, text);
+            m.attachments = vec![chatcli_core::model::Attachment {
+                kind: chatcli_core::model::MediaKind::Document,
+                name: Some("plan.pdf".into()),
+                mime: None,
+                size: None,
+                fetch_ref: chatcli_core::model::FetchRef::new("ref"),
+                open_url: None,
+            }];
+            m
+        };
+        for (text, want) in [
+            ("[document: plan.pdf] see p2", "see p2"),
+            ("[document: plan.pdf]", "plan.pdf"),
+        ] {
+            let mut app = app_with(ChatKind::Direct, vec![file(text)]);
+            to_selection(&mut app);
+            ch(&mut app, 'y');
+            assert_eq!(
+                app.take_copy().map(|c| c.1).as_deref(),
+                Some(want),
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn ctrl_o_in_one_chat_keeps_the_places_of_another() {
+        let mut app = app_with(ChatKind::Direct, three());
+        to_selection(&mut app);
+        // A place in some other chat, then one in this chat.
+        app.ns_mut(Network::Teams)
+            .jumps
+            .extend([("other".into(), "x1".into()), ("a".into(), "m1".into())]);
+        app.handle_key(key_with(KeyCode::Char('o'), KeyModifiers::CONTROL));
+        assert_eq!(sel(&app), Some("m1"));
+        app.handle_key(key_with(KeyCode::Char('o'), KeyModifiers::CONTROL));
+        assert_eq!(
+            app.ns(Network::Teams).jumps,
+            [("other".to_string(), "x1".to_string())],
+            "the other chat's place is still there"
+        );
+    }
+
+    #[test]
+    fn ctrl_o_walks_back_through_the_big_jumps() {
+        let many: Vec<ChatMessage> = (0..40)
+            .map(|i| msg(&format!("m{i:02}"), 1000 + i, false, "x"))
+            .collect();
+        let mut app = app_with(ChatKind::Direct, many);
+        let ctrl_o =
+            |app: &mut App| app.handle_key(key_with(KeyCode::Char('o'), KeyModifiers::CONTROL));
+        to_selection(&mut app);
+        ch(&mut app, 'k');
+        assert_eq!(sel(&app), Some("m38"));
+        // g, then G: two places remembered.
+        ch(&mut app, 'g');
+        assert_eq!(sel(&app), Some("m00"));
+        ch(&mut app, 'G');
+        assert_eq!(sel(&app), Some("m39"));
+        // Small moves are not remembered.
+        ch(&mut app, 'k');
+        ctrl_o(&mut app);
+        assert_eq!(sel(&app), Some("m00"), "back to before G");
+        assert!(in_view(&app));
+        ctrl_o(&mut app);
+        assert_eq!(sel(&app), Some("m38"), "back to before g");
+        ctrl_o(&mut app);
+        assert_eq!(sel(&app), Some("m38"), "nothing left");
+        assert_eq!(
+            app.current_notice().map(|n| n.text.as_str()),
+            Some("No earlier place to jump back to.")
+        );
+        // A jump that lands where it started remembers nothing.
+        ch(&mut app, 'G');
+        ch(&mut app, 'G');
+        ctrl_o(&mut app);
+        assert_eq!(sel(&app), Some("m38"));
+    }
+
+    #[test]
+    fn screen_keys_pick_the_first_middle_and_last_message_on_screen() {
+        let many: Vec<ChatMessage> = (0..40)
+            .map(|i| msg(&format!("m{i:02}"), 1000 + i, false, "x"))
+            .collect();
+        let mut app = app_with(ChatKind::Direct, many);
+        to_selection(&mut app);
+        assert_eq!(sel(&app), Some("m39"));
+        ch(&mut app, 'H');
+        let top = sel(&app).unwrap().to_string();
+        assert!(top.as_str() < "m39" && in_view(&app), "{top}");
+        ch(&mut app, 'L');
+        assert_eq!(sel(&app), Some("m39"));
+        ch(&mut app, 'M');
+        let mid = sel(&app).unwrap().to_string();
+        assert!(top < mid && mid.as_str() < "m39", "{mid}");
+        // g is the very first message held.
+        ch(&mut app, 'g');
+        assert_eq!(sel(&app), Some("m00"));
     }
 
     #[test]
     fn a_deleted_message_hands_the_highlight_to_its_neighbour() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         let mut gone = msg("m3", 3000, false, "");
         gone.state = MessageState::Deleted;
         app.handle_event(Event::MessageChanged(gone));
@@ -1046,36 +1399,6 @@ mod tests {
             Focus::Composer,
             "nothing left to select"
         );
-    }
-
-    #[test]
-    fn vim_v_selects_and_gg_goes_to_the_first() {
-        let mut s = chatcli_core::settings::Settings::default();
-        s.keys.preset = "vim".into();
-        let mut app = App::with_settings(clock(), &s, None);
-        online(&mut app, ChatKind::Direct);
-        app.handle_event(Event::Messages {
-            network: Network::Teams,
-            chat_id: "a".into(),
-            messages: three(),
-        });
-        // Preview the chat from the list, then `v`.
-        ch(&mut app, 'j');
-        ch(&mut app, 'k');
-        let out = ch(&mut app, 'v');
-        assert_eq!(app.active().focus, Focus::Select);
-        assert_eq!(app.mode(), Some(Mode::Select));
-        assert_eq!(sel(&app), Some("m3"));
-        assert!(
-            out.iter()
-                .any(|(_, c)| matches!(c, Command::OpenChat { .. })),
-            "selecting opens the chat like Enter: {out:?}"
-        );
-        ch(&mut app, 'g');
-        ch(&mut app, 'g');
-        assert_eq!(sel(&app), Some("m1"));
-        press(&mut app, KeyCode::Esc);
-        assert_eq!(app.mode(), Some(Mode::Insert));
     }
 
     // ---- reply (issue 12) ----
@@ -1097,7 +1420,7 @@ mod tests {
         let mut m3 = msg("m3", 3000, false, "third\nline with   spaces");
         m3.sender_id = "aad-1".into();
         let mut app = app_with(ChatKind::Direct, vec![msg("m1", 1000, false, "x"), m3]);
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'r');
         assert_eq!(app.active().focus, Focus::Composer, "back to typing");
         let want = QuotedRef {
@@ -1123,7 +1446,7 @@ mod tests {
     #[test]
     fn replying_to_your_own_message_is_quoted_as_you() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'k');
         ch(&mut app, 'r');
         match app.active().target() {
@@ -1137,20 +1460,20 @@ mod tests {
     #[test]
     fn escape_cancels_the_reply_first_and_then_leaves() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'r');
         press(&mut app, KeyCode::Esc);
         assert!(app.active().target().is_none());
         assert_eq!(app.active().focus, Focus::Composer);
         press(&mut app, KeyCode::Esc);
-        assert_eq!(app.active().focus, Focus::List);
+        assert_eq!(app.active().focus, Focus::Select);
     }
 
     #[test]
     fn a_refused_reply_stays_a_failed_reply() {
         // The backend answers MessageFailed; the message keeps its quote and shows why.
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'r');
         typed(&mut app, "ok");
         let out = press(&mut app, KeyCode::Enter);
@@ -1174,7 +1497,7 @@ mod tests {
     #[test]
     fn react_opens_the_picker_and_choosing_sends_the_reaction() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'e');
         assert!(app.picker().is_some());
         let out = press(&mut app, KeyCode::Enter);
@@ -1200,7 +1523,7 @@ mod tests {
     fn choosing_your_own_reaction_again_removes_it() {
         let mut m3 = msg("m3", 3000, false, "third");
         let mut app = app_with(ChatKind::Direct, vec![m3.clone()]);
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'e');
         // Whatever the first cell is, make it already yours.
         let first = app
@@ -1247,10 +1570,10 @@ mod tests {
     fn edit_loads_the_text_and_enter_sends_the_change() {
         let mut app = app_with(ChatKind::Direct, three());
         typed(&mut app, "unsent draft");
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'k');
         assert_eq!(sel(&app), Some("m2"));
-        ch(&mut app, 'E');
+        ch(&mut app, 'c');
         assert_eq!(app.active().focus, Focus::Composer);
         assert_eq!(app.active().draft(), "second, mine");
         assert!(matches!(app.active().target(), Some(Target::Edit { .. })));
@@ -1277,9 +1600,9 @@ mod tests {
     fn escape_ends_an_edit_and_gives_the_draft_back() {
         let mut app = app_with(ChatKind::Direct, three());
         typed(&mut app, "unsent draft");
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'k');
-        ch(&mut app, 'E');
+        ch(&mut app, 'c');
         press(&mut app, KeyCode::Esc);
         assert!(app.active().target().is_none());
         assert_eq!(app.active().draft(), "unsent draft");
@@ -1289,15 +1612,15 @@ mod tests {
     #[test]
     fn an_unchanged_or_empty_edit_sends_nothing() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'k');
-        ch(&mut app, 'E');
+        ch(&mut app, 'c');
         assert!(press(&mut app, KeyCode::Enter).is_empty());
         assert!(app.active().target().is_none(), "unchanged ends the edit");
         // An empty edit is refused with the box kept.
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'k');
-        ch(&mut app, 'E');
+        ch(&mut app, 'c');
         ctrl_u(&mut app);
         assert_eq!(app.active().draft(), "");
         assert!(press(&mut app, KeyCode::Enter).is_empty());
@@ -1308,9 +1631,9 @@ mod tests {
     #[test]
     fn edit_and_delete_are_for_your_own_messages_only() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         assert_eq!(sel(&app), Some("m3"));
-        ch(&mut app, 'E');
+        ch(&mut app, 'c');
         assert_eq!(app.active().focus, Focus::Select, "no edit of theirs");
         assert!(app.active().target().is_none());
         assert_eq!(
@@ -1328,7 +1651,7 @@ mod tests {
     #[test]
     fn delete_asks_first_and_y_sends_it() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'k');
         ch(&mut app, 'd');
         assert_eq!(
@@ -1408,7 +1731,7 @@ mod tests {
         assert_eq!(app.ns(Network::WhatsApp).caps, Capabilities::default());
         // A dimmed action still works: before any Capabilities event, `r` replies.
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'r');
         assert!(matches!(app.active().target(), Some(Target::Reply(_))));
     }
@@ -1416,7 +1739,7 @@ mod tests {
     #[test]
     fn a_link_in_the_selected_message_opens_behind_the_question() {
         let mut app = app_with(ChatKind::Direct, three());
-        ctrl_up(&mut app);
+        to_selection(&mut app);
         ch(&mut app, 'u');
         assert!(matches!(app.prompt(), Some(Prompt::Confirm(_))));
         ch(&mut app, 'y');
@@ -1569,6 +1892,49 @@ mod tests {
         typed(&mut app, "al");
         assert_eq!(app.active().draft(), "@al");
         assert!(app.popup().is_none());
+    }
+
+    #[test]
+    fn members_arriving_do_not_reopen_a_list_closed_with_esc() {
+        let mut app = app_with(ChatKind::Group, three());
+        typed(&mut app, ":he");
+        assert!(app.popup().is_some());
+        press(&mut app, KeyCode::Esc);
+        assert!(app.popup().is_none());
+        app.handle_event(Event::Members {
+            network: Network::Teams,
+            chat_id: "a".into(),
+            members: Vec::new(),
+            error: None,
+        });
+        assert!(app.popup().is_none(), "closed until the draft is edited");
+        typed(&mut app, "l");
+        assert!(app.popup().is_some(), "an edit brings it back");
+    }
+
+    #[test]
+    fn a_paste_is_an_edit_so_members_may_open_the_list_again() {
+        let mut app = app_with(ChatKind::Group, three());
+        typed(&mut app, ":he");
+        press(&mut app, KeyCode::Esc);
+        app.handle_paste(" @al");
+        app.handle_event(Event::Members {
+            network: Network::Teams,
+            chat_id: "a".into(),
+            members: Vec::new(),
+            error: None,
+        });
+        assert!(
+            !app.popup_closed,
+            "the paste reopened it for the next refresh"
+        );
+        // A paste that changes nothing (no chat focus) leaves it closed.
+        let mut app = app_with(ChatKind::Group, three());
+        typed(&mut app, ":he");
+        press(&mut app, KeyCode::Esc);
+        to_selection(&mut app);
+        app.handle_paste("x");
+        assert!(app.popup_closed);
     }
 
     /// The cached member list answers the first `@` at once, before the backend does.
@@ -1875,6 +2241,31 @@ mod tests {
     }
 
     #[test]
+    fn a_1_1_chat_sits_two_columns_in_and_clicks_follow() {
+        let mut app = clicked_app();
+        let w = app.layout_for(Network::Teams).messages.width as usize;
+        let (lines, _) = ui::message_layout(app.ns(Network::Teams), &app.look(), w);
+        let sp = span_of(&app, "m3");
+        // Name row and body both start at column 2.
+        for line in &lines[sp.start..sp.end] {
+            let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+            assert!(
+                text.starts_with("  ") && !text[2..].starts_with(' '),
+                "{text:?}"
+            );
+        }
+        let hit = sp.hits.first().expect("link hit").clone();
+        assert!(hit.x0 >= 2, "{hit:?}");
+        // The gutter is not the link; the first drawn cell is.
+        let (x, y) = cell(&app, hit.line, hit.x0 - 1);
+        left(&mut app, x, y);
+        assert!(app.prompt.is_none());
+        let (x, y) = cell(&app, hit.line, hit.x0);
+        left(&mut app, x, y);
+        assert!(matches!(app.prompt, Some(Prompt::Confirm(_))));
+    }
+
+    #[test]
     fn a_link_that_wraps_is_clickable_on_every_line() {
         let long = format!("see https://example.invalid/{}", "x".repeat(60));
         let mut app = app_with(ChatKind::Direct, vec![msg("m1", 1000, false, &long)]);
@@ -1927,7 +2318,12 @@ mod tests {
     #[test]
     fn click_a_message_from_the_chat_list_opens_the_chat_first() {
         let mut app = clicked_app();
-        press(&mut app, KeyCode::Esc);
+        // Esc steps out one level at a time: message box, selection, chat list.
+        for _ in 0..3 {
+            if app.active().focus != Focus::List {
+                press(&mut app, KeyCode::Esc);
+            }
+        }
         assert_eq!(app.active().focus, Focus::List);
         let (x, y) = cell(&app, span_of(&app, "m2").end - 1, 40);
         left(&mut app, x, y);
@@ -1966,6 +2362,7 @@ mod tests {
             detail: String::new(),
             insert: insert.into(),
             person: None,
+            command: None,
         }
     }
 

@@ -1,0 +1,38 @@
+ Teams 101 LIVE   WhatsApp NO LOGIN    Ctrl+C quit
+┌ Alex Example ──────────────────────────────────┐
+│  of the document.                              │
+│                                                │
+│                 ---- Today ----                │
+│  Alex Example 09:10                            │
+│  is the build done? 🚀 今日はどうですか        │
+│                                                │
+│  You 09:15                                     │
+│  yes, shipped                                  │
+│                                                │
+│  You 09:30                                     │
+│  on it, will confirm shortly [sending]         │
+│  this one will fail                            │
+│  NOT SENT - demo: this chat refuses messages   │
+└────────────────────────────────────────────────┘
+╔ Message ═══════════════════════════════════════╗
+║> typing a draft                                ║
+╚════════════════════════════════════════════════╝
+Enter send  F1 help  Esc back  Ctrl+J newline
+--- styled runs (everything else is default style) ---
+row 0 cols 0-15: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 18-25: fg=Reset bg=Reset BOLD
+row 0 cols 27-34: fg=Yellow bg=Reset BOLD
+row 0 cols 39-49: fg=Reset bg=Reset DIM
+row 4 cols 18-32: fg=DarkGray bg=Reset NONE
+row 5 cols 3-14: fg=Yellow bg=Reset BOLD
+row 5 cols 16-20: fg=DarkGray bg=Reset NONE
+row 8 cols 3-5: fg=Cyan bg=Reset BOLD
+row 8 cols 7-11: fg=DarkGray bg=Reset NONE
+row 11 cols 3-5: fg=Cyan bg=Reset BOLD
+row 11 cols 7-11: fg=DarkGray bg=Reset NONE
+row 12 cols 30-39: fg=DarkGray bg=Reset NONE
+row 13 cols 3-20: fg=Red bg=Reset NONE
+row 14 cols 3-45: fg=Red bg=Reset BOLD
+row 16 cols 1-9: fg=Reset bg=Reset BOLD
+row 17 cols 1-2: fg=Reset bg=Reset BOLD
+row 19 cols 0-44: fg=Reset bg=Reset DIM

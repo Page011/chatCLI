@@ -260,6 +260,23 @@ impl App {
         }
     }
 
+    /// `mark_read`: the selected chat of the list is read, with no question.
+    pub(super) fn mark_selected_read(&mut self, n: Network) -> Out {
+        let ns = self.ns_mut(n);
+        let vis = ns.visible();
+        let Some(&i) = vis.get(ns.sel_pos(&vis)) else {
+            return Vec::new();
+        };
+        if ns.chats[i].unread == 0 {
+            self.push_notice(n, "Nothing unread in this chat.", false);
+            return Vec::new();
+        }
+        let id = ns.chats[i].id.clone();
+        let mut out = Vec::new();
+        ns.mark_read(&id, &mut out);
+        out
+    }
+
     /// `mark_all_read`: one line to confirm, then one `MarkRead` per unread chat of the tab.
     pub(super) fn ask_mark_all_read(&mut self, n: Network) {
         let count = self.ns(n).chats.iter().filter(|c| c.unread > 0).count();
@@ -428,7 +445,7 @@ impl App {
     }
 
     /// Runs the query again after the text changed. A failure is shown in the box and as a notice.
-    fn search_rerun(&mut self) {
+    pub(super) fn search_rerun(&mut self) {
         let rows = ui::search_geometry(self.layout_in(self.size).body).map_or(1, |g| g.rows);
         let (Some(s), Some(store)) = (self.search.as_mut(), self.store.as_ref()) else {
             return;
@@ -442,14 +459,7 @@ impl App {
 
     pub(super) fn search_type(&mut self, text: &str) {
         if let Some(s) = self.search.as_mut() {
-            s.query.push_str(text);
-            self.search_rerun();
-        }
-    }
-
-    pub(super) fn search_backspace(&mut self) {
-        if let Some(s) = self.search.as_mut() {
-            s.query.pop();
+            s.query.insert_str(text);
             self.search_rerun();
         }
     }
@@ -471,10 +481,10 @@ impl App {
 
     pub(super) fn search_action(&mut self, action: Action) -> Out {
         match action {
-            Action::PopupUp => self.search_move(-1),
-            Action::PopupDown => self.search_move(1),
-            Action::PopupAccept => return self.search_open_hit(),
-            Action::PopupClose => self.search = None,
+            Action::Up => self.search_move(-1),
+            Action::Down => self.search_move(1),
+            Action::Accept => return self.search_open_hit(),
+            Action::Back => self.search = None,
             _ => {}
         }
         Vec::new()
@@ -657,7 +667,7 @@ mod tests {
 
     /// Teams online with chats a (2 unread), b (0), c (1), newest first.
     fn app_with(settings: &Settings) -> App {
-        let mut app = App::with_settings(clock(), settings, None);
+        let mut app = App::with_settings(clock(), settings);
         online_status(&mut app, Network::Teams);
         app.handle_event(Event::Chats(
             Network::Teams,
@@ -722,7 +732,7 @@ mod tests {
         let toasts = app.take_toasts();
         assert_eq!(toasts.len(), 1);
         assert_eq!(toasts[0].title, "Sam Sample");
-        assert_eq!(toasts[0].body, "New message", "preview is off by default");
+        assert_eq!(toasts[0].body, "Sam Sample: secret plan", "full by default");
         assert!(toasts[0].sound);
         assert!(app.take_toasts().is_empty(), "taken once");
     }
@@ -988,7 +998,7 @@ mod tests {
         // and the name row of the oldest held message, which now continues the older page's
         // run from the same person.
         let after = visible_text(&app);
-        assert_eq!(loading[2], "Alex Example 02:46", "{loading:?}");
+        assert_eq!(loading[2], "  Alex Example 02:46", "{loading:?}");
         assert_eq!(&after[3..], &loading[3..], "no jump");
         assert_eq!(app.ns(Network::Teams).older["a"], Older::Idle);
 
@@ -1095,7 +1105,7 @@ mod tests {
         assert!(wheel(&mut app).is_empty(), "one at a time");
 
         let mut app = app_with_history(5);
-        app.handle_key(key_with(KeyCode::Up, KeyModifiers::CONTROL));
+        press(&mut app, KeyCode::Esc);
         assert_eq!(app.active().focus, Focus::Select);
         let out = press(&mut app, KeyCode::Home);
         assert_eq!(
@@ -1164,10 +1174,20 @@ mod tests {
         assert_eq!(selected(&app), "a");
     }
 
+    /// `:readall` and Enter.
+    fn readall(app: &mut App) -> Out {
+        let mut out = ch(app, ':');
+        for c in "readall".chars() {
+            out.extend(ch(app, c));
+        }
+        out.extend(press(app, KeyCode::Enter));
+        out
+    }
+
     #[test]
     fn mark_all_read_asks_then_sends_one_mark_read_per_unread_chat() {
         let mut app = app();
-        assert!(ch(&mut app, 'M').is_empty());
+        assert!(readall(&mut app).is_empty());
         assert_eq!(app.prompt(), Some(&Prompt::MarkAllRead { count: 2 }));
         let out = ch(&mut app, 'y');
         assert_eq!(
@@ -1194,7 +1214,7 @@ mod tests {
         );
         assert!(app.active().chats.iter().all(|c| c.unread == 0));
         // Nothing left: a notice, no question.
-        ch(&mut app, 'M');
+        readall(&mut app);
         assert!(app.prompt().is_none());
         assert_eq!(app.notices().back().unwrap().text, "Nothing unread.");
     }
@@ -1202,11 +1222,13 @@ mod tests {
     #[test]
     fn declining_mark_all_read_changes_nothing() {
         let mut app = app();
-        ch(&mut app, 'M');
+        readall(&mut app);
+        assert!(app.prompt().is_some());
         assert!(ch(&mut app, 'n').is_empty());
         assert!(app.prompt().is_none());
         assert_eq!(app.active().unread(), 3);
-        ch(&mut app, 'M');
+        readall(&mut app);
+        assert!(app.prompt().is_some());
         assert!(press(&mut app, KeyCode::Esc).is_empty());
         assert_eq!(app.active().unread(), 3);
     }
@@ -1225,9 +1247,31 @@ mod tests {
                 muted,
             )],
         ));
-        ch(&mut app, 'M');
+        readall(&mut app);
         let out = ch(&mut app, 'y');
         assert_eq!(out.len(), 1, "every unread chat of the tab, muted too");
+    }
+
+    #[test]
+    fn shift_r_marks_the_selected_chat_read_with_no_question() {
+        let mut app = app();
+        assert_eq!(selected(&app), "a");
+        assert_eq!(
+            ch(&mut app, 'R'),
+            vec![(
+                Network::Teams,
+                Command::MarkRead {
+                    chat_id: "a".into()
+                }
+            )]
+        );
+        assert!(app.prompt().is_none());
+        assert_eq!(app.active().unread(), 1, "c keeps its one unread message");
+        assert!(ch(&mut app, 'R').is_empty());
+        assert_eq!(
+            app.notices().back().unwrap().text,
+            "Nothing unread in this chat."
+        );
     }
 
     // ---- pin, mute, hide ----
@@ -1244,11 +1288,11 @@ mod tests {
     }
 
     #[test]
-    fn p_m_x_ask_the_backend_to_flip_the_flag_of_the_selected_chat() {
+    fn p_m_z_ask_the_backend_to_flip_the_flag_of_the_selected_chat() {
         let mut app = app();
         assert_eq!(ch(&mut app, 'p'), flag_cmd("a", ChatFlag::Pinned, true));
         assert_eq!(ch(&mut app, 'm'), flag_cmd("a", ChatFlag::Muted, true));
-        assert_eq!(ch(&mut app, 'x'), flag_cmd("a", ChatFlag::Hidden, true));
+        assert_eq!(ch(&mut app, 'z'), flag_cmd("a", ChatFlag::Hidden, true));
         // The list changes only when the backend answers.
         assert!(app
             .active()
@@ -1319,7 +1363,7 @@ mod tests {
     }
 
     #[test]
-    fn hidden_chats_leave_the_list_and_h_brings_them_back() {
+    fn hidden_chats_leave_the_list_and_shift_z_brings_them_back() {
         let mut app = app();
         let hidden = ChatFlags {
             hidden: true,
@@ -1347,13 +1391,13 @@ mod tests {
             1,
             "hidden chats are not in the total"
         );
-        ch(&mut app, 'H');
+        ch(&mut app, 'Z');
         assert_eq!(listed(&app), ["a", "b", "c"]);
-        // On a hidden chat x un-hides.
+        // On a hidden chat z un-hides.
         ch(&mut app, 'k');
         assert_eq!(selected(&app), "a");
-        assert_eq!(ch(&mut app, 'x'), flag_cmd("a", ChatFlag::Hidden, false));
-        ch(&mut app, 'H');
+        assert_eq!(ch(&mut app, 'z'), flag_cmd("a", ChatFlag::Hidden, false));
+        ch(&mut app, 'Z');
         assert_eq!(listed(&app), ["b", "c"]);
     }
 
@@ -1364,7 +1408,7 @@ mod tests {
             Network::Teams,
             Status::NeedsLogin { reason: None },
         ));
-        for c in ['p', 'm', 'x', 'n', 'M', 'H'] {
+        for c in ['p', 'm', 'z', 'n', 'R', 'Z'] {
             assert!(ch(&mut app, c).is_empty(), "{c}");
         }
     }
@@ -1586,7 +1630,7 @@ mod tests {
     // ---- typing ----
 
     fn wa_app(settings: &Settings) -> App {
-        let mut app = App::with_settings(clock(), settings, None);
+        let mut app = App::with_settings(clock(), settings);
         online_status(&mut app, Network::WhatsApp);
         app.handle_event(Event::Chats(
             Network::WhatsApp,
@@ -1698,7 +1742,9 @@ mod tests {
 
     #[test]
     fn with_send_typing_off_or_on_teams_nothing_is_sent() {
-        let mut app = wa_app(&Settings::default());
+        let mut s = Settings::default();
+        s.whatsapp.send_typing = false;
+        let mut app = wa_app(&s);
         press(&mut app, KeyCode::Enter);
         assert!(ch(&mut app, 'h').is_empty());
         let out = press(&mut app, KeyCode::Enter);
@@ -1829,7 +1875,7 @@ mod tests {
         for want in [
             "Next unread",
             "Prev unread",
-            "Mark all read",
+            "Mark read",
             "Pin",
             "Mute",
             "Hide",

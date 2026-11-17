@@ -158,12 +158,15 @@ impl PanelLook {
         }
     }
 
-    fn shaded(bg: u8, focus_bg: u8) -> PanelLook {
+    /// A frameless panel with one fixed shade (`None` keeps the terminal's own background).
+    /// Focus changes nothing: the selected row already shows where focus is.
+    fn shaded(bg: Option<u8>) -> PanelLook {
+        let bg = bg.map(Color::Indexed);
         PanelLook {
             outline: Outline::None,
             focus_outline: Outline::None,
-            bg: Some(Color::Indexed(bg)),
-            focus_bg: Some(Color::Indexed(focus_bg)),
+            bg,
+            focus_bg: bg,
             focus_tint: false,
         }
     }
@@ -176,18 +179,20 @@ fn palette_looks(name: &str, light: bool) -> Option<[PanelLook; 6]> {
     Some(match name.trim().to_ascii_lowercase().as_str() {
         "lines" => same(PanelLook::LINES),
         "blocks" => {
-            // Sidebar, messages, message box, popups, top bar: darker to lighter on a dark
-            // terminal, the other way on a light one. The focused panel is one step lighter.
-            let (s, m, c, p, h) = if light {
-                ((254, 253), (255, 254), (253, 252), (252, 252), 253)
+            // Fixed shades, none changing with focus. The messages panel keeps the terminal's own
+            // background (a transparent terminal shows through there); terminals have no
+            // per-cell transparency, so the rest are solid: sidebar and top bar in the middle,
+            // popups next, the message box the lightest on dark.
+            let (s, c, p, h) = if light {
+                (254, 252, 253, 254)
             } else {
-                ((234, 236), (233, 235), (235, 237), (236, 236), 235)
+                (234, 236, 235, 234)
             };
             [
-                PanelLook::shaded(s.0, s.1),
-                PanelLook::shaded(m.0, m.1),
-                PanelLook::shaded(c.0, c.1),
-                PanelLook::shaded(p.0, p.1),
+                PanelLook::shaded(Some(s)),
+                PanelLook::shaded(None),
+                PanelLook::shaded(Some(c)),
+                PanelLook::shaded(Some(p)),
                 PanelLook {
                     bg: Some(Color::Indexed(h)),
                     focus_bg: Some(Color::Indexed(h)),
@@ -529,6 +534,20 @@ impl Theme {
             }
         }
         if no_colour {
+            // Blocks has no fill on the messages panel, so without_colour would leave it
+            // borderless: give it lines here, unless the user set its outline.
+            let blocks = s
+                .overrides
+                .get("palette")
+                .is_some_and(|n| n.trim().eq_ignore_ascii_case("blocks"));
+            let look = &mut theme.panels[1];
+            if blocks
+                && look.outline == Outline::None
+                && !s.overrides.contains_key("messages_outline")
+            {
+                look.outline = Outline::Single;
+                look.focus_outline = Outline::Double;
+            }
             theme = theme.without_colour();
         }
         (theme, problems)
@@ -750,12 +769,39 @@ mod tests {
         let side = t.panel(Panel::Sidebar);
         assert_eq!(side.outline, Outline::None);
         assert_eq!(side.bg, Some(Color::Indexed(234)));
-        assert_ne!(
-            side.focus_bg, side.bg,
-            "the focused panel is a shade lighter"
+        let shades = |t: &Theme| {
+            [
+                Panel::Sidebar,
+                Panel::Messages,
+                Panel::Composer,
+                Panel::Popup,
+                Panel::Header,
+            ]
+            .map(|p| t.panel(p).bg)
+        };
+        let idx = |n| Some(Color::Indexed(n));
+        assert_eq!(
+            shades(&t),
+            [idx(234), None, idx(236), idx(235), idx(234)],
+            "chat window on the terminal background, message box the lightest"
         );
+        for panel in [
+            Panel::Sidebar,
+            Panel::Messages,
+            Panel::Composer,
+            Panel::Popup,
+            Panel::Header,
+        ] {
+            let look = t.panel(panel);
+            assert_eq!(look.focus_bg, look.bg, "focus changes no shade");
+            assert!(!look.focus_tint);
+            assert_eq!(look.focus_outline, look.outline);
+        }
         let (light, _) = Theme::from_settings(&settings("light", &[("palette", "blocks")]), false);
-        assert_eq!(light.panel(Panel::Messages).bg, Some(Color::Indexed(255)));
+        assert_eq!(
+            shades(&light),
+            [idx(254), None, idx(252), idx(253), idx(254)]
+        );
         let (lines, _) = Theme::from_settings(&settings("default", &[("palette", "lines")]), false);
         assert_eq!(
             lines,
@@ -821,7 +867,8 @@ mod tests {
             t.panel(Panel::Header).bg,
             Some(Color::Rgb(0x10, 0x20, 0x30))
         );
-        assert_eq!(t.panel(Panel::Messages).bg, Some(Color::Indexed(233)));
+        assert_eq!(t.panel(Panel::Messages).bg, None);
+        assert_eq!(t.panel(Panel::Composer).bg, Some(Color::Indexed(236)));
     }
 
     #[test]
@@ -840,5 +887,21 @@ mod tests {
             );
         }
         assert_eq!(t.panel(Panel::Header).bg, None);
+    }
+
+    #[test]
+    fn no_colour_keeps_an_outline_the_user_set_to_none() {
+        let s = settings(
+            "default",
+            &[("palette", "lines"), ("messages_outline", "none")],
+        );
+        let (t, _) = Theme::from_settings(&s, true);
+        assert_eq!(t.panel(Panel::Messages).outline, Outline::None);
+        let s = settings(
+            "default",
+            &[("palette", "blocks"), ("messages_outline", "none")],
+        );
+        let (t, _) = Theme::from_settings(&s, true);
+        assert_eq!(t.panel(Panel::Messages).outline, Outline::None);
     }
 }

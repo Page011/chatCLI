@@ -926,7 +926,7 @@ impl Backend {
 
     // -- typing -----------------------------------------------------------------------------
 
-    /// Our own typing state. Off by default (`send_typing`): with it off no chat-state stanza
+    /// Our own typing state. On by default (`send_typing`): with it off no chat-state stanza
     /// is ever sent. On, "composing" goes out at most once per 5 s per chat, and "paused" only
     /// after a "composing".
     pub(super) async fn typing(&mut self, chat_id: String, active: bool) {

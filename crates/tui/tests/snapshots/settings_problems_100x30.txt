@@ -1,0 +1,49 @@
+ chatcli  Teams 103 LIVE   WhatsApp CONNECTING                                           Ctrl+C quit
+┌ Settings ──────┐╔ Layout ════════════════════════════════════════════════════════════════════════╗
+│Appearance      │║SETTINGS FILE PROBLEMS: 2 - see About                                           ║
+│Layout          │║Sidebar width       auto           auto, 16-120 columns or 10%-70%              ║
+│Notifications   │║Time format         24h            24h or 12h                                   ║
+│Media           │║Date order          dmy            dmy, mdy or ymd                              ║
+│Teams           │║Density             cozy           cozy or compact                              ║
+│WhatsApp        │║Show previews       on             last message under each chat                 ║
+│Keys            │║Avatars             groups         groups, all or off                           ║
+│About           │║Photos              on             in avatars, Sixel/Kitty/iTerm2 only          ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║                                                                                ║
+│                │║auto, 16-120 columns or 10%-70%                                                 ║
+└────────────────┘╚════════════════════════════════════════════════════════════════════════════════╝
+Up/Down move  Esc close  Left/Right change  Enter edit  r reset  Tab sections
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 89-99: fg=Reset bg=Reset DIM
+row 1 cols 19-26: fg=Reset bg=Reset BOLD
+row 2 cols 19-55: fg=Red bg=Reset NONE
+row 3 cols 1-16: fg=Reset bg=Reset BOLD
+row 3 cols 19-53: fg=Reset bg=Reset BOLD | REVERSED
+row 3 cols 54-98: fg=Reset bg=Reset BOLD | DIM | REVERSED
+row 4 cols 54-98: fg=Reset bg=Reset DIM
+row 5 cols 54-98: fg=Reset bg=Reset DIM
+row 6 cols 54-98: fg=Reset bg=Reset DIM
+row 7 cols 54-98: fg=Reset bg=Reset DIM
+row 8 cols 54-98: fg=Reset bg=Reset DIM
+row 9 cols 54-98: fg=Reset bg=Reset DIM
+row 27 cols 19-49: fg=Reset bg=Reset DIM
+row 29 cols 0-76: fg=Reset bg=Reset DIM

@@ -1,0 +1,52 @@
+ chatcli  Teams 101 LIVE   WhatsApp CONNECTING   Ctrl+C quit
+┌ Chats ───────────────────┐┌ Alex Example ────────────────┐
+│     Alex Example    09:15││  summary page needs a shorter│
+│     Alex Ex ╔ Emoji ═══════════════════════╗ e figures   │
+│99+  Project ║< Faces 2/10 >                ║ nd the      │
+│     Sam Sam ║/type to search               ║ e to the end│
+│  1  Sam Sam ║😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 ║             │
+│     You: se ║🫠 🫫 😉 😊 😇 🥰 😍 🤩 😘 😗 ║             │
+│     Release ║☺️ 😚 😙 🥲 😋 😛 😜 🤪 😝 🤑 ║  ----       │
+│     Jordan  ║🤗 🤭 🫢 🫣 🤫 🤔 🫡 🤐 🤨 😐 ║ 10          │
+│     田中太郎║😑 😶 🫥 😶‍🌫️ 😏 😒 🙄 😬 😮‍💨 🤥 ║ e? 🚀       │
+│     了解しま║🫨 🙂‍↔️ 🙂‍↕️ 😌 😔 😪 🤤 😴 🫩 😷 ║             │
+│     Jordan  ║🤒 🤕 🤢 🤮 🤧 🥵 🥶 🥴 😵 😵‍💫 ║             │
+│     You: th ║🤯 🤠 🥳 🥸 😎 🤓 🧐 😕 🫤 😟 ║             │
+│             ║grinning face :grinning:      ║             │
+│             ╚══════════════════════════════╝ ────────────┘
+│                          │╔ Message ═════════════════════╗
+│                          │║> hi                          ║
+└──────────────────────────┘╚══════════════════════════════╝
+Type to search  Enter choose  PgUp/PgDn category  Esc close
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 49-59: fg=Reset bg=Reset DIM
+row 2 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
+row 3 cols 1-12: fg=Reset bg=Reset BOLD | UNDERLINED
+row 3 cols 15-21: fg=Reset bg=Reset BOLD
+row 4 cols 1-4: fg=Reset bg=Reset BOLD
+row 4 cols 6-12: fg=Reset bg=Reset BOLD
+row 4 cols 15-28: fg=Reset bg=Reset BOLD
+row 5 cols 1-12: fg=DarkGray bg=Reset NONE
+row 5 cols 15-15: fg=Reset bg=Reset BOLD
+row 5 cols 16-29: fg=Reset bg=Reset DIM
+row 6 cols 1-4: fg=Reset bg=Reset BOLD
+row 6 cols 6-12: fg=Reset bg=Reset BOLD
+row 6 cols 15-16: fg=Reset bg=Reset BOLD | REVERSED
+row 7 cols 1-12: fg=DarkGray bg=Reset NONE
+row 8 cols 1-4: fg=Reset bg=Reset BOLD
+row 8 cols 47-51: fg=DarkGray bg=Reset NONE
+row 9 cols 1-12: fg=DarkGray bg=Reset NONE
+row 9 cols 47-48: fg=DarkGray bg=Reset NONE
+row 10 cols 1-4: fg=Reset bg=Reset BOLD
+row 11 cols 1-13: fg=DarkGray bg=Reset NONE
+row 12 cols 1-4: fg=Reset bg=Reset BOLD
+row 13 cols 1-12: fg=DarkGray bg=Reset NONE
+row 14 cols 15-38: fg=Reset bg=Reset DIM
+row 16 cols 29-37: fg=Reset bg=Reset BOLD
+row 17 cols 29-30: fg=Reset bg=Reset BOLD
+row 19 cols 0-58: fg=Reset bg=Reset DIM
+cursor: 16,5

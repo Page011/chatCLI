@@ -1,0 +1,60 @@
+ Teams 101 LIVE   WhatsApp CONN…       Ctrl+C quit
+╔ Alex Example - scrolled, PgDn for newer ═══════╗
+║  sunset from the lab window                    ║
+║  [image sunset.png 51 KB]                      ║
+║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀      ║
+║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀      ║
+║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀      ║
+║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀      ║
+║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀      ║
+║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀      ║
+║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀      ║
+║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀      ║
+║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀      ║
+║  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀      ║
+║  [file notes.txt 2 KB]                         ║
+╚════════════════════════════════════════════════╝
+┌ Message ───────────────────────────────────────┐
+│i to type                                       │
+└────────────────────────────────────────────────┘
+Up/Down move  r reply  e react  u link  o open
+--- styled runs (everything else is default style) ---
+row 0 cols 0-15: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 18-25: fg=Reset bg=Reset BOLD
+row 0 cols 27-31: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 39-49: fg=Reset bg=Reset DIM
+row 1 cols 1-41: fg=Reset bg=Reset BOLD
+row 2 cols 1-28: fg=Reset bg=Reset BOLD | REVERSED
+row 3 cols 1-26: fg=Reset bg=Reset BOLD | REVERSED
+row 4 cols 3-7: fg=Rgb(255, 255, 255) bg=Rgb(255, 255, 255) NONE
+row 4 cols 8-22: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 4 cols 23-42: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
+row 5 cols 3-7: fg=Rgb(255, 255, 255) bg=Rgb(255, 255, 255) NONE
+row 5 cols 8-22: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 5 cols 23-42: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
+row 6 cols 3-7: fg=Rgb(255, 255, 255) bg=Rgb(220, 40, 40) NONE
+row 6 cols 8-22: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 6 cols 23-42: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
+row 7 cols 3-22: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 7 cols 23-42: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
+row 8 cols 3-22: fg=Rgb(220, 40, 40) bg=Rgb(220, 40, 40) NONE
+row 8 cols 23-42: fg=Rgb(40, 180, 60) bg=Rgb(40, 180, 60) NONE
+row 9 cols 3-22: fg=Rgb(50, 80, 220) bg=Rgb(50, 80, 220) NONE
+row 9 cols 23-42: fg=Rgb(240, 200, 40) bg=Rgb(240, 200, 40) NONE
+row 10 cols 3-22: fg=Rgb(50, 80, 220) bg=Rgb(50, 80, 220) NONE
+row 10 cols 23-42: fg=Rgb(240, 200, 40) bg=Rgb(240, 200, 40) NONE
+row 11 cols 3-22: fg=Rgb(50, 80, 220) bg=Rgb(50, 80, 220) NONE
+row 11 cols 23-42: fg=Rgb(240, 200, 40) bg=Rgb(240, 200, 40) NONE
+row 12 cols 3-22: fg=Rgb(50, 80, 220) bg=Rgb(50, 80, 220) NONE
+row 12 cols 23-42: fg=Rgb(240, 200, 40) bg=Rgb(240, 200, 40) NONE
+row 13 cols 3-22: fg=Rgb(50, 80, 220) bg=Rgb(50, 80, 220) NONE
+row 13 cols 23-42: fg=Rgb(240, 200, 40) bg=Rgb(240, 200, 40) NONE
+row 14 cols 3-23: fg=Reset bg=Reset BOLD
+row 17 cols 1-9: fg=Reset bg=Reset DIM
+row 19 cols 0-11: fg=Reset bg=Reset BOLD
+row 19 cols 12-13: fg=Reset bg=Reset DIM
+row 19 cols 14-20: fg=Reset bg=Reset BOLD
+row 19 cols 21-22: fg=Reset bg=Reset DIM
+row 19 cols 23-29: fg=Reset bg=Reset BOLD
+row 19 cols 30-39: fg=Reset bg=Reset DIM
+row 19 cols 40-45: fg=Reset bg=Reset BOLD

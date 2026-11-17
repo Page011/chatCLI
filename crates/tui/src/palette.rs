@@ -2,10 +2,12 @@
 //! of the active network that match. Pure state; `App` fills the items, `ui` draws them.
 
 use crate::commands::CmdId;
+use crate::input::TextInput;
+use crate::list;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct Palette {
-    pub query: String,
+    pub query: TextInput,
     /// Chosen item.
     pub sel: usize,
     /// First display row shown (headings count as rows).
@@ -47,33 +49,24 @@ pub(crate) fn rows(items: &[PalItem]) -> Vec<PalRow> {
 impl Palette {
     /// Moves the selection, wrapping at both ends.
     pub fn step(&mut self, len: usize, delta: isize) {
-        if len > 0 {
-            self.sel = (self.sel as isize + delta).rem_euclid(len as isize) as usize;
-        }
+        self.sel = list::step(self.sel, len, delta);
     }
 
     /// Page keys: clamped, not wrapped.
     pub fn page(&mut self, len: usize, delta: isize) {
-        if len > 0 {
-            self.sel = (self.sel as isize + delta).clamp(0, len as isize - 1) as usize;
-        }
+        self.sel = list::page(self.sel, len, delta);
     }
 
     /// Scrolls so the selected item's row is inside a window of `rows_shown` rows.
     pub fn keep_visible(&mut self, items: &[PalItem], rows_shown: usize) {
-        let shown = rows_shown.max(1);
-        let at = rows(items)
+        let rows = rows(items);
+        let at = rows
             .iter()
             .position(|r| *r == PalRow::Item(self.sel))
             .unwrap_or(0);
-        if self.sel == 0 {
-            // The first item: show its heading too.
-            self.top = 0;
-        } else if at < self.top {
-            self.top = at;
-        } else if at >= self.top + shown {
-            self.top = at + 1 - shown;
-        }
+        // The first item: show its heading too.
+        let row = if self.sel == 0 { 0 } else { at };
+        self.top = list::keep_visible(self.top, row, rows_shown, rows.len());
     }
 }
 

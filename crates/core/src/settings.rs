@@ -42,7 +42,7 @@ const MEDIA_KEYS: [&str; 5] = [
     "image_protocol",
 ];
 const TEAMS_KEYS: [&str; 3] = ["files_read", "files_write", "photos"];
-const WHATSAPP_KEYS: [&str; 2] = ["send_read_receipts", "send_typing"];
+const WHATSAPP_KEYS: [&str; 3] = ["send_read_receipts", "send_typing", "download_images"];
 
 /// Accepted spellings of each choice setting, in cycling order. The parser and the writer both
 /// read these, so a name can never be written that would not load.
@@ -86,24 +86,12 @@ pub struct Settings {
 }
 
 /// Raw: `chatcli_tui` validates action names, key strings and contexts.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct KeySettings {
-    /// "default" or "vim".
-    pub preset: String,
     /// context -> key string -> action name, exactly as written.
     pub bindings: BTreeMap<String, BTreeMap<String, String>>,
     /// (context, key) -> line in the file, so the TUI's messages can name it.
     pub lines: BTreeMap<(String, String), usize>,
-}
-
-impl Default for KeySettings {
-    fn default() -> Self {
-        KeySettings {
-            preset: "default".to_string(),
-            bindings: BTreeMap::new(),
-            lines: BTreeMap::new(),
-        }
-    }
 }
 
 /// Raw: `chatcli_tui` validates role names and colour values.
@@ -194,9 +182,10 @@ impl Default for LayoutSettings {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum NotifyPreview {
     /// No message text leaves the process.
-    #[default]
     Off,
     Sender,
+    /// Sender and message text in the toast.
+    #[default]
     Full,
 }
 
@@ -262,12 +251,24 @@ pub struct TeamsSettings {
     pub photos: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WhatsAppSettings {
     /// Send read receipts when a chat is marked read.
     pub send_read_receipts: bool,
     /// Send our own typing indicator. Showing other people's is always on.
     pub send_typing: bool,
+    /// Fetch pictures in opened WhatsApp chats and show them as thumbnails.
+    pub download_images: bool,
+}
+
+impl Default for WhatsAppSettings {
+    fn default() -> Self {
+        WhatsAppSettings {
+            send_read_receipts: true,
+            send_typing: true,
+            download_images: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -507,12 +508,24 @@ pub fn parse(text: &str, path: &Path) -> LoadReport {
         }
     }
     if let Some(t) = table_of("keys") {
-        // Besides `preset`, [keys] holds one table per context. A plain value cannot be a binding.
+        // [keys] holds one table per context. A plain value cannot be a binding.
         unknown.extend(
             t.iter()
                 .filter(|(k, v)| *k != "preset" && !v.is_table())
                 .map(|(k, _)| ("keys".to_string(), Some(k.clone()))),
         );
+        // Presets ("default", "vim") were removed before any release that had them.
+        if t.contains_key("preset") {
+            problems.push(SettingsProblem {
+                severity: Severity::Warning,
+                line: line_of(text, "keys", "preset"),
+                section: "keys".to_string(),
+                key: Some("preset".to_string()),
+                message: "key presets are gone: there is one set of keys, and any of them can \
+                          be rebound in [keys.<context>]. Remove this line."
+                    .to_string(),
+            });
+        }
     }
     if !unknown.is_empty() {
         problems.push(unknown_problem(text, &unknown));
@@ -583,35 +596,27 @@ fn load_section<T: Default>(
 
 fn keys_section(t: &Table, text: &str) -> Result<KeySettings, Bad> {
     let mut out = KeySettings::default();
+    // A plain value is not read here: it is reported once as an unknown setting (or `preset`,
+    // as no longer used).
     for (name, value) in t {
-        match value {
-            Value::String(s) if name == "preset" => out.preset = s.clone(),
-            _ if name == "preset" => {
-                return Err(bad(
-                    "preset",
-                    "use a preset name in quotes, such as \"default\" or \"vim\"",
-                ))
+        let Value::Table(context) = value else {
+            continue;
+        };
+        let mut map = BTreeMap::new();
+        for (key, action) in context {
+            let Value::String(action) = action else {
+                return Err(Bad {
+                    path: Some(format!("keys.{name}")),
+                    key: key.clone(),
+                    message: "use an action name in quotes".to_string(),
+                });
+            };
+            map.insert(key.clone(), action.clone());
+            if let Some(line) = line_of(text, &format!("keys.{name}"), key) {
+                out.lines.insert((name.clone(), key.clone()), line);
             }
-            Value::Table(context) => {
-                let mut map = BTreeMap::new();
-                for (key, action) in context {
-                    let Value::String(action) = action else {
-                        return Err(Bad {
-                            path: Some(format!("keys.{name}")),
-                            key: key.clone(),
-                            message: "use an action name in quotes".to_string(),
-                        });
-                    };
-                    map.insert(key.clone(), action.clone());
-                    if let Some(line) = line_of(text, &format!("keys.{name}"), key) {
-                        out.lines.insert((name.clone(), key.clone()), line);
-                    }
-                }
-                out.bindings.insert(name.clone(), map);
-            }
-            // A plain value that is not `preset`: reported once as an unknown setting.
-            _ => {}
         }
+        out.bindings.insert(name.clone(), map);
     }
     Ok(out)
 }
@@ -711,8 +716,9 @@ fn teams_section(t: &Table, _text: &str) -> Result<TeamsSettings, Bad> {
 
 fn whatsapp_section(t: &Table, _text: &str) -> Result<WhatsAppSettings, Bad> {
     Ok(WhatsAppSettings {
-        send_read_receipts: flag(t, "send_read_receipts", false)?,
-        send_typing: flag(t, "send_typing", false)?,
+        send_read_receipts: flag(t, "send_read_receipts", true)?,
+        send_typing: flag(t, "send_typing", true)?,
+        download_images: flag(t, "download_images", true)?,
     })
 }
 
@@ -1160,12 +1166,12 @@ mod tests {
     #[test]
     fn defaults_are_todays_behaviour() {
         let s = Settings::default();
-        assert_eq!(s.keys.preset, "default");
+        assert!(s.keys.bindings.is_empty());
         assert_eq!(s.theme.name, "default");
         assert_eq!(s.layout.sidebar_width, None);
         assert!(s.layout.show_previews);
         assert!(s.notifications.enabled && s.notifications.sound);
-        assert_eq!(s.notifications.preview, NotifyPreview::Off);
+        assert_eq!(s.notifications.preview, NotifyPreview::Full);
         assert_eq!(
             (
                 s.media.cache_max_mb,
@@ -1176,16 +1182,15 @@ mod tests {
         );
         assert!(!s.teams.files_read && !s.teams.files_write && !s.teams.photos);
         assert!(s.layout.photos);
-        assert!(!s.whatsapp.send_read_receipts && !s.whatsapp.send_typing);
+        assert!(
+            s.whatsapp.send_read_receipts && s.whatsapp.send_typing && s.whatsapp.download_images
+        );
     }
 
     #[test]
     fn a_full_file_loads_every_section() {
         let r = load(
             r##"
-[keys]
-preset = "vim"
-
 [keys.list]
 "ctrl+n" = "list_down"
 x = "unbound"
@@ -1222,20 +1227,20 @@ files_write = true
 photos = true
 
 [whatsapp]
-send_read_receipts = true
-send_typing = true
+send_read_receipts = false
+send_typing = false
+download_images = false
 "##,
         );
         assert!(r.problems.is_empty(), "{:?}", r.problems);
         let s = r.settings;
-        assert_eq!(s.keys.preset, "vim");
         assert_eq!(s.keys.bindings["list"]["ctrl+n"], "list_down");
         assert_eq!(s.keys.bindings["list"]["x"], "unbound");
-        assert_eq!(s.keys.lines[&("list".to_string(), "ctrl+n".to_string())], 6);
+        assert_eq!(s.keys.lines[&("list".to_string(), "ctrl+n".to_string())], 3);
         assert_eq!(s.theme.name, "high-contrast");
         assert_eq!(s.theme.overrides["dim"], "8");
         assert_eq!(s.theme.overrides["chip_live"], "#00ff00");
-        assert_eq!(s.theme.lines["accent"], 11);
+        assert_eq!(s.theme.lines["accent"], 8);
         assert_eq!(s.layout.sidebar_width, Some(SidebarWidth::Percent(30)));
         assert_eq!(s.layout.time_format, TimeFormat::H12);
         assert_eq!(s.layout.date_order, DateOrder::Ymd);
@@ -1249,7 +1254,11 @@ send_typing = true
         assert!(!s.media.inline_images);
         assert_eq!(s.media.image_protocol, ImageProtocol::Kitty);
         assert!(s.teams.files_read && s.teams.files_write && s.teams.photos);
-        assert!(s.whatsapp.send_read_receipts && s.whatsapp.send_typing);
+        assert!(
+            !s.whatsapp.send_read_receipts
+                && !s.whatsapp.send_typing
+                && !s.whatsapp.download_images
+        );
     }
 
     #[test]
@@ -1302,7 +1311,7 @@ send_typing = true
     #[test]
     fn syntax_errors_after_a_split_section_keep_real_line_numbers() {
         // [keys] and [keys.list] are one group around [layout]: the error line stays 9.
-        let r = load("[keys]\npreset = \"vim\"\n\n[layout]\nshow_previews = false\n\n[keys.list]\n\"a\" = \"x\"\n\"b\" = \n");
+        let r = load("[keys]\n# bindings below\n\n[layout]\nshow_previews = false\n\n[keys.list]\n\"a\" = \"x\"\n\"b\" = \n");
         let e = errors(&r);
         assert_eq!(e.len(), 1, "{:?}", r.problems);
         assert_eq!(e[0].line, Some(9));
@@ -1348,6 +1357,7 @@ send_typing = true
             "[notifications]\npreview = \"all\"\n",
             "[teams]\nfiles_read = \"true\"\n",
             "[whatsapp]\nsend_typing = 0\n",
+            "[whatsapp]\ndownload_images = \"yes\"\n",
         ] {
             let r = load(text);
             assert_eq!(errors(&r).len(), 1, "{text:?} -> {:?}", r.problems);
@@ -1380,7 +1390,7 @@ send_typing = true
     #[test]
     fn unknown_things_make_one_warning_and_the_values_still_load() {
         let r = load(
-            "stray = 1\n[layout]\ndensty = \"compact\"\ndensity = \"compact\"\n[colors]\nx = 1\n[teams]\nfiles_reed = true\n[keys]\npreset = \"vim\"\nbogus = 2\n",
+            "stray = 1\n[layout]\ndensty = \"compact\"\ndensity = \"compact\"\n[colors]\nx = 1\n[teams]\nfiles_reed = true\n[keys]\nbogus = 2\n",
         );
         assert_eq!(r.problems.len(), 1, "{:?}", r.problems);
         let w = &r.problems[0];
@@ -1401,7 +1411,6 @@ send_typing = true
             Density::Compact,
             "known keys still load"
         );
-        assert_eq!(r.settings.keys.preset, "vim");
         let one = load("[layout]\ndensty = 1\n");
         assert!(one.problems[0]
             .message
@@ -1413,15 +1422,32 @@ send_typing = true
     }
 
     #[test]
+    fn a_key_preset_is_a_warning_naming_its_line_and_the_bindings_still_load() {
+        for value in ["\"vim\"", "\"default\"", "3"] {
+            let r = load(&format!(
+                "[keys]\npreset = {value}\n\n[keys.list]\n\"f5\" = \"refresh\"\n"
+            ));
+            assert_eq!(r.problems.len(), 1, "{value}: {:?}", r.problems);
+            let w = &r.problems[0];
+            assert_eq!(w.severity, Severity::Warning);
+            assert_eq!((w.line, w.key.as_deref()), (Some(2), Some("preset")));
+            assert!(
+                w.message.starts_with("key presets are gone"),
+                "{}",
+                w.message
+            );
+            assert_eq!(r.settings.keys.bindings["list"]["f5"], "refresh");
+        }
+    }
+
+    #[test]
     fn a_wrong_typed_key_value_is_an_error_naming_the_context_line() {
-        let r = load("[keys]\npreset = \"default\"\n\n[keys.list]\n\"ctrl+n\" = 5\n");
+        let r = load("[keys.list]\n\"ctrl+n\" = 5\n");
         let e = errors(&r);
         assert_eq!(e.len(), 1, "{:?}", r.problems);
         assert_eq!(e[0].section, "keys.list");
-        assert_eq!(e[0].line, Some(5));
+        assert_eq!(e[0].line, Some(2));
         assert_eq!(r.settings.keys, KeySettings::default());
-        let r = load("[keys]\npreset = 3\n");
-        assert_eq!(errors(&r)[0].key.as_deref(), Some("preset"));
         let r = load("[theme]\naccent = true\n");
         assert_eq!(errors(&r).len(), 1);
     }
@@ -1597,10 +1623,12 @@ send_typing = true
         assert_eq!(out, "[layout]\ndensity = \"compact\"\n");
         let out = edited(
             "[teams]\nfiles_read = true\n",
-            &[set("whatsapp", "send_typing", SettingValue::Bool(true))],
+            &[set("whatsapp", "send_typing", SettingValue::Bool(false))],
         );
         let r = load(&out);
-        assert!(r.settings.teams.files_read && r.settings.whatsapp.send_typing);
+        assert!(r.settings.teams.files_read && !r.settings.whatsapp.send_typing);
+        // Only the edited key moves; the others keep their defaults.
+        assert!(r.settings.whatsapp.send_read_receipts && r.settings.whatsapp.download_images);
     }
 
     #[test]
@@ -1921,11 +1949,9 @@ density = \"cozy\"
             .image_protocol,
             ImageProtocol::Iterm2
         );
-        // Colours and the key preset are plain strings.
+        // Colours are plain strings.
         let s = one("theme", "name", SettingValue::str("light"));
         assert_eq!(s.theme.name, "light");
-        let s = one("keys", "preset", SettingValue::str("vim"));
-        assert_eq!(s.keys.preset, "vim");
         let out = edited("", &[set("theme", "unread", SettingValue::str("#12ab3f"))]);
         assert_eq!(load(&out).settings.theme.overrides["unread"], "#12ab3f");
     }
