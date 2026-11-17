@@ -621,7 +621,7 @@ pub async fn run(
         // A steady stream of backend events (history sync, Teams catch-up) can win every
         // select! round and starve the sleep branch above, so a due timer is also checked here,
         // after whichever branch ran.
-        if app.next_deadline().is_some_and(|due| due <= now_ms()) {
+        if app.refill_due() || app.next_deadline().is_some_and(|due| due <= now_ms()) {
             app.tick(now_ms());
             out.extend(app.fire_timers());
             dirty = true;

@@ -1991,17 +1991,22 @@ fn draw_convo(f: &mut Frame, app: &App, lay: &Layout) {
         centered_note(f, lay.messages, "No messages in this chat yet.", t);
         return;
     }
-    let (start, end, area) = convo_view(lay, lines.len(), ns.scroll);
+    let (start, end, area) = convo_view(app, lay, lines.len(), ns.scroll);
     f.render_widget(Paragraph::new(lines[start..end].to_vec()), area);
 }
 
 /// The lines `start..end` of `total` that show in the message area at `scroll`, and where they
 /// are drawn. Shared by drawing and the mouse.
-fn convo_view(lay: &Layout, total: usize, scroll: usize) -> (usize, usize, Rect) {
-    let height = lay.messages.height as usize;
+fn convo_view(app: &App, lay: &Layout, total: usize, scroll: usize) -> (usize, usize, Rect) {
+    let mut msgs = lay.messages;
+    // An open completion list covers the bottom of the pane: lay the lines out above it.
+    if let Some(g) = popup_geometry(app, lay) {
+        msgs.height = g.outer.y.saturating_sub(msgs.y).min(msgs.height);
+    }
+    let height = msgs.height as usize;
     let end = total - scroll.min(total.saturating_sub(height));
     let start = end.saturating_sub(height);
-    (start, end, bottom_anchored(lay.messages, end - start))
+    (start, end, bottom_anchored(msgs, end - start))
 }
 
 /// What is under `pos` in the conversation: the message and, on a link or attachment chip,
@@ -2016,7 +2021,7 @@ pub(crate) fn convo_hit(
         return None;
     }
     let (lines, spans) = message_layout(ns, &app.look(), lay.messages.width as usize);
-    let (start, _, area) = convo_view(lay, lines.len(), ns.scroll);
+    let (start, _, area) = convo_view(app, lay, lines.len(), ns.scroll);
     if !area.contains(pos) {
         return None;
     }
@@ -2068,7 +2073,7 @@ pub(crate) fn visible_images(app: &App, lay: &Layout) -> Visible {
         return Visible::default();
     }
     let (lines, spans) = message_layout(ns, &app.look(), lay.messages.width as usize);
-    let (start, end, area) = convo_view(lay, lines.len(), ns.scroll);
+    let (start, end, area) = convo_view(app, lay, lines.len(), ns.scroll);
     let mut out = Visible::default();
     // A partly visible avatar keeps its initials.
     if app.photos() {

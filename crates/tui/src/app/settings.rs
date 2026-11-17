@@ -124,8 +124,8 @@ impl App {
     /// at once. The backends get a copy when something they read changed.
     pub(crate) fn apply_settings(&mut self, new: Settings) -> Out {
         let old = &self.settings;
-        if old.teams.photos && !new.teams.photos {
-            // Off hides what is already drawn, not only what is asked next.
+        if old.teams.photos != new.teams.photos {
+            // Off hides what is already drawn; on asks again for people answered None while off.
             self.ns_mut(Network::Teams).avatars.clear();
         }
         let old = &self.settings;
@@ -653,6 +653,8 @@ impl App {
         if let Some(section) = crate::settings_ui::section_at(page, &g, pos) {
             if let Some(p) = self.settings_page.as_mut() {
                 p.section = section;
+                p.filter.clear();
+                p.filtering = false;
                 p.row = 0;
                 p.top = 0;
                 p.in_rows = false;

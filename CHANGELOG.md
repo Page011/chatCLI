@@ -68,6 +68,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Auto-download no longer fetches your own sent pictures back (that includes ones you sent from your phone: press `v` for those). A completion list closed by a click stays closed. Settings: clicking a section ends the `/` filter, and turning Teams photos back on asks again for people missed while off. A photo answer that arrives after sign-out is dropped on WhatsApp as well as Teams. Auto-download fetches three pictures at a time instead of up to twenty together. An open completion list no longer hides the newest messages. Avatars count towards the cache size limit at once. NO_COLOR also removes the colour swatches on the Appearance page.
 - No more screen flashes when switching tabs or chats or scrolling: a picture that moves or goes away now has only its own cells redrawn instead of the whole screen being cleared, and every frame is sent as one synchronized update (terminals without support ignore it).
 - Linux on Wayland: the clipboard is the native Wayland one (wlroots compositors such as Hyprland and sway, and KDE), so `Alt+V` reads pictures and copied text reaches other apps. Through XWayland it did neither. Older GNOME, without the data-control protocol, still goes through XWayland.
 - Running `relay setup` twice no longer silently breaks live Teams with a 401.

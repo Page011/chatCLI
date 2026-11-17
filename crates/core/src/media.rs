@@ -394,6 +394,7 @@ impl MediaCache {
     }
 
     /// Re-encodes the photo (`avatar_png`), writes `<hex>.png` and drops the `.none` marker.
+    /// Does not evict: callers call `evict` once after a batch.
     /// CPU work: call from `spawn_blocking`.
     pub fn store_avatar(&self, network: Network, person_id: &str, bytes: &[u8]) -> Result<PathBuf> {
         let png = avatar_png(bytes)?;

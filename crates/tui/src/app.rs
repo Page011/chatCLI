@@ -287,6 +287,9 @@ pub struct App {
     notices: VecDeque<Notice>,
     size: Rect,
     clock: Clock,
+    /// Set when a pane may have come back on screen: `fire_timers` then refills the picture
+    /// downloads that stalled while it was hidden.
+    auto_kick: bool,
     next_client: u64,
     quit: bool,
     keys: Keymap,
@@ -503,6 +506,7 @@ impl App {
             notices: VecDeque::new(),
             size: Rect::new(0, 0, 80, 24),
             clock,
+            auto_kick: false,
             next_client: 0,
             quit: false,
             keys: Keymap::build(&settings.keys).0,
@@ -789,6 +793,7 @@ impl App {
         let now = self.clock.now_ms;
         for n in Network::ALL {
             let visible = self.convo_visible(n);
+            self.auto_kick |= visible;
             let ns = self.ns_mut(n);
             if !ns.previewing || ns.open.is_none() {
                 continue;
@@ -830,6 +835,11 @@ impl App {
             .min()
     }
 
+    /// True when `fire_timers` has picture downloads to refill after a pane came back.
+    pub fn refill_due(&self) -> bool {
+        self.auto_kick
+    }
+
     /// Runs the timers that are due at the clock time set by `tick`: requests a chat that has
     /// rested for `SETTLE_MS`, and marks one read after `READ_AFTER_MS` of preview.
     pub fn fire_timers(&mut self) -> Out {
@@ -861,6 +871,10 @@ impl App {
         }
         for n in counted {
             out.extend(self.auto_images(n));
+        }
+        // A pane that came back on screen: repeating is safe, `auto_tried` and the cap hold.
+        if std::mem::take(&mut self.auto_kick) {
+            out.extend(self.auto_images(self.active));
         }
         out
     }
@@ -1257,7 +1271,11 @@ impl App {
                 message_id,
                 index,
                 path,
-            } => self.media_ready(network, chat_id, message_id, index, path),
+            } => {
+                self.media_ready(network, chat_id, message_id, index, path);
+                // A slot freed: a picture held back by the in-flight cap starts now.
+                out.extend(self.auto_images(network));
+            }
             Event::MediaFailed {
                 network,
                 chat_id,
@@ -1265,7 +1283,10 @@ impl App {
                 index,
                 reason,
                 fallback_url,
-            } => self.media_failed(network, chat_id, message_id, index, reason, fallback_url),
+            } => {
+                self.media_failed(network, chat_id, message_id, index, reason, fallback_url);
+                out.extend(self.auto_images(network));
+            }
             Event::SendProgress {
                 network,
                 chat_id,
@@ -2446,6 +2467,7 @@ impl App {
             return self.run_click_action(action);
         }
         self.popup = None;
+        self.popup_closed = true;
         match m.kind {
             MouseEventKind::Down(MouseButton::Left) => {
                 if lay.header.contains(pos) {

@@ -162,6 +162,7 @@ impl App {
             self.run_action(action, ctx)
         };
         out.extend(self.composing_after(net, chat, was_empty));
+        self.popup_closed = !self.popup_alive;
         if self.popup_alive {
             out.extend(self.refresh_popup());
         } else {

@@ -657,7 +657,7 @@ pub(crate) fn rows(
                 RowId::NotifPreview,
                 "Preview",
                 name_of(&NOTIFY_PREVIEWS, n.preview),
-                "off keeps message text out of toasts",
+                "off or sender: no message text in toasts",
                 n.preview != d.notifications.preview,
             ));
             out.push(row(

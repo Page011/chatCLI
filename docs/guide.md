@@ -230,7 +230,7 @@ You can unlink at any time from the same **Linked devices** screen on your phone
 
 - Replies, reactions, mentions, edit and delete work on WhatsApp. Edit and delete only work for a short time after sending: WhatsApp decides, and its refusal is shown as a notice with the text unchanged. Mentions work in groups only.
 - **Older messages:** scrolling past the top asks your phone for 50 older messages. The phone must be online; after 30 seconds without an answer chatcli shows `PHONE DID NOT ANSWER` and you can scroll again. Very old messages may be unavailable.
-- **Media** is downloaded when you ask, into the media cache (not encrypted on disk). Pictures in the 20 newest messages of a chat you open also download by themselves and show as thumbnails (not files, and nothing over `max_file_mb`); `[whatsapp] download_images = false` turns that off. WhatsApp deletes old media from its servers: a file that is gone shows `MEDIA EXPIRED`; ask the sender to send it again.
+- **Media** is downloaded when you ask, into the media cache (not encrypted on disk). Pictures from others in the 20 newest messages of a chat you open also download by themselves and show as thumbnails (not files, and nothing over `max_file_mb`); `[whatsapp] download_images = false` turns that off. WhatsApp deletes old media from its servers: a file that is gone shows `MEDIA EXPIRED`; ask the sender to send it again.
 - **Sending files:** pictures (PNG, JPEG, GIF as a still, WebP) up to 16 MB are re-encoded, which removes EXIF data such as location. Other files up to 100 MB are sent as documents. WhatsApp can flag media sent by unofficial clients: keep sends manual and low volume.
 - **Typing:** you see when someone is typing. chatcli sends your own typing state unless `[whatsapp] send_typing = false` (default `true`), at most once per 5 seconds per chat.
 - **Read state:** reading a chat clears the unread mark on your phone. Read receipts (blue ticks for the sender) are sent unless `[whatsapp] send_read_receipts = false` (default `true`).
@@ -413,7 +413,7 @@ photos = false              # User.ReadBasic.All: profile photos in avatars (nee
 [whatsapp]
 send_read_receipts = true   # blue ticks for the sender when you read a chat
 send_typing = true          # tell the other side when you type (showing theirs is always on)
-download_images = true      # pictures in the newest 20 messages of an opened chat load as thumbnails
+download_images = true      # pictures from others in the newest 20 messages of an opened chat load as thumbnails
 
 # [keys.list] and the other context tables: see Key bindings
 
@@ -466,7 +466,7 @@ Roles: `text` (messages, chat titles, your draft), `dim` (times, previews, separ
 
 ### Media
 
-Nothing downloads until you press `o` or `v` on a message. `o` fetches the attachment into the media cache and opens it in the default app. `v` shows a thumbnail under the message.
+Nothing downloads until you press `o` or `v` on a message, except WhatsApp pictures: those from others in the 20 newest messages of the open chat download by themselves (`[whatsapp] download_images`, see WhatsApp above). `o` fetches the attachment into the media cache and opens it in the default app. `v` shows a thumbnail under the message.
 
 - The cache is `media\<network>\` in the data folder, files named by a hash, never by the sender's file name. It is capped by `cache_max_mb` and `retention_days` (oldest files go first, checked at start and after each download). A file over `max_file_mb` is not downloaded: you get a notice that names the setting. `chatcli media clear` empties it.
 - **Cached files are not encrypted on disk.** Use full-disk encryption.
@@ -479,7 +479,7 @@ Nothing downloads until you press `o` or `v` on a message. `o` fetches the attac
 
 A Windows toast appears for a new incoming message when chatcli's window is not focused or the chat is not the open one. Never for your own messages, the open chat while the window is focused, muted chats, loaded history or edits.
 
-- The toast shows the sender and the message text by default. `preview` decides how much text leaves chatcli (see the settings above): `sender` shows `Name: new message`, `off` shows the chat title and `New message`. The text can show on a locked screen: set `preview = "off"` if that matters to you.
+- The toast shows the sender and the message text by default. `preview` decides how much text leaves chatcli (see the settings above): `sender` shows `Name: new message`, `off` shows the chat title and `New message`. The text can show on a locked screen: set `preview = "off"` or `"sender"` to keep message text off it.
 - At most one toast per chat per 10 seconds; the rest fold into `N new messages`.
 - chatcli learns about focus from the terminal. If your terminal never reports it, chatcli treats the window as unfocused and toasts for the open chat too.
 - Windows' Focus Assist or Do Not Disturb silences toasts by design.

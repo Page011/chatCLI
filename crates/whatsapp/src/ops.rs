@@ -275,12 +275,19 @@ impl Backend {
                 Err(reason) => self.media_failed(chat_id, message_id, index, reason),
             },
             Done::Members { chat_id, result } => self.on_members(chat_id, result),
-            Done::Avatar { person_id, path } => {
-                self.emit(Out::Avatar {
-                    network: NET,
-                    person_id,
-                    path,
-                });
+            Done::Avatar {
+                gen,
+                person_id,
+                path,
+            } => {
+                // An answer from before a logout is not shown: its photo is gone or not ours.
+                if gen == self.avatar_gen.load(std::sync::atomic::Ordering::SeqCst) {
+                    self.emit(Out::Avatar {
+                        network: NET,
+                        person_id,
+                        path,
+                    });
+                }
                 self.schedule_avatar();
             }
             Done::OlderAsked {
@@ -642,7 +649,12 @@ impl Backend {
         let att = match self.store.message(NET, &chat_id, &message_id) {
             Ok(Some(m)) => m.attachments.get(index as usize).cloned(),
             Ok(None) => None,
-            Err(e) => return self.store_failed("read message", &e),
+            Err(e) => {
+                self.store_failed("read message", &e);
+                // Answer the TUI too, or its item stays Downloading and holds an auto slot.
+                let reason = "Could not read the message locally.".to_string();
+                return self.media_failed(chat_id, message_id, index, reason);
+            }
         };
         let Some(att) = att else {
             let reason = "That attachment is no longer available.".to_string();
@@ -1091,9 +1103,12 @@ impl Backend {
         self.avatar_sent.push_back(now);
         self.avatar_total += 1;
         let cache = self.media.clone();
+        let live = self.avatar_gen.clone();
+        let gen = live.load(std::sync::atomic::Ordering::SeqCst);
         self.spawn_done(async move {
-            let path = avatar_job(wa, &cache, &id, jid).await;
+            let path = avatar_job(wa, &cache, &id, jid, &live, gen).await;
             Done::Avatar {
+                gen,
                 person_id: id,
                 path,
             }
@@ -1265,22 +1280,51 @@ fn wa_log(text: &str) -> String {
 
 /// One profile photo lookup, stored in the cache. No photo, a picture over the cap or one that
 /// will not decode all write the "no photo" marker; a network failure writes nothing and keeps
-/// an older photo.
-async fn avatar_job(wa: Arc<dyn Wa>, cache: &MediaCache, id: &str, jid: Jid) -> Option<PathBuf> {
+/// an older photo. When `live` no longer reads `gen` (the session stopped) nothing is written.
+async fn avatar_job(
+    wa: Arc<dyn Wa>,
+    cache: &MediaCache,
+    id: &str,
+    jid: Jid,
+    live: &Arc<std::sync::atomic::AtomicU64>,
+    gen: u64,
+) -> Option<PathBuf> {
+    use std::sync::atomic::Ordering::SeqCst;
+    let current = || live.load(SeqCst) == gen;
     let stale = || match cache.avatar_lookup(NET, id, now_ms()) {
         AvatarLookup::Stale(p) => Some(p),
         _ => None,
     };
     let no_photo = || {
-        let _ = cache.store_no_avatar(NET, id);
+        if current() {
+            let _ = cache.store_no_avatar(NET, id);
+        }
         None
     };
-    match within(AVATAR_WAIT, wa.profile_picture(jid)).await {
+    let answer = within(AVATAR_WAIT, wa.profile_picture(jid)).await;
+    if !current() {
+        return None;
+    }
+    match answer {
         Ok(Some(bytes)) => {
             let c = cache.clone();
             let i = id.to_string();
-            match tokio::task::spawn_blocking(move || c.store_avatar(NET, &i, &bytes)).await {
-                Ok(Ok(p)) => Some(p),
+            let live = live.clone();
+            // Lookups are paced (AVATAR_GAP apart), so one cache walk per photo is cheap here.
+            let stored = tokio::task::spawn_blocking(move || {
+                if live.load(SeqCst) != gen {
+                    return None;
+                }
+                let r = c.store_avatar(NET, &i, &bytes);
+                if r.is_ok() {
+                    let _ = c.evict(now_ms());
+                }
+                Some(r)
+            })
+            .await;
+            match stored {
+                Ok(Some(Ok(p))) => Some(p),
+                Ok(None) => None,
                 _ => no_photo(),
             }
         }

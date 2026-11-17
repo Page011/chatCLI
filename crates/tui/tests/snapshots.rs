@@ -881,6 +881,15 @@ fn shortcode_popup() {
     check("shortcode_popup_second", 80, 24, &got);
 }
 
+/// The open list covers the bottom of the pane, so the newest messages sit above it, not under.
+#[test]
+fn shortcode_popup_does_not_hide_the_newest_messages() {
+    let mut app = typing_app();
+    type_str(&mut app, "nice :thu");
+    let got = render_cursor(&mut app, 100, 30);
+    assert!(got.contains("yes, shipped"), "{got}");
+}
+
 /// The popup squeezes into a short conversation pane without overflowing.
 #[test]
 fn shortcode_popup_in_a_small_terminal() {

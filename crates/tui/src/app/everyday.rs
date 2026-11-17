@@ -43,6 +43,11 @@ impl App {
         }
     }
 
+    /// NO_COLOR is set.
+    pub(crate) fn no_colour(&self) -> bool {
+        self.no_colour
+    }
+
     /// `[layout] photos`: profile photos drawn over the initials avatars.
     pub(crate) fn photos(&self) -> bool {
         self.layout.photos && !self.no_colour

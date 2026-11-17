@@ -2,8 +2,9 @@
 //! the one place that talks to the operating system. Windows only: elsewhere `notify` says so
 //! once and the TUI logs it once.
 //!
-//! Toast text can appear on a locked screen, which is why `[notifications] preview` defaults to
-//! off. Nothing here logs the toast text.
+//! Toast text can appear on a locked screen. `[notifications] preview` defaults to full (the
+//! text is shown); `"off"` or `"sender"` keeps message text off a locked screen. Nothing here
+//! logs the toast text.
 
 use std::sync::Arc;
 

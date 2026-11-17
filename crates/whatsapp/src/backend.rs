@@ -197,8 +197,10 @@ pub(crate) enum Done {
         prior: ChatFlags,
         result: Result<(), String>,
     },
-    /// One profile photo lookup finished: the stored picture, or None.
+    /// One profile photo lookup finished: the stored picture, or None. `gen` is the
+    /// `avatar_gen` it started under; an older one is dropped.
     Avatar {
+        gen: u64,
         person_id: String,
         path: Option<PathBuf>,
     },
@@ -300,6 +302,8 @@ pub(crate) struct Backend {
     avatar_sent: VecDeque<Instant>,
     /// Lookups started this run (one past the cap once the cap was logged).
     avatar_total: usize,
+    /// Bumped when the session stops: a lookup started before then writes nothing and is not shown.
+    avatar_gen: Arc<std::sync::atomic::AtomicU64>,
     /// When the next lookup may start (the run loop wakes then).
     pub(crate) avatar_at: Option<Instant>,
     /// When a connection attempt counts as stuck; None while connected or not trying.
@@ -337,6 +341,7 @@ impl Backend {
             avatar_seen: HashSet::new(),
             avatar_sent: VecDeque::new(),
             avatar_total: 0,
+            avatar_gen: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             avatar_at: None,
             connect_by: None,
             undecryptable: 0,
@@ -907,6 +912,8 @@ impl Backend {
         self.gen += 1;
         self.connect_by = None;
         self.drop_avatar_queue();
+        self.avatar_gen
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         // The queue ends once its pending sends are answered; the transfers on their own tasks
         // fail by themselves on the dead client and report it.
         self.link = None;

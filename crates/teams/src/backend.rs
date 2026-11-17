@@ -1441,7 +1441,12 @@ impl Backend {
                     answer(&events, id, stale);
                     continue;
                 }
-                let path = match graph.user_photo(&id).await {
+                let got = graph.user_photo(&id).await;
+                // Signed out while the request was in flight: write and answer nothing.
+                if gen_now.load(std::sync::atomic::Ordering::SeqCst) != gen_at {
+                    return;
+                }
+                let path = match got {
                     Ok(Some(bytes)) => {
                         let (c, i) = (cache.clone(), id.clone());
                         let stored = tokio::task::spawn_blocking(move || {
@@ -1477,8 +1482,14 @@ impl Backend {
                         stale
                     }
                 };
+                if gen_now.load(std::sync::atomic::Ordering::SeqCst) != gen_at {
+                    return;
+                }
                 answer(&events, id, path);
             }
+            // One cache walk per batch, not per photo.
+            let c = cache.clone();
+            let _ = tokio::task::spawn_blocking(move || c.evict(now_ms())).await;
             log::info(
                 "teams",
                 &format!("profile photos: {asked} asked, {found} found, {cached} cached"),

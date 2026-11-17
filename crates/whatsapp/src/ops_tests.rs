@@ -64,6 +64,8 @@ struct FakeWa {
     photo: Mutex<Result<Option<Vec<u8>>, String>>,
     /// When each `profile_picture` call came.
     photo_at: Mutex<Vec<tokio::time::Instant>>,
+    /// Some: `profile_picture` waits for a `notify_one` before it answers.
+    photo_gate: Mutex<Option<Arc<tokio::sync::Notify>>>,
 }
 
 impl FakeWa {
@@ -76,6 +78,7 @@ impl FakeWa {
             hang: Mutex::new(false),
             photo: Mutex::new(Ok(Some(photo_png()))),
             photo_at: Mutex::new(Vec::new()),
+            photo_gate: Mutex::new(None),
         })
     }
 
@@ -214,6 +217,10 @@ impl Wa for FakeWa {
             .unwrap()
             .push(tokio::time::Instant::now());
         self.record(Call::Photo(jid))?;
+        let gate = self.photo_gate.lock().unwrap().clone();
+        if let Some(g) = gate {
+            g.notified().await;
+        }
         self.photo.lock().unwrap().clone()
     }
 }
@@ -3066,6 +3073,28 @@ async fn logout_answers_the_waiting_people_with_none() {
     assert_eq!(got.len(), 3, "one lookup is in flight, three were waiting");
     assert!(got.iter().all(|(_, p)| p.is_none()));
     assert!(b.avatar_queue.is_empty() && b.avatar_at.is_none());
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_lookup_answered_after_logout_writes_and_shows_nothing() {
+    let (mut b, mut erx, mut rx) = backend();
+    let fake = linked(&mut b);
+    let gate = Arc::new(tokio::sync::Notify::new());
+    *fake.photo_gate.lock().unwrap() = Some(gate.clone());
+    b.on_command(avatar_cmd(&[phone(1)])).await;
+    b.on_command(Command::Logout).await;
+    gate.notify_one();
+    while let Ok(Some(m)) = tokio::time::timeout(Duration::from_secs(1), rx.recv()).await {
+        b.on_msg(m).await;
+    }
+    assert!(
+        avatar_events(&mut erx).is_empty(),
+        "no photo event after logout"
+    );
+    assert_eq!(
+        b.media.avatar_lookup(NET, &phone(1), now_ms()),
+        AvatarLookup::Missing
+    );
 }
 
 #[tokio::test(start_paused = true)]

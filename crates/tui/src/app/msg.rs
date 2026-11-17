@@ -1913,6 +1913,27 @@ mod tests {
     }
 
     #[test]
+    fn members_arriving_do_not_reopen_a_list_closed_by_the_mouse() {
+        let mut app = app_with(ChatKind::Group, three());
+        typed(&mut app, ":he");
+        assert!(app.popup().is_some());
+        app.handle_mouse(MouseEvent {
+            kind: MouseEventKind::ScrollUp,
+            column: 10,
+            row: 10,
+            modifiers: crossterm::event::KeyModifiers::NONE,
+        });
+        assert!(app.popup().is_none());
+        app.handle_event(Event::Members {
+            network: Network::Teams,
+            chat_id: "a".into(),
+            members: Vec::new(),
+            error: None,
+        });
+        assert!(app.popup().is_none(), "closed until the draft is edited");
+    }
+
+    #[test]
     fn a_paste_is_an_edit_so_members_may_open_the_list_again() {
         let mut app = app_with(ChatKind::Group, three());
         typed(&mut app, ":he");

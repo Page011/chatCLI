@@ -306,7 +306,9 @@ fn draw_rows(f: &mut Frame, app: &App, page: &SettingsPage, rows: &[Row], g: &Ge
         if let RowId::Role(name) = row.id {
             if name.ends_with("_background") {
                 // A swatch: the value drawn on the colour it names.
-                if let Ok(Some(c)) = crate::theme::background(&row.value) {
+                if let (false, Ok(Some(c))) =
+                    (app.no_colour(), crate::theme::background(&row.value))
+                {
                     value_style = value_style.bg(c);
                 }
             } else if name != "selected" {

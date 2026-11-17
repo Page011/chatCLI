@@ -26,6 +26,8 @@ const MIB: u64 = 1024 * 1024;
 const NAME_MAX: usize = 40;
 /// How many of a chat's newest messages get their pictures downloaded by themselves.
 const AUTO_IMAGE_MSGS: usize = 20;
+/// Most automatic picture downloads running at once; the rest wait for one to finish.
+const AUTO_IMAGE_IN_FLIGHT: usize = 3;
 
 /// A file chosen for the next message of one chat. Nothing is read or sent until Enter.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -566,6 +568,7 @@ impl App {
             .get(&chat)
             .into_iter()
             .flat_map(|ms| ms.iter().rev().take(AUTO_IMAGE_MSGS))
+            .filter(|m| !m.from_me)
             .flat_map(|m| {
                 m.attachments
                     .iter()
@@ -581,6 +584,16 @@ impl App {
                     })
             })
             .collect();
+        let mut running = self
+            .ns(n)
+            .media
+            .items
+            .iter()
+            .filter(|(k, i)| {
+                i.fetch == Fetch::Downloading(Then::View)
+                    && self.media.auto_tried.contains(&(n, (*k).clone()))
+            })
+            .count();
         let mut out = Vec::new();
         for (key, att) in wanted {
             let idle = self
@@ -590,10 +603,13 @@ impl App {
                 .get(&key)
                 .is_none_or(|i| i.fetch == Fetch::Idle && i.view == View::Hidden);
             if idle
+                && running < AUTO_IMAGE_IN_FLIGHT
                 && self.download_cap(att.size).is_ok()
                 && self.media.auto_tried.insert((n, key.clone()))
             {
-                out.extend(self.begin_view(n, key, &att, &Fetch::Idle));
+                let cmds = self.begin_view(n, key, &att, &Fetch::Idle);
+                running += cmds.len();
+                out.extend(cmds);
             }
         }
         out
@@ -2148,17 +2164,62 @@ mod tests {
         let mut mine = wa_message("p3", 4000, vec![image(10)]);
         mine.from_me = true;
         assert!(fetched(&app.handle_event(Event::Message(mine))).is_empty());
+        // ... nor by the next incoming message.
+        let out = app.handle_event(Event::Message(wa_message("p4", 5000, vec![])));
+        assert!(fetched(&out).is_empty());
     }
 
     #[test]
-    fn only_the_newest_twenty_messages_are_fetched() {
+    fn only_the_newest_twenty_messages_are_fetched_three_at_a_time() {
         let many: Vec<ChatMessage> = (0..21)
             .map(|i| wa_message(&format!("m{i:02}"), 1000 + i, vec![image(10)]))
             .collect();
         let mut app = wa_closed(&Settings::default(), Capabilities::all(), many);
-        let ids = fetched(&press(&mut app, KeyCode::Enter));
-        assert_eq!(ids.len(), 20);
-        assert!(!ids.contains(&"m00".to_string()));
+        let mut running = fetched(&press(&mut app, KeyCode::Enter));
+        assert_eq!(running, ["m20", "m19", "m18"], "only three start");
+        let mut all = running.clone();
+        // Each answer frees one slot, which starts the next waiting picture.
+        while let Some(id) = running.pop() {
+            let out = app.handle_event(Event::MediaFailed {
+                network: Network::WhatsApp,
+                chat_id: "w".into(),
+                message_id: id,
+                index: 0,
+                reason: "gone".into(),
+                fallback_url: None,
+            });
+            let next = fetched(&out);
+            assert!(next.len() <= 1);
+            all.extend(next.clone());
+            running.extend(next);
+        }
+        assert_eq!(all.len(), 20);
+        assert!(!all.contains(&"m00".to_string()));
+    }
+
+    #[test]
+    fn downloads_that_finish_while_the_pane_is_hidden_resume_when_it_returns() {
+        let many: Vec<ChatMessage> = (0..5)
+            .map(|i| wa_message(&format!("m{i}"), 1000 + i, vec![image(10)]))
+            .collect();
+        let mut app = wa_closed(&Settings::default(), Capabilities::all(), many);
+        let started = fetched(&press(&mut app, KeyCode::Enter));
+        assert_eq!(started, ["m4", "m3", "m2"]);
+        app.set_active(Network::Teams);
+        for id in started {
+            let out = app.handle_event(Event::MediaFailed {
+                network: Network::WhatsApp,
+                chat_id: "w".into(),
+                message_id: id,
+                index: 0,
+                reason: "gone".into(),
+                fallback_url: None,
+            });
+            assert!(fetched(&out).is_empty(), "pane hidden: nothing starts");
+        }
+        app.set_active(Network::WhatsApp);
+        assert!(app.refill_due(), "a refill is pending");
+        assert_eq!(fetched(&app.fire_timers()), ["m1", "m0"]);
     }
 
     #[test]
