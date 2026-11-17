@@ -2,11 +2,11 @@
 ╔ Appearance ══════════════════════════╗
 ║Theme               default           ║
 ║Palette             lines             ║
+║Sent mark           ○                 ║
+║Delivered mark      ●                 ║
+║Read mark           ✓                 ║
 ║Sidebar outline     default           ║
 ║Sidebar fill        default           ║
-║Messages outline    default           ║
-║Messages fill       default           ║
-║Message box outline default           ║
 ║default, high-contrast, light, dark   ║
 ╚══════════════════════════════════════╝
 Up/Down move  Esc close

@@ -92,6 +92,16 @@ pub struct Notice {
     pub global: bool,
 }
 
+/// What `Event::Receipts` last said about one chat: the `ts` of your newest message everyone
+/// else has read, and has received. None = unknown (no tick, no crosses).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct Receipts {
+    pub read: Option<i64>,
+    pub delivered: Option<i64>,
+    /// Your messages at or before this carry no state (sent before delivery was tracked).
+    pub since: Option<i64>,
+}
+
 pub(crate) struct NetState {
     pub network: Network,
     pub status: Status,
@@ -142,6 +152,10 @@ pub(crate) struct NetState {
     pub(crate) older: HashMap<String, Older>,
     /// Who is typing now, per chat id (WhatsApp only).
     pub(crate) typing: HashMap<String, Typers>,
+    /// How far everyone else has read and received your messages, per chat id (the last
+    /// `Event::Receipts`; WhatsApp only). The message pane ticks your newest read message and
+    /// crosses every sent message past `delivered`.
+    pub(crate) receipts: HashMap<String, Receipts>,
     /// When "composing" was last sent for a chat (clock ms): the 5 s throttle.
     pub(crate) typed_at: HashMap<String, i64>,
     /// Chats where "composing" went out and `paused` has not: owed when the message is sent.
@@ -186,6 +200,7 @@ impl NetState {
             progress: HashMap::new(),
             older: HashMap::new(),
             typing: HashMap::new(),
+            receipts: HashMap::new(),
             typed_at: HashMap::new(),
             composing: HashSet::new(),
             show_hidden: false,
@@ -1296,6 +1311,7 @@ impl App {
             } => self.send_progress(network, &chat_id, client_id, done, total),
             ev @ (Event::OlderMessages { .. }
             | Event::OlderFailed { .. }
+            | Event::Receipts { .. }
             | Event::Typing { .. }) => {
                 self.handle_everyday(ev);
             }

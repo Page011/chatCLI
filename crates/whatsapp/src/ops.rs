@@ -42,7 +42,7 @@ const NO_ADDRESS: &str = "This chat has no valid WhatsApp address. Press r to re
 impl Backend {
     // -- plumbing ---------------------------------------------------------------------------
 
-    fn wa(&self) -> Option<Arc<dyn Wa>> {
+    pub(super) fn wa(&self) -> Option<Arc<dyn Wa>> {
         self.link.as_ref().map(|l| l.wa.clone())
     }
 
@@ -84,7 +84,7 @@ impl Backend {
 
     /// The stored id of a chat the network names by `jid`: the phone-number form when the hidden
     /// (LID) address has a known one, as everywhere else.
-    fn canonical_id(&self, jid: &Jid) -> String {
+    pub(super) fn canonical_id(&self, jid: &Jid) -> String {
         let jid = jid.to_non_ad();
         if jid.is_lid() {
             if let Some(pn) = self.names.linked(&jid.user) {
@@ -275,6 +275,7 @@ impl Backend {
                 Err(reason) => self.media_failed(chat_id, message_id, index, reason),
             },
             Done::Members { chat_id, result } => self.on_members(chat_id, result),
+            Done::ReadMembers { chat_id, result } => self.on_read_members(chat_id, result),
             Done::Avatar {
                 gen,
                 person_id,
@@ -1275,7 +1276,7 @@ impl Backend {
 // ---------------------------------------------------------------------------------------------
 
 /// Library error text with URLs removed, for logs and notices.
-fn wa_log(text: &str) -> String {
+pub(super) fn wa_log(text: &str) -> String {
     crate::wa::redact_urls(text)
 }
 
@@ -1340,7 +1341,7 @@ async fn avatar_job(
 }
 
 /// `fut` or a one-sentence timeout, so one dead call never hangs a task for ever.
-async fn within<T>(
+pub(super) async fn within<T>(
     limit: Duration,
     fut: impl Future<Output = Result<T, String>>,
 ) -> Result<T, String> {

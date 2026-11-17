@@ -153,6 +153,7 @@ Add the permission under **API permissions** as in step 8, switch the setting on
 - Reactions: Microsoft does not document which emoji Teams accepts. A refused one shows Teams' reason in the notice line.
 - Older history loads one page of 50 per scroll past the top. chatcli never polls Teams.
 - Teams shows no typing indicator because Microsoft Graph has none for chats.
+- Teams shows no read ticks or delivery crosses: Microsoft Graph only says how far you have read, not other people.
 
 ## Make Teams live with a relay
 
@@ -234,6 +235,13 @@ You can unlink at any time from the same **Linked devices** screen on your phone
 - **Sending files:** pictures (PNG, JPEG, GIF as a still, WebP) up to 16 MB are re-encoded, which removes EXIF data such as location. Other files up to 100 MB are sent as documents. WhatsApp can flag media sent by unofficial clients: keep sends manual and low volume.
 - **Typing:** you see when someone is typing. chatcli sends your own typing state unless `[whatsapp] send_typing = false` (default `true`), at most once per 5 seconds per chat.
 - **Read state:** reading a chat, or sending in it, clears the unread mark on your phone and your other linked devices. This happens with read receipts on or off. Read receipts (blue ticks for the sender) are sent unless `[whatsapp] send_read_receipts = false` (default `true`).
+- **Message status:** a column to the left of your messages shows how far they have got. The marks differ in shape, so they read the same without colour (change them in Settings, Appearance, or see Themes):
+  - `✓` your newest message that has been read, along with everything before it. Older messages carry no mark.
+  - `●` a later message that has reached their phone but is not read yet.
+  - `○` a later message that has not reached their phone yet (see below).
+
+  In a group a message counts as read, or delivered, once every member has it. A voice note counts as read when it is seen, like any message, whether or not it was played. In a 1:1 chat WhatsApp only sends these when both of you have read receipts on; in groups it sends them anyway.
+- **Waiting for their phone:** a `○` beside one of your messages means it was sent but has not reached the other person's phone yet (in a group: every member's phone), or for a moment just after sending; a longer wait usually means their phone is off or offline. Nothing is wrong on your side. It changes to `●` when the message arrives. Messages from before you upgraded to this version never show one, and neither does your chat with yourself.
 - **Pin, mute (for good) and hide (archive)** sync with the phone; the phone wins on a conflict.
 
 ## Using it
@@ -461,6 +469,14 @@ own_name = "#00aa00"
 A value is an ANSI name (`black` `red` `green` `yellow` `blue` `magenta` `cyan` `gray` `dark_gray` `white` and the `light_` variants), a number 0-255, or `#rrggbb`. An override replaces only the colour: the role keeps its bold or reverse. Numbers from 16 up and `#rrggbb` are fixed colours that do not follow your terminal's palette and look wrong without 24-bit colour support. A bad value shows one notice naming the role and the theme's own colour is used.
 
 Roles: `text` (messages, chat titles, your draft), `dim` (times, previews, separators), `hint` (key hints, empty-state notes), `accent` (SIGNING IN and SCAN QR chips, "is typing"), `own_name` (your name), `unread` (counts and unread titles), `error`, `warn`, `ok` (send progress), `selected` (selected tab, row or message), `chip_live`, `chip_attention` (LIVE and SIGN-IN NEEDED / NOT LIVE chips), `network_teams`, `network_whatsapp` (tab names).
+
+The WhatsApp message status marks are `[theme]` keys too: `mark_sent` (default `○`), `mark_delivered` (`●`) and `mark_read` (`✓`). Each is one character one column wide (an emoji takes two and is refused, keeping the default). Two the same are kept, with a warning: you could no longer tell those states apart.
+
+```toml
+[theme]
+mark_sent = "◌"
+mark_read = "✔"
+```
 
 `NO_COLOR` set to any non-empty value removes all colour (bold, dim and reverse stay). Two exceptions: the WhatsApp sign-in QR stays black on white so a phone can scan it, and thumbnails are switched off (the attachment chips stay).
 

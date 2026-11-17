@@ -586,6 +586,22 @@ impl App {
                 sender,
                 active,
             } => self.typing_event(network, chat_id, &sender, active),
+            Event::Receipts {
+                network,
+                chat_id,
+                read,
+                delivered,
+                since,
+            } => {
+                self.ns_mut(network).receipts.insert(
+                    chat_id,
+                    crate::app::Receipts {
+                        read,
+                        delivered,
+                        since,
+                    },
+                );
+            }
             other => return Some(other),
         }
         None

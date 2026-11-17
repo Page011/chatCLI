@@ -749,6 +749,106 @@ fn chat_open_list_focus() -> App {
     app
 }
 
+/// Sends `Event::Receipts` for the open Alex chat, with tracking since 1 November.
+fn receipts(app: &mut App, read: Option<i64>, delivered: Option<i64>) {
+    app.handle_event(Event::Receipts {
+        network: Network::Teams,
+        chat_id: "alex".into(),
+        read,
+        delivered,
+        since: Some(ts(2026, 11, 1, 0, 0)),
+    });
+}
+
+/// WhatsApp receipts in the status column left of your messages: `✓` on your newest message
+/// everyone has read, and after it `●` delivered or `○` sent, not delivered yet. Older history,
+/// messages still sending and messages not sent carry nothing.
+#[test]
+fn status_column_marks() {
+    let mut app = open_chat_app();
+    let got = render(&mut app, 80, 24);
+    assert!(
+        !got.contains("│\u{2713} ") && !got.contains("│\u{25cf} "),
+        "nothing known"
+    );
+    // Everything read: one mark, on "yes, shipped"; "Will do." is older history.
+    let late = Some(ts(2026, 11, 16, 23, 0));
+    receipts(&mut app, late, late);
+    let got = render(&mut app, 100, 60);
+    assert!(got.contains("│\u{2713} yes, shipped"), "{got}");
+    assert!(got.contains("│  Will do."), "{got}");
+    assert_eq!(got.matches('\u{2713}').count(), 1, "{got}");
+    check("read_mark", 80, 24, &render(&mut app, 80, 24));
+    // Read up to "Will do.", and "yes, shipped" reached their phone.
+    let between = Some(ts(2026, 11, 10, 0, 0));
+    receipts(&mut app, between, late);
+    let got = render(&mut app, 100, 60);
+    assert!(got.contains("│\u{2713} Will do."), "{got}");
+    assert!(got.contains("│\u{25cf} yes, shipped"), "{got}");
+    check("delivered_mark", 80, 24, &render(&mut app, 80, 24));
+    // Not delivered either: waiting.
+    receipts(&mut app, between, between);
+    let got = render(&mut app, 80, 24);
+    assert!(got.contains("│\u{25cb} yes, shipped"), "{got}");
+    check("waiting_mark", 80, 24, &got);
+    // The pending and failed messages never carry a mark.
+    assert!(
+        got.contains("│  on it, will confirm shortly [sending]"),
+        "{got}"
+    );
+    assert!(got.contains("│  this one will fail"), "{got}");
+}
+
+/// A message from before tracking started carries no state, even when delivery says nothing.
+#[test]
+fn no_status_before_tracking_started() {
+    let mut app = open_chat_app();
+    app.handle_event(Event::Receipts {
+        network: Network::Teams,
+        chat_id: "alex".into(),
+        read: None,
+        delivered: Some(ts(2026, 11, 16, 9, 20)),
+        since: Some(ts(2026, 11, 16, 9, 20)),
+    });
+    let got = render(&mut app, 80, 24);
+    assert!(got.contains("│  yes, shipped"), "{got}");
+}
+
+/// The waiting mark shows at once, a moment after sending, with no timer behind it.
+#[test]
+fn the_waiting_mark_shows_at_once() {
+    let mut app = open_chat_app();
+    let shipped = ts(2026, 11, 16, 9, 15);
+    app.tick(shipped + 100);
+    receipts(&mut app, None, Some(shipped - 1));
+    let got = render(&mut app, 80, 24);
+    assert!(got.contains("│\u{25cb} yes, shipped"), "{got}");
+    assert_eq!(app.next_deadline(), None, "nothing to wake for");
+}
+
+/// The status column is the last two columns of the indent in every layout: after the avatar,
+/// and after the sender in the one-line layout.
+#[test]
+fn status_column_in_the_other_layouts() {
+    let late = Some(ts(2026, 11, 16, 23, 0));
+    let mut all = Settings::default();
+    all.layout.avatars = chatcli_core::settings::Avatars::All;
+    let mut app = open_chat_in(new_app_with(all));
+    receipts(&mut app, late, late);
+    let got = render(&mut app, 100, 30);
+    let row = got.lines().find(|l| l.contains("yes, shipped")).unwrap();
+    assert!(row.contains("\u{2713} yes, shipped"), "{got}");
+
+    let mut off = Settings::default();
+    off.layout.avatars = chatcli_core::settings::Avatars::Off;
+    let mut app = open_chat_in(new_app_with(off));
+    receipts(&mut app, late, late);
+    let got = render(&mut app, 100, 30);
+    let row = got.lines().find(|l| l.contains("yes, shipped")).unwrap();
+    assert!(row.contains("09:15 You"), "{got}");
+    assert!(row.contains("\u{2713} yes, shipped"), "{got}");
+}
+
 /// Sidebar rows with emoji in the title and the preview keep the border in one column.
 #[test]
 fn sidebar_with_emoji_stays_aligned() {
@@ -3272,9 +3372,9 @@ fn settings_number_error() {
 fn settings_colour_entry() {
     at_sizes("settings_colour_entry", &[(80, 24)], || {
         let mut app = settings_app(0, true);
-        // Past Theme, Palette, the four panel outline and fill pairs and the two bar fills:
-        // the first colour role.
-        for _ in 0..12 {
+        // Past Theme, Palette, the three message marks, the four panel outline and fill pairs
+        // and the two bar fills: the first colour role.
+        for _ in 0..15 {
             press(&mut app, KeyCode::Down);
         }
         press(&mut app, KeyCode::Enter);

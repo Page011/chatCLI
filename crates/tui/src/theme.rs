@@ -249,6 +249,66 @@ pub struct Theme {
     /// Name colours in group chats: each person keeps one, picked from their id. Empty under
     /// NO_COLOR, where names are bold only.
     pub people: &'static [Color],
+    /// The WhatsApp message status marks (`mark_sent`, `mark_delivered`, `mark_read`).
+    pub marks: Marks,
+}
+
+/// The status column's marks: one character each, one column wide. They differ in shape, so
+/// colour is never the only signal (a user who sets two the same is told).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Marks {
+    /// Sent, not on everyone's phone yet.
+    pub sent: char,
+    /// On everyone's phone, not read.
+    pub delivered: char,
+    /// The newest message everyone has read.
+    pub read: char,
+}
+
+impl Default for Marks {
+    fn default() -> Marks {
+        Marks {
+            sent: '○',
+            delivered: '●',
+            read: '✓',
+        }
+    }
+}
+
+/// The `[theme]` keys of the marks, with their defaults' field.
+pub const MARK_KEYS: [&str; 3] = ["mark_sent", "mark_delivered", "mark_read"];
+
+impl Marks {
+    pub fn get(&self, key: &str) -> Option<char> {
+        Some(match key {
+            "mark_sent" => self.sent,
+            "mark_delivered" => self.delivered,
+            "mark_read" => self.read,
+            _ => return None,
+        })
+    }
+
+    fn slot(&mut self, key: &str) -> Option<&mut char> {
+        Some(match key {
+            "mark_sent" => &mut self.sent,
+            "mark_delivered" => &mut self.delivered,
+            "mark_read" => &mut self.read,
+            _ => return None,
+        })
+    }
+}
+
+/// A mark as typed: exactly one character that takes one terminal column (the status column
+/// is one wide; an emoji takes two).
+pub fn mark_char(value: &str) -> Result<char, String> {
+    let v = value.trim();
+    let mut chars = v.chars();
+    match (chars.next(), chars.next()) {
+        (Some(c), None) if !c.is_control() && crate::text::sw(v) == 1 => Ok(c),
+        _ => Err(format!(
+            "\"{v}\" is not one character one column wide (try ○ ● ✓ ◌ ◉ ✔ ·)."
+        )),
+    }
 }
 
 /// Name colours for a dark terminal: no red (errors) and no cyan of either shade (your own
@@ -306,6 +366,7 @@ impl Default for Theme {
             network_whatsapp: Style::new(),
             panels: palette_looks("lines", false).expect("lines is built in"),
             people: &PEOPLE_DARK,
+            marks: Marks::default(),
         }
     }
 }
@@ -478,6 +539,15 @@ impl Theme {
             if key == "palette" {
                 continue;
             }
+            if let Some(slot) = theme.marks.slot(key) {
+                match mark_char(value) {
+                    Ok(c) => *slot = c,
+                    Err(e) => {
+                        problems.push(problem(Some(key), format!("{e} Keeping \"{}\".", *slot)))
+                    }
+                }
+                continue;
+            }
             if let Some((panel, part)) = panel_key(key) {
                 let look = &mut theme.panels[panel];
                 match part {
@@ -532,6 +602,19 @@ impl Theme {
                     format!("{e} Using the theme's own value for \"{role}\"."),
                 )),
             }
+        }
+        let m = theme.marks;
+        if m.sent == m.delivered || m.delivered == m.read || m.sent == m.read {
+            problems.push(SettingsProblem {
+                severity: Severity::Warning,
+                ..problem(
+                    MARK_KEYS.iter().copied().find(|k| s.overrides.contains_key(*k)),
+                    format!(
+                        "two message marks are the same ({} {} {}): sent, delivered and read look alike.",
+                        m.sent, m.delivered, m.read
+                    ),
+                )
+            });
         }
         if no_colour {
             // Blocks has no fill on the messages panel, so without_colour would leave it
@@ -699,6 +782,34 @@ mod tests {
             Theme::builtin(" High-Contrast "),
             Theme::builtin("high-contrast")
         );
+    }
+
+    #[test]
+    fn message_marks_default_override_and_refuse_wide_or_long_values() {
+        let (t, p) = Theme::from_settings(&settings("default", &[]), false);
+        assert!(p.is_empty());
+        assert_eq!(
+            (t.marks.sent, t.marks.delivered, t.marks.read),
+            ('○', '●', '✓')
+        );
+        let (t, p) = Theme::from_settings(
+            &settings("default", &[("mark_read", "✔"), ("mark_sent", "😀")]),
+            false,
+        );
+        assert_eq!(t.marks.read, '✔');
+        assert_eq!(t.marks.sent, '○', "a bad mark keeps the default");
+        assert_eq!(p.len(), 1, "{p:?}");
+        assert_eq!(p[0].key.as_deref(), Some("mark_sent"));
+        assert!(p[0].message.contains("Keeping \"○\""), "{}", p[0].message);
+        // Two marks alike: kept, but the user is warned they cannot be told apart.
+        let (t, p) = Theme::from_settings(&settings("default", &[("mark_read", "●")]), false);
+        assert_eq!(t.marks.read, '●');
+        assert_eq!(p.len(), 1, "{p:?}");
+        assert_eq!(p[0].severity, Severity::Warning);
+        assert_eq!(p[0].key.as_deref(), Some("mark_read"));
+        // NO_COLOR keeps them: they are shapes.
+        let (t, _) = Theme::from_settings(&settings("default", &[("mark_read", "✔")]), true);
+        assert_eq!(t.marks.read, '✔');
     }
 
     #[test]
