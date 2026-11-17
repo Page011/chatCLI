@@ -20,7 +20,7 @@
 │                            ││  [image b.png 3.0 MB]                                              │
 │                            ││                                                                    │
 │                            ││  You 09:30                                                         │
-│                            ││  caption                                                           │
+│                            ││◷ caption                                                           │
 │                            ││  [image photo.png 2.9 MB] [sending 45%]                            │
 │                            │└────────────────────────────────────────────────────────────────────┘
 │                            │╔ Message ═══════════════════════════════════════════════════════════╗
@@ -66,6 +66,7 @@ row 18 cols 33-50: fg=Reset bg=Reset BOLD
 row 19 cols 33-52: fg=Reset bg=Reset BOLD
 row 21 cols 33-35: fg=Cyan bg=Reset BOLD
 row 21 cols 37-41: fg=DarkGray bg=Reset NONE
+row 22 cols 31-31: fg=DarkGray bg=Reset NONE
 row 23 cols 33-56: fg=Reset bg=Reset BOLD
 row 23 cols 57-70: fg=DarkGray bg=Reset NONE
 row 25 cols 31-39: fg=Reset bg=Reset BOLD

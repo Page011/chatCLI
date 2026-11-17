@@ -333,10 +333,10 @@ const PANEL_ROWS: [(&str, Option<&str>); 6] = [
 ];
 
 /// Message mark choices for Left/Right (any one-column character can be typed).
-const MARK_CHOICES: [char; 8] = ['○', '●', '✓', '◌', '◉', '✔', '·', '*'];
+const MARK_CHOICES: [char; 9] = ['○', '●', '✓', '◌', '◉', '✔', '·', '*', '◷'];
 
 /// Labels of the `MARK_KEYS` rows, in the same order.
-const MARK_LABELS: [&str; 3] = ["Sent mark", "Delivered mark", "Read mark"];
+const MARK_LABELS: [&str; 4] = ["Sending mark", "Sent mark", "Delivered mark", "Read mark"];
 
 /// Outline choices for Left/Right: `default` removes the override (the palette decides).
 const OUTLINE_CHOICES: [&str; 7] = [
@@ -581,7 +581,7 @@ pub(crate) fn rows(
                     label,
                     v.cloned()
                         .unwrap_or_else(|| marks.get(key).unwrap_or(' ').to_string()),
-                    "one character, e.g. ○ ● ✓ ◌ ◉ ✔ ·",
+                    "one character, e.g. ◷ ○ ● ✓ ◌ ◉ ✔ ·",
                     v.is_some(),
                 ));
             }

@@ -20,7 +20,7 @@
 │                            ││  yes, shipped                                                      │
 │                            ││                                                                    │
 │                            ││  You 09:30                                                         │
-│                            ││  on it, will confirm shortly [sending]                             │
+│                            ││◷ on it, will confirm shortly                                       │
 │                            ││  this one will fail                                                │
 │                            ││  NOT SENT - demo: this chat refuses messages                       │
 │                            │└────────────────────────────────────────────────────────────────────┘
@@ -61,7 +61,7 @@ row 18 cols 33-35: fg=Cyan bg=Reset BOLD
 row 18 cols 37-41: fg=DarkGray bg=Reset NONE
 row 21 cols 33-35: fg=Cyan bg=Reset BOLD
 row 21 cols 37-41: fg=DarkGray bg=Reset NONE
-row 22 cols 60-69: fg=DarkGray bg=Reset NONE
+row 22 cols 31-31: fg=DarkGray bg=Reset NONE
 row 23 cols 33-50: fg=Red bg=Reset NONE
 row 24 cols 33-75: fg=Red bg=Reset BOLD
 row 26 cols 31-39: fg=Reset bg=Reset BOLD

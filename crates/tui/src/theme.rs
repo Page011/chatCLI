@@ -257,6 +257,8 @@ pub struct Theme {
 /// colour is never the only signal (a user who sets two the same is told).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Marks {
+    /// Typed here, not yet taken by the network (any network).
+    pub sending: char,
     /// Sent, not on everyone's phone yet.
     pub sent: char,
     /// On everyone's phone, not read.
@@ -268,6 +270,7 @@ pub struct Marks {
 impl Default for Marks {
     fn default() -> Marks {
         Marks {
+            sending: '◷',
             sent: '○',
             delivered: '●',
             read: '✓',
@@ -275,12 +278,13 @@ impl Default for Marks {
     }
 }
 
-/// The `[theme]` keys of the marks, with their defaults' field.
-pub const MARK_KEYS: [&str; 3] = ["mark_sent", "mark_delivered", "mark_read"];
+/// The `[theme]` keys of the marks, in the order a message goes through them.
+pub const MARK_KEYS: [&str; 4] = ["mark_sending", "mark_sent", "mark_delivered", "mark_read"];
 
 impl Marks {
     pub fn get(&self, key: &str) -> Option<char> {
         Some(match key {
+            "mark_sending" => self.sending,
             "mark_sent" => self.sent,
             "mark_delivered" => self.delivered,
             "mark_read" => self.read,
@@ -290,11 +294,17 @@ impl Marks {
 
     fn slot(&mut self, key: &str) -> Option<&mut char> {
         Some(match key {
+            "mark_sending" => &mut self.sending,
             "mark_sent" => &mut self.sent,
             "mark_delivered" => &mut self.delivered,
             "mark_read" => &mut self.read,
             _ => return None,
         })
+    }
+
+    /// Every mark, in `MARK_KEYS` order.
+    fn all(&self) -> [char; 4] {
+        [self.sending, self.sent, self.delivered, self.read]
     }
 }
 
@@ -306,7 +316,7 @@ pub fn mark_char(value: &str) -> Result<char, String> {
     match (chars.next(), chars.next()) {
         (Some(c), None) if !c.is_control() && crate::text::sw(v) == 1 => Ok(c),
         _ => Err(format!(
-            "\"{v}\" is not one character one column wide (try ○ ● ✓ ◌ ◉ ✔ ·)."
+            "\"{v}\" is not one character one column wide (try ◷ ○ ● ✓ ◌ ◉ ✔ ·)."
         )),
     }
 }
@@ -603,15 +613,16 @@ impl Theme {
                 )),
             }
         }
-        let m = theme.marks;
-        if m.sent == m.delivered || m.delivered == m.read || m.sent == m.read {
+        let marks = theme.marks.all();
+        if (1..marks.len()).any(|i| marks[..i].contains(&marks[i])) {
+            let shown: String = marks.iter().flat_map(|c| [*c, ' ']).collect();
             problems.push(SettingsProblem {
                 severity: Severity::Warning,
                 ..problem(
                     MARK_KEYS.iter().copied().find(|k| s.overrides.contains_key(*k)),
                     format!(
-                        "two message marks are the same ({} {} {}): sent, delivered and read look alike.",
-                        m.sent, m.delivered, m.read
+                        "two message marks are the same ({}): sending, sent, delivered and read must differ to be told apart.",
+                        shown.trim_end()
                     ),
                 )
             });
@@ -788,10 +799,7 @@ mod tests {
     fn message_marks_default_override_and_refuse_wide_or_long_values() {
         let (t, p) = Theme::from_settings(&settings("default", &[]), false);
         assert!(p.is_empty());
-        assert_eq!(
-            (t.marks.sent, t.marks.delivered, t.marks.read),
-            ('○', '●', '✓')
-        );
+        assert_eq!(t.marks.all(), ['◷', '○', '●', '✓']);
         let (t, p) = Theme::from_settings(
             &settings("default", &[("mark_read", "✔"), ("mark_sent", "😀")]),
             false,

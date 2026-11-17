@@ -2,12 +2,13 @@
 ┌ Settings ──────┐╔ Appearance ════════════════════════════════════════════════╗
 │Appearance      │║Theme               default                                 ║
 │Layout          │║Palette             lines                                   ║
-│Notifications   │║Sent mark           ○                                       ║
-│Media           │║Delivered mark      ●                                       ║
-│Teams           │║Read mark           ✓                                       ║
-│WhatsApp        │║Sidebar outline     default                                 ║
-│Keys            │║Sidebar fill        default                                 ║
-│About           │║Messages outline    default                                 ║
+│Notifications   │║Sending mark        ◷                                       ║
+│Media           │║Sent mark           ○                                       ║
+│Teams           │║Delivered mark      ●                                       ║
+│WhatsApp        │║Read mark           ✓                                       ║
+│Keys            │║Sidebar outline     default                                 ║
+│About           │║Sidebar fill        default                                 ║
+│                │║Messages outline    default                                 ║
 │                │║Messages fill       default                                 ║
 │                │║Message box outline default                                 ║
 │                │║Message box fill    default                                 ║
@@ -18,7 +19,6 @@
 │                │║Text                default                                 ║
 │                │║Dim text            default                                 ║
 │                │║Hints               default                                 ║
-│                │║Accent              default                                 ║
 │                │║default, high-contrast, light, dark                         ║
 └────────────────┘╚════════════════════════════════════════════════════════════╝
 Up/Down move  Esc close  Left/Right change  Enter edit  r reset  Tab sections
@@ -31,7 +31,7 @@ row 0 cols 69-79: fg=Reset bg=Reset DIM
 row 1 cols 19-30: fg=Reset bg=Reset BOLD
 row 2 cols 1-16: fg=Reset bg=Reset BOLD
 row 2 cols 19-78: fg=Reset bg=Reset BOLD | REVERSED
-row 18 cols 39-78: fg=Reset bg=Reset DIM
 row 19 cols 39-78: fg=Reset bg=Reset DIM
+row 20 cols 39-78: fg=Reset bg=Reset DIM
 row 21 cols 19-53: fg=Reset bg=Reset DIM
 row 23 cols 0-76: fg=Reset bg=Reset DIM

@@ -761,8 +761,8 @@ fn receipts(app: &mut App, read: Option<i64>, delivered: Option<i64>) {
 }
 
 /// WhatsApp receipts in the status column left of your messages: `✓` on your newest message
-/// everyone has read, and after it `●` delivered or `○` sent, not delivered yet. Older history,
-/// messages still sending and messages not sent carry nothing.
+/// everyone has read, and after it `●` delivered or `○` sent, not delivered yet. A message still
+/// sending has `◷`; older history and messages not sent carry nothing.
 #[test]
 fn status_column_marks() {
     let mut app = open_chat_app();
@@ -791,11 +791,12 @@ fn status_column_marks() {
     let got = render(&mut app, 80, 24);
     assert!(got.contains("│\u{25cb} yes, shipped"), "{got}");
     check("waiting_mark", 80, 24, &got);
-    // The pending and failed messages never carry a mark.
+    // The pending message has the clock instead of a [sending] tag; the failed one no mark.
     assert!(
-        got.contains("│  on it, will confirm shortly [sending]"),
+        got.contains("│\u{25f7} on it, will confirm shortly   "),
         "{got}"
     );
+    assert!(!got.contains("[sending]"), "{got}");
     assert!(got.contains("│  this one will fail"), "{got}");
 }
 
@@ -3372,9 +3373,9 @@ fn settings_number_error() {
 fn settings_colour_entry() {
     at_sizes("settings_colour_entry", &[(80, 24)], || {
         let mut app = settings_app(0, true);
-        // Past Theme, Palette, the three message marks, the four panel outline and fill pairs
+        // Past Theme, Palette, the four message marks, the four panel outline and fill pairs
         // and the two bar fills: the first colour role.
-        for _ in 0..15 {
+        for _ in 0..16 {
             press(&mut app, KeyCode::Down);
         }
         press(&mut app, KeyCode::Enter);

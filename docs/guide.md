@@ -24,11 +24,11 @@ Right now you can host everything yourself.
 │    Jordan Placeholde…││09:10 Alex Example  is the build done? 🚀            │
 │    田中太郎 05/11/26  ││                    今日はどうですか                   │
 │    了解しました       ││09:15 You           yes, shipped                      │
-│    Jordan P… 09/10/26││09:30 You           on it, will confirm shortly       │
-│    You: thanks       ││                    [sending]                         │
-│                      ││09:30 You           this one will fail                │
+│    Jordan P… 09/10/26││09:30 You         ◷ on it, will confirm shortly       │
+│    You: thanks       ││09:30 You           this one will fail                │
 │                      ││                    NOT SENT - demo: this chat refuses│
 │                      ││                    messages                          │
+│                      ││                                                      │
 │                      │└──────────────────────────────────────────────────────┘
 │                      │╔ Message ═════════════════════════════════════════════╗
 │                      │║> typing a draft                                      ║
@@ -236,6 +236,7 @@ You can unlink at any time from the same **Linked devices** screen on your phone
 - **Typing:** you see when someone is typing. chatcli sends your own typing state unless `[whatsapp] send_typing = false` (default `true`), at most once per 5 seconds per chat.
 - **Read state:** reading a chat, or sending in it, clears the unread mark on your phone and your other linked devices. This happens with read receipts on or off. Read receipts (blue ticks for the sender) are sent unless `[whatsapp] send_read_receipts = false` (default `true`).
 - **Message status:** a column to the left of your messages shows how far they have got. The marks differ in shape, so they read the same without colour (change them in Settings, Appearance, or see Themes):
+  - `◷` still sending: chatcli has not handed it to the network yet (Teams and WhatsApp). A file also shows how far, as `[sending 45%]`.
   - `✓` your newest message that has been read, along with everything before it. Older messages carry no mark.
   - `●` a later message that has reached their phone but is not read yet.
   - `○` a later message that has not reached their phone yet (see below).
@@ -470,7 +471,7 @@ A value is an ANSI name (`black` `red` `green` `yellow` `blue` `magenta` `cyan` 
 
 Roles: `text` (messages, chat titles, your draft), `dim` (times, previews, separators), `hint` (key hints, empty-state notes), `accent` (SIGNING IN and SCAN QR chips, "is typing"), `own_name` (your name), `unread` (counts and unread titles), `error`, `warn`, `ok` (send progress), `selected` (selected tab, row or message), `chip_live`, `chip_attention` (LIVE and SIGN-IN NEEDED / NOT LIVE chips), `network_teams`, `network_whatsapp` (tab names).
 
-The WhatsApp message status marks are `[theme]` keys too: `mark_sent` (default `○`), `mark_delivered` (`●`) and `mark_read` (`✓`). Each is one character one column wide (an emoji takes two and is refused, keeping the default). Two the same are kept, with a warning: you could no longer tell those states apart.
+The message status marks are `[theme]` keys too: `mark_sending` (default `◷`), `mark_sent` (`○`), `mark_delivered` (`●`) and `mark_read` (`✓`). Each is one character one column wide (an emoji takes two and is refused, keeping the default). Two the same are kept, with a warning: you could no longer tell those states apart.
 
 ```toml
 [theme]

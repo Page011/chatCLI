@@ -229,7 +229,7 @@ fn mark_stale(f: &mut ratatui::Frame, stale: &[Rect], images: &[ui::VisibleImage
 fn deliver(app: &mut App, commands: &HashMap<Network, CommandTx>, out: Out) {
     for (net, cmd) in out {
         // A rejected send gives the command back, so a Send can be failed instead of left
-        // as `[sending]` for ever.
+        // as pending for ever.
         let rejected = match commands.get(&net) {
             Some(tx) => tx.send(cmd).err().map(|e| e.0),
             None => Some(cmd),

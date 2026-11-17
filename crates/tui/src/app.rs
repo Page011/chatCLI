@@ -2134,7 +2134,7 @@ impl App {
     }
 
     /// A command the run loop could not hand to its backend (channel closed, no such backend).
-    /// A send must not stay `[sending]` for ever: it fails now, with the reason.
+    /// A send must not stay pending for ever: it fails now, with the reason.
     pub fn command_undelivered(&mut self, net: Network, cmd: &Command) {
         const REASON: &str = "Backend stopped: restart chatcli.";
         // An older-history request that never left: the chat must not stay "loading older...".
@@ -3632,7 +3632,7 @@ mod tests {
 
     // ---- CodeRabbit review comments on PR 1 ----
 
-    /// Reopening a chat before the backend answered a send must keep the `[sending]` line, and a
+    /// Reopening a chat before the backend answered a send must keep the pending message, and a
     /// failed one must keep its NOT SENT reason (CodeRabbit 7).
     #[test]
     fn history_keeps_unresolved_local_sends() {
@@ -3897,7 +3897,7 @@ mod tests {
         assert!(pos >= ns.list_top && pos < ns.list_top + app.list_rows(Network::Teams));
     }
 
-    /// A closed backend channel must not leave the message `[sending]` (CodeRabbit 10).
+    /// A closed backend channel must not leave the message pending (CodeRabbit 10).
     #[test]
     fn undelivered_send_fails_the_pending_message() {
         let mut app = online_app();
