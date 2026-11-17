@@ -8,7 +8,7 @@ use chatcli_core::model::{Attachment, ChatKind, EventRx, MediaKind, MUTE_FOREVER
 use chatcli_core::settings::MediaSettings;
 use whatsapp_rust::wacore::types::events as wev;
 use whatsapp_rust::wacore::types::message::MessageSource;
-use whatsapp_rust::wacore::types::presence::{ChatPresence, ChatPresenceMedia};
+use whatsapp_rust::wacore::types::presence::{ChatPresence, ChatPresenceMedia, ReceiptType};
 
 use super::tests::{
     backend, backend_with, chat, drain, inbound, seed_chat, stored, text, ALEX, LID, SAM, TEAM,
@@ -3148,4 +3148,287 @@ async fn the_avatar_queue_is_capped() {
     assert_eq!(b.avatar_queue.len(), 63);
     assert_eq!(got.len(), 6);
     assert!(got.iter().all(|(_, p)| p.is_none()));
+}
+
+// ---------------------------------------------------------------------------------------------
+// #71 read ticks and undelivered crosses
+// ---------------------------------------------------------------------------------------------
+
+fn receipt(chat: &str, reader: &str, ids: &[&str], kind: ReceiptType) -> Event {
+    let source = MessageSource {
+        chat: chat.parse().unwrap(),
+        sender: reader.parse().unwrap(),
+        is_from_me: false,
+        is_group: chat.ends_with("@g.us"),
+        ..Default::default()
+    };
+    Event::Receipt(
+        wev::Receipt::builder()
+            .source(source)
+            .message_ids(ids.iter().map(|s| s.to_string()).collect())
+            .timestamp(whatsapp_rust::chrono::DateTime::from_timestamp(1, 0).unwrap())
+            .r#type(kind)
+            .offline(false)
+            .build(),
+    )
+}
+
+/// Our messages "m1" at 1000 and "m2" at 2000, and their "t1" at 1500, in `chat`.
+fn ours_and_theirs(b: &Backend, chat: &str) {
+    b.store
+        .upsert_messages(&[
+            stored(chat, "m1", 1000, true, "You"),
+            stored(chat, "t1", 1500, false, "Alex Example"),
+            stored(chat, "m2", 2000, true, "You"),
+        ])
+        .unwrap();
+}
+
+/// As `ours_and_theirs`, with delivery tracked from 500 on (both of ours are after it).
+fn tracked(b: &Backend, chat: &str) {
+    ours_and_theirs(b, chat);
+    b.store.set_delivery_baseline(NET, chat, 500).unwrap();
+}
+
+/// (chat, read, delivered) of every `Receipts` event.
+type Marks = (String, Option<i64>, Option<i64>);
+
+fn receipts(evs: &[Out]) -> Vec<Marks> {
+    evs.iter()
+        .filter_map(|e| match e {
+            Out::Receipts {
+                chat_id,
+                read,
+                delivered,
+                ..
+            } => Some((chat_id.clone(), *read, *delivered)),
+            _ => None,
+        })
+        .collect()
+}
+
+fn marks(chat: &str, read: Option<i64>, delivered: Option<i64>) -> Vec<Marks> {
+    vec![(chat.to_string(), read, delivered)]
+}
+
+#[tokio::test]
+async fn receipts_in_a_direct_chat_move_forward_only_and_read_counts_as_delivered() {
+    let (mut b, mut erx, _rx) = backend();
+    tracked(&b, ALEX);
+    // Played (a voice note) is not read: it comes even with read receipts off. Their own
+    // message and an unknown id say nothing.
+    b.on_event(&receipt(ALEX, ALEX, &["m2"], ReceiptType::Played))
+        .await;
+    b.on_event(&receipt(ALEX, ALEX, &["t1", "gone"], ReceiptType::Read))
+        .await;
+    assert!(receipts(&drain(&mut erx)).is_empty());
+
+    b.on_event(&receipt(ALEX, ALEX, &["m1"], ReceiptType::Delivered))
+        .await;
+    assert_eq!(receipts(&drain(&mut erx)), marks(ALEX, None, Some(1000)));
+    b.on_event(&receipt(ALEX, ALEX, &["m1"], ReceiptType::Read))
+        .await;
+    assert_eq!(
+        receipts(&drain(&mut erx)),
+        marks(ALEX, Some(1000), Some(1000))
+    );
+    // The newest of the ids wins, and a read moves delivered along.
+    b.on_event(&receipt(ALEX, ALEX, &["m1", "m2"], ReceiptType::Read))
+        .await;
+    assert_eq!(
+        receipts(&drain(&mut erx)),
+        marks(ALEX, Some(2000), Some(2000))
+    );
+    // A late receipt for an older message never moves either back.
+    b.on_event(&receipt(ALEX, ALEX, &["m1"], ReceiptType::Read))
+        .await;
+    b.on_event(&receipt(ALEX, ALEX, &["m1"], ReceiptType::Delivered))
+        .await;
+    assert!(receipts(&drain(&mut erx)).is_empty());
+
+    // Opening the chat sends the marks after the messages.
+    b.on_command(Command::OpenChat {
+        chat_id: ALEX.into(),
+    })
+    .await;
+    let evs = drain(&mut erx);
+    assert!(matches!(evs[0], Out::Messages { .. }), "{evs:?}");
+    assert_eq!(receipts(&evs), marks(ALEX, Some(2000), Some(2000)));
+}
+
+#[tokio::test]
+async fn a_receipt_from_our_own_device_is_not_a_read_tick() {
+    let (mut b, mut erx, _rx) = backend();
+    b.names.set_own(vec![OWN_PN.to_string()]);
+    tracked(&b, ALEX);
+    b.on_event(&receipt(ALEX, OWN_JID, &["m2"], ReceiptType::Read))
+        .await;
+    assert!(receipts(&drain(&mut erx)).is_empty());
+    assert!(b.store.read_marks(NET, ALEX).unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn the_chat_with_ourselves_never_gets_receipt_marks() {
+    let (mut b, mut erx, _rx) = backend();
+    b.names.set_own(vec![OWN_PN.to_string()]);
+    // A note to self from the phone would start delivery tracking anywhere else.
+    b.on_message(&inbound(
+        OWN_JID,
+        OWN_JID,
+        "n1",
+        true,
+        1_700_000_000,
+        text("note"),
+        "",
+    ))
+    .await;
+    assert!(receipts(&drain(&mut erx)).is_empty());
+    b.on_command(Command::OpenChat {
+        chat_id: OWN_JID.into(),
+    })
+    .await;
+    assert!(receipts(&drain(&mut erx)).is_empty());
+}
+
+#[tokio::test]
+async fn our_first_message_in_a_chat_starts_delivery_tracking_once() {
+    let (mut b, mut erx, _rx) = backend();
+    // Sent from the phone: everything before it counts as delivered, it does not.
+    b.on_message(&inbound(
+        ALEX,
+        OWN_JID,
+        "p1",
+        true,
+        1_700_000_000,
+        text("hi"),
+        "",
+    ))
+    .await;
+    let at = 1_700_000_000_000;
+    let evs = drain(&mut erx);
+    assert_eq!(receipts(&evs), marks(ALEX, None, Some(at - 1)));
+    // The TUI is told tracking starts there, so older messages get no state.
+    assert!(evs
+        .iter()
+        .any(|e| matches!(e, Out::Receipts { since, .. } if *since == Some(at - 1))));
+    // A second one is past the same baseline: nothing new to say.
+    b.on_message(&inbound(
+        ALEX,
+        OWN_JID,
+        "p2",
+        true,
+        1_700_000_010,
+        text("there"),
+        "",
+    ))
+    .await;
+    assert!(receipts(&drain(&mut erx)).is_empty());
+    assert_eq!(
+        b.store.delivered_marks(NET, ALEX).unwrap(),
+        [(String::new(), at - 1)]
+    );
+}
+
+#[tokio::test]
+async fn a_first_receipt_counts_everything_stored_before_it_as_delivered() {
+    let (mut b, mut erx, _rx) = backend();
+    // From before delivery was tracked: m2 has no receipt and must not look undelivered.
+    ours_and_theirs(&b, ALEX);
+    b.on_event(&receipt(ALEX, ALEX, &["m1"], ReceiptType::Read))
+        .await;
+    let got = receipts(&drain(&mut erx));
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].1, Some(1000));
+    assert!(got[0].2.is_some_and(|d| d >= 2000), "{got:?}");
+}
+
+#[tokio::test]
+async fn a_group_is_read_and_delivered_once_every_member_is_by_either_address() {
+    let (mut b, mut erx, mut rx) = backend();
+    let fake = linked(&mut b);
+    // The group names Alex by the hidden address and gives the phone number with it. Nothing
+    // links the two beforehand: the member list teaches it.
+    *fake.members.lock().unwrap() = vec![(LID.into(), Some(ALEX.into())), (SAM.into(), None)];
+    assert_eq!(b.names.linked("100200300"), None);
+    tracked(&b, TEAM);
+
+    // Alex reads by phone number. The members are fetched once, quietly (no Members event for
+    // the TUI); then Sam has nothing past the baseline, so nothing is read and only what came
+    // before tracking counts as delivered.
+    b.on_event(&receipt(TEAM, ALEX, &["m2"], ReceiptType::Read))
+        .await;
+    assert!(receipts(&drain(&mut erx)).is_empty());
+    pump(&mut b, &mut rx).await;
+    let evs = drain(&mut erx);
+    assert!(!evs.iter().any(|e| matches!(e, Out::Members { .. })));
+    assert_eq!(receipts(&evs), marks(TEAM, None, Some(500)));
+    assert_eq!(b.store.members(NET, TEAM, 10).unwrap().len(), 2);
+
+    // Sam's phone gets the older one, then Sam reads it, then the newer one.
+    b.on_event(&receipt(TEAM, SAM, &["m1"], ReceiptType::Delivered))
+        .await;
+    assert_eq!(receipts(&drain(&mut erx)), marks(TEAM, None, Some(1000)));
+    b.on_event(&receipt(TEAM, SAM, &["m1"], ReceiptType::Read))
+        .await;
+    assert_eq!(
+        receipts(&drain(&mut erx)),
+        marks(TEAM, Some(1000), Some(1000))
+    );
+    b.on_event(&receipt(TEAM, SAM, &["m2"], ReceiptType::Read))
+        .await;
+    assert_eq!(
+        receipts(&drain(&mut erx)),
+        marks(TEAM, Some(2000), Some(2000))
+    );
+    let fetches = fake
+        .calls()
+        .iter()
+        .filter(|c| matches!(c, Call::Members(_)))
+        .count();
+    assert_eq!(fetches, 1, "the member list is fetched once a run");
+}
+
+#[tokio::test]
+async fn a_failed_member_fetch_for_receipts_is_tried_again() {
+    let (mut b, mut erx, mut rx) = backend();
+    let fake = linked(&mut b);
+    fake.fail_with("offline");
+    tracked(&b, TEAM);
+    b.on_event(&receipt(TEAM, ALEX, &["m2"], ReceiptType::Read))
+        .await;
+    pump(&mut b, &mut rx).await;
+    assert!(b.store.members(NET, TEAM, 10).unwrap().is_empty());
+    // The next receipt asks again, and this time it works.
+    *fake.fail.lock().unwrap() = None;
+    *fake.members.lock().unwrap() = vec![(ALEX.into(), None)];
+    b.on_event(&receipt(TEAM, ALEX, &["m1"], ReceiptType::Delivered))
+        .await;
+    pump(&mut b, &mut rx).await;
+    drain(&mut erx);
+    let fetches = fake
+        .calls()
+        .iter()
+        .filter(|c| matches!(c, Call::Members(_)))
+        .count();
+    assert_eq!(fetches, 2);
+    assert_eq!(b.store.members(NET, TEAM, 10).unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn a_member_list_from_a_stopped_session_is_dropped() {
+    let (mut b, mut erx, mut rx) = backend();
+    let fake = linked(&mut b);
+    *fake.members.lock().unwrap() = vec![(ALEX.into(), None), (SAM.into(), None)];
+    tracked(&b, TEAM);
+    b.on_event(&receipt(TEAM, ALEX, &["m2"], ReceiptType::Read))
+        .await;
+    // Signed out (or another account) before the answer came.
+    b.gen += 1;
+    pump(&mut b, &mut rx).await;
+    assert!(b.store.members(NET, TEAM, 10).unwrap().is_empty());
+    assert!(receipts(&drain(&mut erx)).is_empty());
+    assert!(
+        !b.read_members_asked.contains(TEAM),
+        "asked again next time"
+    );
 }

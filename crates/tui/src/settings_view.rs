@@ -10,7 +10,9 @@ use chatcli_core::settings::{
 
 use crate::input::TextInput;
 use crate::keymap::{actions_for, default_keys, parse_key, Action, Context, KeyChord, Keymap};
-use crate::theme::{background, parse_colour, Outline, PALETTES, ROLES, THEMES};
+use crate::theme::{
+    background, mark_char, parse_colour, Marks, Outline, MARK_KEYS, PALETTES, ROLES, THEMES,
+};
 
 /// A page of the settings screen, opened by `/settings`, `/theme`, `/keys`, `/layout`,
 /// `/notifications` and `/about`.
@@ -184,6 +186,8 @@ pub(crate) enum RowId {
     Outline(&'static str),
     /// One of `theme::ROLES`.
     Role(&'static str),
+    /// `[theme] mark_sent`, `mark_delivered` or `mark_read`: one character.
+    Mark(&'static str),
     SidebarWidth,
     TimeFormat,
     DateOrder,
@@ -328,6 +332,12 @@ const PANEL_ROWS: [(&str, Option<&str>); 6] = [
     ("footer_background", None),
 ];
 
+/// Message mark choices for Left/Right (any one-column character can be typed).
+const MARK_CHOICES: [char; 10] = ['○', '●', '✓', '◌', '◉', '✔', '·', '*', '◷', ' '];
+
+/// Labels of the `MARK_KEYS` rows, in the same order.
+const MARK_LABELS: [&str; 4] = ["Sending mark", "Sent mark", "Delivered mark", "Read mark"];
+
 /// Outline choices for Left/Right: `default` removes the override (the palette decides).
 const OUTLINE_CHOICES: [&str; 7] = [
     "default", "none", "rule", "single", "rounded", "double", "thick",
@@ -357,6 +367,7 @@ fn row(id: RowId, label: &str, value: String, hint: &'static str, custom: bool) 
             RowId::Info(_) | RowId::Problem(_) => Kind::Info,
             RowId::KeyHeading(_) => Kind::Heading,
             RowId::Role(_)
+            | RowId::Mark(_)
             | RowId::SidebarWidth
             | RowId::CacheMaxMb
             | RowId::RetentionDays
@@ -401,6 +412,7 @@ fn width_text(w: Option<SidebarWidth>) -> String {
 pub(crate) fn edit_start(s: &Settings, id: RowId) -> String {
     match id {
         RowId::Role(r) => s.theme.overrides.get(r).cloned().unwrap_or_default(),
+        RowId::Mark(k) => s.theme.overrides.get(k).cloned().unwrap_or_default(),
         RowId::SidebarWidth => width_text(s.layout.sidebar_width),
         RowId::CacheMaxMb => s.media.cache_max_mb.to_string(),
         RowId::RetentionDays => s.media.retention_days.to_string(),
@@ -561,6 +573,26 @@ pub(crate) fn rows(
                 "lines, blocks, minimal, rounded",
                 palette.is_some(),
             ));
+            let marks = Marks::default();
+            for (key, label) in MARK_KEYS.into_iter().zip(MARK_LABELS) {
+                let v = s.theme.overrides.get(key);
+                let mark = v
+                    .and_then(|v| mark_char(v).ok())
+                    .or_else(|| marks.get(key))
+                    .unwrap_or(' ');
+                out.push(row(
+                    RowId::Mark(key),
+                    label,
+                    // A blank value would look like a missing one.
+                    if mark == ' ' {
+                        "none (space)".to_string()
+                    } else {
+                        mark.to_string()
+                    },
+                    "one character, e.g. ◷ ○ ● ✓ ◌ ◉ ✔ ·, or a space for none",
+                    v.is_some(),
+                ));
+            }
             for (bg, outline) in PANEL_ROWS {
                 if let Some(key) = outline {
                     let v = s.theme.overrides.get(key);
@@ -937,6 +969,35 @@ pub(crate) fn change(s: &Settings, id: RowId, c: Change) -> Done {
                 set_or_remove("theme", "palette", name.map(SettingValue::Str)),
             )
         }
+        RowId::Mark(key) => {
+            let default = Marks::default().get(key).unwrap_or(' ');
+            let cur = s
+                .theme
+                .overrides
+                .get(key)
+                .and_then(|v| mark_char(v).ok())
+                .unwrap_or(default);
+            let mark = match &c {
+                Change::Reset => default,
+                // An empty box is the default; a space is a space (no mark).
+                Change::Text(t) if t.is_empty() || t.trim().eq_ignore_ascii_case("default") => {
+                    default
+                }
+                Change::Text(t) => mark_char(t)?,
+                _ => {
+                    let k = MARK_CHOICES.len();
+                    let i = MARK_CHOICES.iter().position(|m| *m == cur).unwrap_or(0);
+                    MARK_CHOICES[if c == Change::Prev { i + k - 1 } else { i + 1 } % k]
+                }
+            };
+            // The default mark is saved as no key at all.
+            let value = (mark != default).then(|| mark.to_string());
+            match &value {
+                Some(v) => n.theme.overrides.insert(key.to_string(), v.clone()),
+                None => n.theme.overrides.remove(key),
+            };
+            one(n, set_or_remove("theme", key, value.map(SettingValue::Str)))
+        }
         RowId::Outline(key) => {
             let cur = s
                 .theme
@@ -1246,7 +1307,10 @@ mod tests {
     #[test]
     fn every_selectable_row_survives_every_change() {
         let ids = all_ids();
-        assert_eq!(ids.len(), 18 + 3 + 1 + 5 + 6 + ROLES.len());
+        assert_eq!(
+            ids.len(),
+            18 + 3 + 1 + 5 + 6 + ROLES.len() + MARK_KEYS.len()
+        );
         for id in ids {
             for c in [Change::Prev, Change::Next, Change::Toggle, Change::Reset] {
                 let (_, edits) = run(&Settings::default(), id, c.clone());
@@ -1401,6 +1465,61 @@ mod tests {
         for bad in ["15", "121", "9%", "71%", "wide", ""] {
             assert_eq!(w(bad).unwrap_err(), MSG_WIDTH, "{bad}");
         }
+    }
+
+    #[test]
+    fn message_marks_take_one_narrow_character_cycle_and_reset() {
+        let s = Settings::default();
+        let id = RowId::Mark("mark_sent");
+        let (n, e) = run(&s, id, Change::Text(" ◌ ".into()));
+        assert_eq!(n.theme.overrides["mark_sent"], "◌");
+        assert_eq!(
+            e,
+            vec![SettingEdit::set(
+                "theme",
+                "mark_sent",
+                SettingValue::str("◌")
+            )]
+        );
+        // Two characters, an emoji (two columns) and a control character are refused.
+        for bad in ["ab", "😀", "\u{7}"] {
+            let msg = err(&s, id, Change::Text(bad.into()));
+            assert!(
+                msg.contains("one character one column wide"),
+                "{bad}: {msg}"
+            );
+        }
+        // Right from the default ○ goes to ●; the default itself is saved as no key.
+        let (n, e) = run(&s, id, Change::Next);
+        assert_eq!(n.theme.overrides["mark_sent"], "●");
+        assert_eq!(e[0].key, "mark_sent");
+        let (n, e) = run(&n, id, Change::Prev);
+        assert!(!n.theme.overrides.contains_key("mark_sent"));
+        assert_eq!(e, vec![SettingEdit::remove("theme", "mark_sent")]);
+        // A space is "no mark", shown as words so the row does not look empty; an empty box is
+        // still the default.
+        let (n, e) = run(&s, id, Change::Text(" ".into()));
+        assert_eq!(n.theme.overrides["mark_sent"], " ");
+        assert_eq!(
+            e,
+            vec![SettingEdit::set(
+                "theme",
+                "mark_sent",
+                SettingValue::str(" ")
+            )]
+        );
+        let shown = rows(Section::Appearance, &n, &Keymap::default(), &[], &[])
+            .into_iter()
+            .find(|r| r.id == id)
+            .unwrap();
+        assert_eq!(shown.value, "none (space)");
+        let (n, e) = run(&n, id, Change::Text(String::new()));
+        assert!(!n.theme.overrides.contains_key("mark_sent"));
+        assert_eq!(e, vec![SettingEdit::remove("theme", "mark_sent")]);
+        let (n, _) = run(&s, id, Change::Text("*".into()));
+        let (n, e) = run(&n, id, Change::Reset);
+        assert!(!n.theme.overrides.contains_key("mark_sent"));
+        assert_eq!(e, vec![SettingEdit::remove("theme", "mark_sent")]);
     }
 
     #[test]

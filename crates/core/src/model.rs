@@ -462,6 +462,19 @@ pub enum Event {
         sender: String,
         active: bool,
     },
+    /// How far everyone else in the chat has got with your messages, as the `ts` (Unix ms) of
+    /// your newest message they all have read, and all have received (never older than `read`).
+    /// `since`: delivery is tracked for your messages after this time only (older ones carry
+    /// no state). None = unknown. WhatsApp only: sent when a receipt moves either, when
+    /// tracking starts in a chat, and after `Messages` for an opened chat. The TUI marks the
+    /// newest read message, and each later one as delivered or waiting.
+    Receipts {
+        network: Network,
+        chat_id: String,
+        read: Option<i64>,
+        delivered: Option<i64>,
+        since: Option<i64>,
+    },
     /// Answer to LoadMembers. `error` Some = failed (members then empty).
     Members {
         network: Network,

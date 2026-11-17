@@ -2,12 +2,16 @@
 ┌ Settings ──────┐╔ Appearance ════════════════════════════════════════════════╗
 │Appearance      │║Theme               default                                 ║
 │Layout          │║Palette             lines                                   ║
-│Notifications   │║Sidebar outline     default                                 ║
-│Media           │║Sidebar fill        default                                 ║
-│Teams           │║Messages outline    default                                 ║
-│WhatsApp        │║Messages fill       default                                 ║
-│Keys            │║Message box outline default                                 ║
-│About           │║Message box fill    default                                 ║
+│Notifications   │║Sending mark        ◷                                       ║
+│Media           │║Sent mark           ○                                       ║
+│Teams           │║Delivered mark      ●                                       ║
+│WhatsApp        │║Read mark           ✓                                       ║
+│Keys            │║Sidebar outline     default                                 ║
+│About           │║Sidebar fill        default                                 ║
+│                │║Messages outline    default                                 ║
+│                │║Messages fill       default                                 ║
+│                │║Message box outline default                                 ║
+│                │║Message box fill    default                                 ║
 │                │║Popups outline      default                                 ║
 │                │║Popups fill         default                                 ║
 │                │║Top bar fill        default                                 ║
@@ -15,10 +19,6 @@
 │                │║Text                #12ab                                   ║
 │                │║Dim text            default                                 ║
 │                │║Hints               default                                 ║
-│                │║Accent              default                                 ║
-│                │║Your name           default                                 ║
-│                │║Unread count        default                                 ║
-│                │║Errors              default                                 ║
 │                │║name, default or #rrggbb                                    ║
 └────────────────┘╚════════════════════════════════════════════════════════════╝
 Enter save  Esc cancel  Type a value
@@ -30,12 +30,8 @@ row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
 row 0 cols 69-79: fg=Reset bg=Reset DIM
 row 1 cols 19-30: fg=Reset bg=Reset BOLD
 row 2 cols 1-16: fg=Reset bg=Reset BOLD
-row 14 cols 19-78: fg=Reset bg=Reset BOLD | REVERSED
-row 15 cols 39-78: fg=DarkGray bg=Reset NONE
-row 16 cols 39-78: fg=Reset bg=Reset DIM
-row 17 cols 39-78: fg=Cyan bg=Reset NONE
-row 18 cols 39-78: fg=Cyan bg=Reset BOLD
-row 19 cols 39-78: fg=Reset bg=Reset BOLD
-row 20 cols 39-78: fg=Red bg=Reset NONE
+row 18 cols 19-78: fg=Reset bg=Reset BOLD | REVERSED
+row 19 cols 39-78: fg=DarkGray bg=Reset NONE
+row 20 cols 39-78: fg=Reset bg=Reset DIM
 row 21 cols 19-42: fg=Reset bg=Reset DIM
 row 23 cols 0-35: fg=Reset bg=Reset DIM

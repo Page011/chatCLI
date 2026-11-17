@@ -92,6 +92,16 @@ pub struct Notice {
     pub global: bool,
 }
 
+/// What `Event::Receipts` last said about one chat: the `ts` of your newest message everyone
+/// else has read, and has received. None = unknown (no tick, no crosses).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct Receipts {
+    pub read: Option<i64>,
+    pub delivered: Option<i64>,
+    /// Your messages at or before this carry no state (sent before delivery was tracked).
+    pub since: Option<i64>,
+}
+
 pub(crate) struct NetState {
     pub network: Network,
     pub status: Status,
@@ -142,6 +152,10 @@ pub(crate) struct NetState {
     pub(crate) older: HashMap<String, Older>,
     /// Who is typing now, per chat id (WhatsApp only).
     pub(crate) typing: HashMap<String, Typers>,
+    /// How far everyone else has read and received your messages, per chat id (the last
+    /// `Event::Receipts`; WhatsApp only). The message pane ticks your newest read message and
+    /// crosses every sent message past `delivered`.
+    pub(crate) receipts: HashMap<String, Receipts>,
     /// When "composing" was last sent for a chat (clock ms): the 5 s throttle.
     pub(crate) typed_at: HashMap<String, i64>,
     /// Chats where "composing" went out and `paused` has not: owed when the message is sent.
@@ -186,6 +200,7 @@ impl NetState {
             progress: HashMap::new(),
             older: HashMap::new(),
             typing: HashMap::new(),
+            receipts: HashMap::new(),
             typed_at: HashMap::new(),
             composing: HashSet::new(),
             show_hidden: false,
@@ -1093,9 +1108,11 @@ impl App {
                     // to ask again.
                     ns.older.retain(|_, o| *o != Older::Loading);
                 }
-                // Signed out: the next sign-in may be another account, so photos are asked afresh.
+                // Signed out: the next sign-in may be another account, so photos are asked afresh
+                // and no receipt state carries over (the backend sends it again per chat).
                 if matches!(status, Status::NeedsLogin { .. }) {
                     ns.avatars.clear();
+                    ns.receipts.clear();
                 }
                 ns.status = status;
                 // A sign-in panel appearing or going away changes what is on screen.
@@ -1296,6 +1313,7 @@ impl App {
             } => self.send_progress(network, &chat_id, client_id, done, total),
             ev @ (Event::OlderMessages { .. }
             | Event::OlderFailed { .. }
+            | Event::Receipts { .. }
             | Event::Typing { .. }) => {
                 self.handle_everyday(ev);
             }
@@ -2118,7 +2136,7 @@ impl App {
     }
 
     /// A command the run loop could not hand to its backend (channel closed, no such backend).
-    /// A send must not stay `[sending]` for ever: it fails now, with the reason.
+    /// A send must not stay pending for ever: it fails now, with the reason.
     pub fn command_undelivered(&mut self, net: Network, cmd: &Command) {
         const REASON: &str = "Backend stopped: restart chatcli.";
         // An older-history request that never left: the chat must not stay "loading older...".
@@ -3616,7 +3634,7 @@ mod tests {
 
     // ---- CodeRabbit review comments on PR 1 ----
 
-    /// Reopening a chat before the backend answered a send must keep the `[sending]` line, and a
+    /// Reopening a chat before the backend answered a send must keep the pending message, and a
     /// failed one must keep its NOT SENT reason (CodeRabbit 7).
     #[test]
     fn history_keeps_unresolved_local_sends() {
@@ -3881,7 +3899,7 @@ mod tests {
         assert!(pos >= ns.list_top && pos < ns.list_top + app.list_rows(Network::Teams));
     }
 
-    /// A closed backend channel must not leave the message `[sending]` (CodeRabbit 10).
+    /// A closed backend channel must not leave the message pending (CodeRabbit 10).
     #[test]
     fn undelivered_send_fails_the_pending_message() {
         let mut app = online_app();

@@ -36,6 +36,8 @@ use crate::wa::{RealWa, Wa};
 
 #[path = "ops.rs"]
 mod ops;
+#[path = "receipts.rs"]
+mod receipts;
 
 const AREA: &str = "whatsapp";
 const NET: Network = Network::WhatsApp;
@@ -176,6 +178,14 @@ pub(crate) enum Done {
         chat_id: String,
         result: Result<Vec<PersonRef>, String>,
     },
+    /// The member list fetched for receipts (not an answer to LoadMembers), as the library
+    /// gives it (each member's phone number kept). `gen` is the session it started under; an
+    /// answer from an older one is dropped.
+    ReadMembers {
+        gen: u64,
+        chat_id: String,
+        result: Result<Vec<crate::wa::Member>, String>,
+    },
     /// The phone-history request left (Ok) or failed to leave (Err).
     OlderAsked {
         chat_id: String,
@@ -257,6 +267,7 @@ impl EventHandler for Forward {
             EventKind::LoggedOut,
             EventKind::PairingQrCode,
             EventKind::PairingQrCodesExhausted,
+            EventKind::Receipt,
             EventKind::QrScannedWithoutMultidevice,
             EventKind::ClientOutdated,
             EventKind::Messages,
@@ -319,6 +330,8 @@ pub(crate) struct Backend {
     typing_open: HashSet<String>,
     /// (chat, sender label) pairs shown as typing, so a message from them can clear it.
     typing_in: HashSet<(String, String)>,
+    /// Groups whose members were fetched this run for read ticks.
+    read_members_asked: HashSet<String>,
 }
 
 impl Backend {
@@ -351,6 +364,7 @@ impl Backend {
             typing_sent: HashMap::new(),
             typing_open: HashSet::new(),
             typing_in: HashSet::new(),
+            read_members_asked: HashSet::new(),
         }
     }
 
@@ -433,11 +447,12 @@ impl Backend {
                 match self.store.messages(NET, &chat_id, OPEN_LIMIT) {
                     Ok(messages) => self.emit(Out::Messages {
                         network: NET,
-                        chat_id,
+                        chat_id: chat_id.clone(),
                         messages,
                     }),
                     Err(e) => self.store_failed("read messages", &e),
                 }
+                self.emit_receipts(&chat_id);
             }
             // Sending in a chat reads it, as on the phone. `mark_read` does nothing when
             // nothing is unread, so a normal reply costs no extra call.
@@ -638,6 +653,7 @@ impl Backend {
                     client_id: s.client_id,
                     message: msg.clone(),
                 });
+                self.own_message_stored(&s.chat_id, msg.ts);
                 if let Ok(jid) = s.chat_id.parse::<Jid>() {
                     self.update_chat(&jid, &msg, false, "").await;
                 }
@@ -1186,6 +1202,7 @@ impl Backend {
             }
             Event::HistorySync(_) => self.on_history(ev).await,
             Event::ChatPresence(p) => self.on_chat_presence(p),
+            Event::Receipt(r) => self.on_receipt(r),
             Event::PinUpdate(u) => self.on_pin_update(&u.jid, u.action.pinned == Some(true)),
             Event::MuteUpdate(u) => {
                 let a = &u.action;
@@ -1655,6 +1672,9 @@ impl Backend {
             self.emit(Out::MessageChanged(msg.clone()));
         } else {
             self.emit(Out::Message(msg.clone()));
+            if msg.from_me {
+                self.own_message_stored(&msg.chat_id, msg.ts);
+            }
         }
         self.update_chat(chat, &msg, !msg.from_me && !seen, push)
             .await;

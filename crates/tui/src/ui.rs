@@ -12,7 +12,7 @@ use ratatui::widgets::{Block, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
 use crate::app::msg::Target;
-use crate::app::{App, Focus, NetState, Prompt, NARROW};
+use crate::app::{App, Focus, NetState, Prompt, Receipts, NARROW};
 use crate::chats;
 use crate::composer::{self, Composer};
 use crate::emoji::{PickerFor, CATEGORIES};
@@ -1472,7 +1472,7 @@ pub(crate) fn message_lines(ns: &NetState, look: &Look, width: usize) -> Vec<Lin
     message_layout(ns, look, width).0
 }
 
-/// Adds a short dim tag (` [sending]`, ` (edited)`) after the last row, or on a row of its own
+/// Adds a short dim tag (` [sending 40%]`, ` (edited)`) after the last row, or on a row of its own
 /// when it does not fit.
 fn push_tag(
     rows: &mut Vec<Vec<Span<'static>>>,
@@ -1494,6 +1494,67 @@ fn push_tag(
             Span::styled(tag.trim_start().to_string(), t.dim),
         ]);
     }
+}
+
+/// Where one of your messages has got, as the status column shows it (the marks are the
+/// theme's: `Theme::marks`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Progress {
+    Sending,
+    Sent,
+    Delivered,
+    Read,
+}
+
+/// What a message of yours shows in the status column: `Sending` while the network has not
+/// taken it (any network); then, from WhatsApp receipts, `Read` on your newest message
+/// everyone has read (`read_mark`), and after it `Delivered` once it reached everyone, or
+/// `Sent` while it has not. Older history, and messages from before tracking started
+/// (`since`), show nothing.
+fn status_of(m: &ChatMessage, r: Receipts, read_mark: Option<&str>) -> Option<Progress> {
+    if m.from_me && m.state == MessageState::Pending {
+        return Some(Progress::Sending);
+    }
+    if !sent_by_me(m) {
+        return None;
+    }
+    if read_mark == Some(m.id.as_str()) {
+        return Some(Progress::Read);
+    }
+    let in_progress = !r.read.is_some_and(|read| m.ts <= read) && r.since.is_some_and(|s| m.ts > s);
+    match r.delivered {
+        Some(d) if in_progress && m.ts <= d => Some(Progress::Delivered),
+        Some(_) if in_progress => Some(Progress::Sent),
+        _ => None,
+    }
+}
+
+/// Puts `mark` in the status column of `row`: the last two columns of its indent (the mark,
+/// then the space before the text). Every layout's indent ends in a run of at least two spaces
+/// (name-row padding, the gap after an avatar, the gap after the sender); a row that does not is
+/// left alone.
+fn put_status(row: &mut Vec<Span<'static>>, indent_w: usize, mark: char, style: Style) {
+    let mut x = 0;
+    for i in 0..row.len() {
+        let w = row[i].width();
+        if x + w == indent_w {
+            if w >= 2 && row[i].content.chars().all(|c| c == ' ') {
+                row[i] = Span::raw(" ".repeat(w - 2));
+                row.insert(i + 1, Span::styled(mark.to_string(), style));
+                row.insert(i + 2, Span::raw(" "));
+            }
+            return;
+        }
+        x += w;
+        if x > indent_w {
+            return;
+        }
+    }
+}
+
+/// Yours and confirmed by the network (not pending, failed or deleted).
+fn sent_by_me(m: &ChatMessage) -> bool {
+    m.from_me && m.state == MessageState::Sent
 }
 
 /// The conversation lines and where each message sits in them. A message you have selected
@@ -1559,6 +1620,16 @@ pub(crate) fn message_layout(
     if let Some(note) = top_note {
         lines.push(Line::from(Span::styled(note, t.hint)).alignment(Alignment::Center));
     }
+    // WhatsApp receipts, drawn in the status column (`status_mark`). Pending, failed and deleted
+    // messages carry none: they have their own tags.
+    let receipts = chat_id
+        .and_then(|c| ns.receipts.get(c))
+        .copied()
+        .unwrap_or_default();
+    let read_mark = receipts
+        .read
+        .and_then(|up_to| msgs.iter().rev().find(|m| sent_by_me(m) && m.ts <= up_to))
+        .map(|m| m.id.as_str());
     let mut spans: Vec<MsgSpan> = Vec::new();
     let mut last_day = None;
     let mut prev: Option<&ChatMessage> = None;
@@ -1776,12 +1847,11 @@ pub(crate) fn message_layout(
         }
         match &m.state {
             MessageState::Pending => {
-                // Upload progress of a file in flight, when the backend reported any.
-                let tag = match ns.progress.get(&m.id).and_then(|&(d, t)| percent(d, t)) {
-                    Some(p) => format!(" [sending {p}%]"),
-                    None => " [sending]".to_string(),
-                };
-                push_tag(&mut rows, &tag, width, indent_w, t);
+                // The status column's sending mark says it is on its way; a file in flight also
+                // says how far, when the backend reported any.
+                if let Some(p) = ns.progress.get(&m.id).and_then(|&(d, t)| percent(d, t)) {
+                    push_tag(&mut rows, &format!(" [sending {p}%]"), width, indent_w, t);
+                }
             }
             MessageState::Failed(reason) => {
                 for row in wrap(&format!("NOT SENT - {reason}"), text_w) {
@@ -1795,6 +1865,18 @@ pub(crate) fn message_layout(
         }
         if m.edited && !deleted {
             push_tag(&mut rows, " (edited)", width, indent_w, t);
+        }
+        // The mark sits on the message's first row under its name row.
+        if let Some(status) = status_of(m, receipts, read_mark) {
+            let (mark, style) = match status {
+                Progress::Sending => (t.marks.sending, t.dim),
+                Progress::Sent => (t.marks.sent, t.dim),
+                Progress::Delivered => (t.marks.delivered, t.dim),
+                Progress::Read => (t.marks.read, t.accent),
+            };
+            if let Some(row) = rows.get_mut(usize::from(starts_run)) {
+                put_status(row, indent_w, mark, style);
+            }
         }
         // Reaction counts under the message, your own in bold.
         let mut row: Vec<Span<'static>> = Vec::new();

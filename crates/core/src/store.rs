@@ -7,7 +7,8 @@
 //! stored here (only their metadata and fetch recipe); they live in the media cache.
 //!
 //! Schema v2 adds attachments, reactions, chat flags, members, recent emoji and an FTS5 index
-//! over message text. One connection behind a mutex. Every call is a few small statements, so
+//! over message text. One connection behind a mutex. Schema v3 and v4 add read and delivery
+//! marks (how far each other person has read, or received, your messages). Every call is a few small statements, so
 //! holding the lock briefly from async code is fine.
 
 use std::path::Path;
@@ -21,13 +22,20 @@ use crate::model::{
 };
 use crate::Result;
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 4;
 
 /// `reactions.reactor` for the signed-in user.
 pub const REACTOR_ME: &str = "@me";
 
+/// `delivered_marks.reader` of a chat's delivery baseline (never a real user part).
+pub const BASELINE_READER: &str = "";
+
 /// Members kept per chat; a bigger group is cut here so one chat cannot grow the table forever.
 const MAX_MEMBERS: usize = 1024;
+/// Receipt marks read per chat: a full group's members under both of their addresses (phone
+/// number and LID), with room for readers who have left and the delivery baseline, so no
+/// current member's mark is cut off before the group is worked out.
+const MAX_MARKS: usize = 4 * MAX_MEMBERS;
 const MAX_RECENT_EMOJI: u32 = 30;
 
 /// FTS5 snippet markers around a hit. Control characters never occur in message text we store
@@ -128,6 +136,22 @@ const V2_SQL: &str = "CREATE TABLE messages_v2 (
         INSERT INTO messages_fts(rowid, text) VALUES (new.rid, new.text); END;
     INSERT INTO messages_fts(messages_fts) VALUES ('rebuild');";
 
+/// Schema 2 -> 3: per reader, the time of your newest message they have read (WhatsApp read
+/// receipts). `reader` is the WhatsApp user part (phone number or LID).
+const V3_SQL: &str = "CREATE TABLE read_marks (
+        network TEXT NOT NULL, chat_id TEXT NOT NULL, reader TEXT NOT NULL, ts INTEGER NOT NULL,
+        PRIMARY KEY (network, chat_id, reader)
+    );";
+
+/// Schema 3 -> 4: per reader, the time of your newest message that reached their phone
+/// (WhatsApp delivery receipts). The reader `BASELINE_READER` holds the time before which every
+/// message of yours counts as delivered (set once, at your first message in the chat after this
+/// arrived), so messages from before delivery was tracked are never shown as undelivered.
+const V4_SQL: &str = "CREATE TABLE delivered_marks (
+        network TEXT NOT NULL, chat_id TEXT NOT NULL, reader TEXT NOT NULL, ts INTEGER NOT NULL,
+        PRIMARY KEY (network, chat_id, reader)
+    );";
+
 /// Columns of one message row, in the order `message_from_row` reads them.
 const MESSAGE_COLS: &str = "id, ts, sender, from_me, text, state, error, sender_id, edited,
     quote_id, quote_sender, quote_sender_id, quote_preview, mentions, mentions_me";
@@ -182,7 +206,7 @@ fn user_version(conn: &Connection) -> rusqlite::Result<i64> {
     conn.query_row("PRAGMA user_version", [], |r| r.get(0))
 }
 
-/// Forward-only migrations, 0 -> 1 -> 2, in one `BEGIN IMMEDIATE` transaction. The version is
+/// Forward-only migrations, 0 -> 1 -> 2 -> 3 -> 4, in one `BEGIN IMMEDIATE` transaction. The version is
 /// re-read inside it, so two processes opening at once migrate once: the second waits on
 /// `busy_timeout`, then finds the new version and does nothing.
 ///
@@ -207,6 +231,12 @@ fn migrate(conn: &mut Connection) -> Result<()> {
     }
     if version < 2 {
         tx.execute_batch(V2_SQL).map_err(fail)?;
+    }
+    if version < 3 {
+        tx.execute_batch(V3_SQL).map_err(fail)?;
+    }
+    if version < 4 {
+        tx.execute_batch(V4_SQL).map_err(fail)?;
     }
     if version < SCHEMA_VERSION {
         tx.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))
@@ -302,8 +332,8 @@ impl Store {
     }
 
     /// The network's full chat list: chats not in `chats` are removed with their messages,
-    /// attachments, reactions and members (left or deleted on the network). Their chat flags
-    /// stay: a chat that comes back keeps its pin and mute.
+    /// attachments, reactions, members and read marks (left or deleted on the network). Their
+    /// chat flags stay: a chat that comes back keeps its pin and mute.
     pub fn replace_chats(&self, network: Network, chats: &[ChatSummary]) -> Result<()> {
         let mut conn = self.lock()?;
         let tx = conn.transaction().map_err(db_err("begin"))?;
@@ -326,6 +356,8 @@ impl Store {
                 ("attachments", "chat_id"),
                 ("reactions", "chat_id"),
                 ("members", "chat_id"),
+                ("read_marks", "chat_id"),
+                ("delivered_marks", "chat_id"),
                 ("chats", "id"),
             ] {
                 tx.execute(
@@ -387,8 +419,8 @@ impl Store {
 
     /// Folds chat `from` into chat `to` (the same conversation under a second id) in one
     /// transaction: messages move over (a message id both chats hold keeps `to`'s row, with its
-    /// attachments and reactions), attachments, reactions, members and chat flags move too (`to`
-    /// keeps its own on conflict), the chat rows merge (newest time and its preview win, unread
+    /// attachments and reactions), attachments, reactions, members, read marks and chat flags
+    /// move too (`to` keeps its own on conflict), the chat rows merge (newest time and its preview win, unread
     /// and mentions add up, `to`'s title is kept) and the `from` row is deleted. `to` is created
     /// from `from` when it does not exist. Returns false when `from` does not exist.
     pub fn rename_chat(&self, network: Network, from: &str, to: &str) -> Result<bool> {
@@ -428,11 +460,29 @@ impl Store {
             )
             .map_err(db_err("drop duplicate message rows"))?;
         }
+        // A reader's marks only move forward, so one both chats hold keeps the later of the two
+        // (the move below would keep `to`'s alone). The delivery baseline is not a reader: `to`
+        // keeps its own, as the move does.
+        for table in ["read_marks", "delivered_marks"] {
+            tx.execute(
+                &format!(
+                    "INSERT INTO {table} (network, chat_id, reader, ts)
+                     SELECT network, ?3, reader, ts FROM {table}
+                     WHERE network = ?1 AND chat_id = ?2 AND reader != ?4
+                     ON CONFLICT (network, chat_id, reader)
+                     DO UPDATE SET ts = MAX({table}.ts, excluded.ts)"
+                ),
+                params![net, from, to, BASELINE_READER],
+            )
+            .map_err(db_err("merge receipt marks"))?;
+        }
         for (table, column) in [
             ("messages", "chat_id"),
             ("attachments", "chat_id"),
             ("reactions", "chat_id"),
             ("members", "chat_id"),
+            ("read_marks", "chat_id"),
+            ("delivered_marks", "chat_id"),
             ("chat_flags", "chat_id"),
         ] {
             tx.execute(
@@ -800,6 +850,97 @@ impl Store {
             .map_err(db_err("read members"))
     }
 
+    /// Records that `reader` has read your messages up to `ts`. A mark only moves forward:
+    /// returns true when it did (a new reader, or a later `ts`).
+    pub fn advance_read_mark(
+        &self,
+        network: Network,
+        chat_id: &str,
+        reader: &str,
+        ts: i64,
+    ) -> Result<bool> {
+        self.advance_mark("read_marks", network, chat_id, reader, ts)
+    }
+
+    /// Records that your messages up to `ts` reached `reader`'s phone. Forward only, like
+    /// `advance_read_mark`. A read mark counts as delivered too; callers combine the two.
+    pub fn advance_delivered_mark(
+        &self,
+        network: Network,
+        chat_id: &str,
+        reader: &str,
+        ts: i64,
+    ) -> Result<bool> {
+        self.advance_mark("delivered_marks", network, chat_id, reader, ts)
+    }
+
+    /// Sets the chat's delivery baseline (`BASELINE_READER`) when it has none: your messages
+    /// up to `ts` count as delivered. Returns true when it was set now. Never moves it later,
+    /// which would hide a message that really is undelivered.
+    pub fn set_delivery_baseline(&self, network: Network, chat_id: &str, ts: i64) -> Result<bool> {
+        let n = self
+            .lock()?
+            .execute(
+                "INSERT OR IGNORE INTO delivered_marks (network, chat_id, reader, ts)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![network.key(), chat_id, BASELINE_READER, ts],
+            )
+            .map_err(db_err("write delivery baseline"))?;
+        Ok(n > 0)
+    }
+
+    /// Every reader's read mark in one chat, as (reader, ts), ordered by reader. At most
+    /// `MAX_MARKS` rows.
+    pub fn read_marks(&self, network: Network, chat_id: &str) -> Result<Vec<(String, i64)>> {
+        self.marks("read_marks", network, chat_id)
+    }
+
+    /// Every reader's delivery mark in one chat, the baseline (reader `BASELINE_READER`)
+    /// included, ordered by reader. At most `MAX_MARKS` rows.
+    pub fn delivered_marks(&self, network: Network, chat_id: &str) -> Result<Vec<(String, i64)>> {
+        self.marks("delivered_marks", network, chat_id)
+    }
+
+    /// `table` is one of the two mark tables (a constant, never user input).
+    fn advance_mark(
+        &self,
+        table: &str,
+        network: Network,
+        chat_id: &str,
+        reader: &str,
+        ts: i64,
+    ) -> Result<bool> {
+        let n = self
+            .lock()?
+            .execute(
+                &format!(
+                    "INSERT INTO {table} (network, chat_id, reader, ts) VALUES (?1, ?2, ?3, ?4)
+                     ON CONFLICT (network, chat_id, reader) DO UPDATE SET ts = excluded.ts
+                     WHERE excluded.ts > {table}.ts"
+                ),
+                params![network.key(), chat_id, reader, ts],
+            )
+            .map_err(db_err("write receipt mark"))?;
+        Ok(n > 0)
+    }
+
+    fn marks(&self, table: &str, network: Network, chat_id: &str) -> Result<Vec<(String, i64)>> {
+        let conn = self.lock()?;
+        let mut stmt = conn
+            .prepare(&format!(
+                "SELECT reader, ts FROM {table} WHERE network = ?1 AND chat_id = ?2
+                 ORDER BY reader LIMIT ?3"
+            ))
+            .map_err(db_err("read receipt marks"))?;
+        let rows = stmt
+            .query_map(params![network.key(), chat_id, MAX_MARKS as i64], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .map_err(db_err("read receipt marks"))?;
+        rows.collect::<std::result::Result<_, _>>()
+            .map_err(db_err("read receipt marks"))
+    }
+
     /// Moves `emoji` to the front of the recents and keeps the newest 30.
     pub fn touch_recent_emoji(&self, emoji: &str, now_ms: i64) -> Result<()> {
         let mut conn = self.lock()?;
@@ -962,8 +1103,8 @@ impl Store {
     /// facts (`from_me`, unread, flags), so a different account on the same chats would show the
     /// old account's messages as "You". The first call only records `account`. A later call
     /// with another id deletes the network's chats, messages, attachments, reactions, members,
-    /// flags, names and saved older-history cursors, records the new id, and returns true (the
-    /// caller reloads from the network). Same id: false, nothing changes.
+    /// read marks, flags, names and saved older-history cursors, records the new id, and returns
+    /// true (the caller reloads from the network). Same id: false, nothing changes.
     pub fn bind_account(&self, network: Network, account: &str) -> Result<bool> {
         let key = format!("{}.account", network.key());
         let mut conn = self.lock()?;
@@ -981,6 +1122,8 @@ impl Store {
                 "attachments",
                 "reactions",
                 "members",
+                "read_marks",
+                "delivered_marks",
                 "chat_flags",
                 "chats",
                 "names",
@@ -1560,11 +1703,20 @@ mod tests {
             muted_until: Some(MUTE_FOREVER),
             hidden: false,
         };
+        s.advance_read_mark(Network::Teams, "gone", "u1", 1)
+            .unwrap();
         s.set_chat_flags(Network::Teams, "gone", pinned).unwrap();
         s.replace_chats(Network::Teams, &[chat("keep", Some(3))])
             .unwrap();
         let conn = s.lock().unwrap();
-        for table in ["messages", "attachments", "reactions", "members"] {
+        for table in [
+            "messages",
+            "attachments",
+            "reactions",
+            "members",
+            "read_marks",
+            "delivered_marks",
+        ] {
             let n: i64 = conn
                 .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
                 .unwrap();
@@ -2023,7 +2175,7 @@ mod tests {
         let path = dir.join("store.db");
         build_v1(&path);
         let s = Store::open(&path).unwrap();
-        assert_eq!(user_version(&s.lock().unwrap()).unwrap(), 2);
+        assert_eq!(user_version(&s.lock().unwrap()).unwrap(), SCHEMA_VERSION);
         let c = s.chat(Network::Teams, "c1").unwrap().unwrap();
         assert_eq!(
             (c.title.as_str(), c.unread, c.mentions, c.last_ts),
@@ -2522,6 +2674,103 @@ mod tests {
     }
 
     #[test]
+    fn delivery_marks_move_forward_and_the_baseline_is_set_once() {
+        let s = Store::open_in_memory().unwrap();
+        let net = Network::WhatsApp;
+        assert!(s.set_delivery_baseline(net, "c", 100).unwrap());
+        assert!(
+            !s.set_delivery_baseline(net, "c", 500).unwrap(),
+            "never moved"
+        );
+        assert!(s.advance_delivered_mark(net, "c", "a", 200).unwrap());
+        assert!(!s.advance_delivered_mark(net, "c", "a", 150).unwrap());
+        assert_eq!(
+            s.delivered_marks(net, "c").unwrap(),
+            vec![(BASELINE_READER.to_string(), 100), ("a".to_string(), 200)]
+        );
+        assert!(
+            s.read_marks(net, "c").unwrap().is_empty(),
+            "separate tables"
+        );
+    }
+
+    #[test]
+    fn a_full_group_under_both_addresses_reads_back_every_mark() {
+        let s = Store::open_in_memory().unwrap();
+        let net = Network::WhatsApp;
+        // 1024 members, each with a phone-number mark and a LID mark.
+        for i in 0..MAX_MEMBERS {
+            s.advance_delivered_mark(net, "g", &format!("pn{i:04}"), 1)
+                .unwrap();
+            s.advance_delivered_mark(net, "g", &format!("lid{i:04}"), 2)
+                .unwrap();
+        }
+        s.set_delivery_baseline(net, "g", 0).unwrap();
+        assert_eq!(
+            s.delivered_marks(net, "g").unwrap().len(),
+            2 * MAX_MEMBERS + 1
+        );
+    }
+
+    #[test]
+    fn a_merge_keeps_the_later_mark_and_the_target_baseline() {
+        let s = Store::open_in_memory().unwrap();
+        let net = Network::WhatsApp;
+        let mut lid = chat("lid", Some(1));
+        lid.network = net;
+        let mut pn = chat("pn", Some(1));
+        pn.network = net;
+        s.upsert_chats(&[lid, pn]).unwrap();
+        // The same reader in both chats: the LID chat holds the later marks.
+        s.advance_read_mark(net, "lid", "a", 300).unwrap();
+        s.advance_read_mark(net, "pn", "a", 100).unwrap();
+        s.advance_delivered_mark(net, "lid", "a", 400).unwrap();
+        s.advance_delivered_mark(net, "pn", "a", 200).unwrap();
+        // Only in the LID chat: moves over as it is.
+        s.advance_read_mark(net, "lid", "b", 50).unwrap();
+        // Both have a baseline: the target keeps its own (not the later one).
+        s.set_delivery_baseline(net, "lid", 90).unwrap();
+        s.set_delivery_baseline(net, "pn", 10).unwrap();
+        assert!(s.rename_chat(net, "lid", "pn").unwrap());
+        assert_eq!(
+            s.read_marks(net, "pn").unwrap(),
+            vec![("a".to_string(), 300), ("b".to_string(), 50)]
+        );
+        assert_eq!(
+            s.delivered_marks(net, "pn").unwrap(),
+            vec![(BASELINE_READER.to_string(), 10), ("a".to_string(), 400)]
+        );
+        assert!(s.read_marks(net, "lid").unwrap().is_empty());
+        assert!(s.delivered_marks(net, "lid").unwrap().is_empty());
+    }
+
+    #[test]
+    fn read_marks_only_move_forward_and_follow_a_renamed_chat() {
+        let s = Store::open_in_memory().unwrap();
+        let net = Network::WhatsApp;
+        assert!(s.read_marks(net, "c").unwrap().is_empty());
+        assert!(
+            s.advance_read_mark(net, "c", "b", 20).unwrap(),
+            "new reader"
+        );
+        assert!(s.advance_read_mark(net, "c", "a", 10).unwrap());
+        assert!(!s.advance_read_mark(net, "c", "b", 15).unwrap(), "older");
+        assert!(!s.advance_read_mark(net, "c", "b", 20).unwrap(), "same");
+        assert!(s.advance_read_mark(net, "c", "b", 30).unwrap(), "newer");
+        assert_eq!(
+            s.read_marks(net, "c").unwrap(),
+            vec![("a".to_string(), 10), ("b".to_string(), 30)]
+        );
+        // A LID chat folded into its phone-number chat takes its marks along.
+        let mut lid = chat("c", Some(1));
+        lid.network = net;
+        s.upsert_chats(&[lid]).unwrap();
+        assert!(s.rename_chat(net, "c", "pn").unwrap());
+        assert!(s.read_marks(net, "c").unwrap().is_empty());
+        assert_eq!(s.read_marks(net, "pn").unwrap().len(), 2);
+    }
+
+    #[test]
     fn members_round_trip_ordered_by_name_and_capped() {
         let s = Store::open_in_memory().unwrap();
         let p = |id: &str, name: &str| PersonRef {
@@ -2599,6 +2848,8 @@ mod tests {
             },
         )
         .unwrap();
+        s.advance_read_mark(Network::Teams, "a", "u1", 1).unwrap();
+        s.set_delivery_baseline(Network::Teams, "a", 1).unwrap();
         s.set_meta("teams.older.a", Some("cursor")).unwrap();
         s.set_meta("teams.subscription_id", Some("sub")).unwrap();
         let mut other = chat("w", Some(1));
@@ -2620,6 +2871,8 @@ mod tests {
             ChatFlags::default()
         );
         assert_eq!(s.meta("teams.older.a").unwrap(), None);
+        assert!(s.read_marks(Network::Teams, "a").unwrap().is_empty());
+        assert!(s.delivered_marks(Network::Teams, "a").unwrap().is_empty());
         assert_eq!(
             s.meta("teams.subscription_id").unwrap().as_deref(),
             Some("sub")
