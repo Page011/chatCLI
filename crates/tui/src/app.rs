@@ -1096,6 +1096,7 @@ impl App {
             } => {
                 messages.iter_mut().for_each(clean_message);
                 messages.sort_by_key(|m| m.ts);
+                let follow = self.selecting_newest(network, &chat_id);
                 let held = self
                     .ns_mut(network)
                     .messages
@@ -1103,6 +1104,9 @@ impl App {
                     .or_default();
                 *held = merge_history(std::mem::take(held), messages);
                 self.keep_selection(network, &chat_id);
+                if follow {
+                    self.follow_newest(network);
+                }
             }
             Event::Message(mut m) => {
                 clean_message(&mut m);
@@ -1115,14 +1119,20 @@ impl App {
                 }
                 let is_open = self.ns(n).open.as_ref() == Some(&chat_id);
                 let visible = self.convo_visible(n);
+                // The newest message highlighted: the highlight moves on to the new one.
+                let follow = self.selecting_newest(n, &chat_id);
                 // A reader scrolled up keeps their place: grow the offset by the lines added.
-                // The same while a message is selected: the highlight must not slide off screen.
-                let anchored = self.ns(n).scroll > 0 || self.ns(n).focus == Focus::Select;
+                // The same while an older message is selected: it must not slide off screen.
+                let anchored =
+                    !follow && (self.ns(n).scroll > 0 || self.ns(n).focus == Focus::Select);
                 let before = (is_open && anchored).then(|| self.convo_lines(n));
                 upsert_message(self.ns_mut(n).messages.entry(chat_id).or_default(), m);
                 if let Some(before) = before {
                     let added = self.convo_lines(n).saturating_sub(before);
                     self.ns_mut(n).scroll += added;
+                }
+                if follow {
+                    self.follow_newest(n);
                 }
                 if is_open && !from_me && !self.ns(n).previewing {
                     let ns = self.ns_mut(n);

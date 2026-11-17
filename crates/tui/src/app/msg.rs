@@ -310,6 +310,24 @@ impl App {
         }
     }
 
+    /// True while selecting in the open chat `chat_id` with its newest message highlighted: new
+    /// messages then take the highlight with them (`follow_newest`).
+    pub(super) fn selecting_newest(&self, n: Network, chat_id: &str) -> bool {
+        let ns = self.ns(n);
+        ns.focus == Focus::Select
+            && ns.open.as_deref() == Some(chat_id)
+            && ns.sel_msg.is_some()
+            && ns.sel_msg.as_ref() == self.selectable_ids(n).last()
+    }
+
+    /// Highlights the newest message that can be selected and scrolls it into view.
+    pub(super) fn follow_newest(&mut self, n: Network) {
+        if let Some(last) = self.selectable_ids(n).last().cloned() {
+            self.ns_mut(n).sel_msg = Some(last);
+            self.ensure_sel_visible(n);
+        }
+    }
+
     /// Remembers `from` (in the open chat) before a big jump. The list keeps the last 50.
     fn push_jump(&mut self, n: Network, from: String) {
         let ns = self.ns_mut(n);
@@ -1027,6 +1045,29 @@ mod tests {
         assert!(in_view(&app));
         app.resize(120, 40);
         assert!(in_view(&app));
+    }
+
+    #[test]
+    fn on_the_newest_message_the_selection_follows_new_ones() {
+        let mut app = app_with(ChatKind::Direct, many(40));
+        app.resize(80, 24);
+        to_selection(&mut app);
+        assert_eq!(sel(&app), Some("m39"));
+        app.handle_event(Event::Message(msg("new0", 5000, false, "ping")));
+        assert_eq!(sel(&app), Some("new0"));
+        assert!(in_view(&app));
+        assert_eq!(app.active().scroll, 0, "the pane stays at the bottom");
+        // A batch that brings newer messages (a catch-up) follows too.
+        app.handle_event(Event::Messages {
+            network: Network::Teams,
+            chat_id: "a".into(),
+            messages: vec![msg("new1", 5001, false, "a"), msg("new2", 5002, false, "b")],
+        });
+        assert_eq!(sel(&app), Some("new2"));
+        // One up from the newest: it stays where it is.
+        press(&mut app, KeyCode::Up);
+        app.handle_event(Event::Message(msg("new3", 5003, false, "c")));
+        assert_eq!(sel(&app), Some("new1"));
     }
 
     #[test]

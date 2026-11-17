@@ -303,7 +303,7 @@ Message selection (`Enter` on a chat, or `Esc` from the message box). The footer
 
 | Key | Does |
 |---|---|
-| `Up` / `Down`, `k` / `j`, `PgUp` / `PgDn`, `g` / `G`, `Home` / `End` | Move the selection. Up from the oldest message held loads older ones |
+| `Up` / `Down`, `k` / `j`, `PgUp` / `PgDn`, `g` / `G`, `Home` / `End` | Move the selection. Up from the oldest message held loads older ones. With the newest message selected, a new one takes the selection with it |
 | `H` / `M` / `L` | The first / middle / last message on screen |
 | `Ctrl+O` | Back to the message selected before the last big jump (`G`, `g`, `H`, `M`, `L`); again for the one before |
 | `i` | To the message box |
