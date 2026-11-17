@@ -233,7 +233,7 @@ You can unlink at any time from the same **Linked devices** screen on your phone
 - **Media** is downloaded when you ask, into the media cache (not encrypted on disk). Pictures from others in the 20 newest messages of a chat you open also download by themselves and show as thumbnails (not files, and nothing over `max_file_mb`); `[whatsapp] download_images = false` turns that off. WhatsApp deletes old media from its servers: a file that is gone shows `MEDIA EXPIRED`; ask the sender to send it again.
 - **Sending files:** pictures (PNG, JPEG, GIF as a still, WebP) up to 16 MB are re-encoded, which removes EXIF data such as location. Other files up to 100 MB are sent as documents. WhatsApp can flag media sent by unofficial clients: keep sends manual and low volume.
 - **Typing:** you see when someone is typing. chatcli sends your own typing state unless `[whatsapp] send_typing = false` (default `true`), at most once per 5 seconds per chat.
-- **Read state:** reading a chat clears the unread mark on your phone. Read receipts (blue ticks for the sender) are sent unless `[whatsapp] send_read_receipts = false` (default `true`).
+- **Read state:** reading a chat, or sending in it, clears the unread mark on your phone and your other linked devices. This happens with read receipts on or off. Read receipts (blue ticks for the sender) are sent unless `[whatsapp] send_read_receipts = false` (default `true`).
 - **Pin, mute (for good) and hide (archive)** sync with the phone; the phone wins on a conflict.
 
 ## Using it

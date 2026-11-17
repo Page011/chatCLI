@@ -439,13 +439,18 @@ impl Backend {
                     Err(e) => self.store_failed("read messages", &e),
                 }
             }
+            // Sending in a chat reads it, as on the phone. `mark_read` does nothing when
+            // nothing is unread, so a normal reply costs no extra call.
             Command::Send {
                 chat_id,
                 text,
                 client_id,
                 reply_to,
                 mentions,
-            } => self.send(chat_id, text, client_id, reply_to, mentions),
+            } => {
+                self.mark_read(&chat_id);
+                self.send(chat_id, text, client_id, reply_to, mentions);
+            }
             Command::MarkRead { chat_id } => self.mark_read(&chat_id),
             Command::SendMedia {
                 chat_id,
@@ -453,7 +458,10 @@ impl Backend {
                 path,
                 kind: _,
                 caption,
-            } => self.send_media(chat_id, client_id, path, caption),
+            } => {
+                self.mark_read(&chat_id);
+                self.send_media(chat_id, client_id, path, caption);
+            }
             Command::React {
                 chat_id,
                 message_id,
