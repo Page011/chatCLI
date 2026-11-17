@@ -328,6 +328,7 @@ impl Backend {
                 result,
             } => {
                 if let Err(e) = result {
+                    log::error(AREA, &format!("read mark refused: {}", wa_log(&e)));
                     self.restore_unread(&chat_id, unread, mentions);
                     self.notice(
                         &format!(

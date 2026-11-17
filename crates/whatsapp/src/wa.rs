@@ -113,6 +113,19 @@ pub(crate) fn redact_urls(text: &str) -> String {
         .join(" ")
 }
 
+/// The address the phone files a chat under. Once the account is 1:1 LID-migrated, WhatsApp
+/// keeps every 1:1 chat under the LID, even when the phone number is known (WA Web
+/// `WAWebMessageDestinationChat`; whatsapp-rust's own sends do the same). A read mark, pin,
+/// mute, archive or read receipt sent under the phone number then names a chat the phone does
+/// not have: the server accepts it and the phone ignores it, with no error anywhere (#66).
+/// Groups, accounts not migrated yet and unknown LIDs keep the address as it is.
+pub(crate) fn chat_wid(chat: &Jid, migrated: bool, lid: Option<&str>) -> Jid {
+    match lid {
+        Some(lid) if migrated && chat.is_pn() && !lid.is_empty() => Jid::lid(lid),
+        _ => chat.clone(),
+    }
+}
+
 /// Each step of a profile photo lookup (the IQ, then the download).
 const PHOTO_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
@@ -121,6 +134,17 @@ const PREALLOC_MAX: u64 = 64 * 1024 * 1024;
 
 pub(crate) struct RealWa {
     pub client: Arc<Client>,
+}
+
+impl RealWa {
+    /// `chat_wid` with the account's migration state and the library's LID mapping.
+    async fn wid(&self, chat: &Jid) -> Jid {
+        if !chat.is_pn() || !self.client.is_lid_migrated().await {
+            return chat.clone();
+        }
+        let entry = self.client.get_lid_pn_entry(chat).await.ok().flatten();
+        chat_wid(chat, true, entry.as_ref().map(|e| &*e.lid))
+    }
 }
 
 #[async_trait]
@@ -292,11 +316,23 @@ impl Wa for RealWa {
     }
 
     async fn mark_chat_read(&self, chat: Jid) -> Result<(), String> {
+        let wid = self.wid(&chat).await;
         self.client
             .chat_actions()
-            .mark_chat_as_read(&chat, true, None)
+            .mark_chat_as_read(&wid, true, None)
             .await
-            .map_err(|e| chain(&e))
+            .map_err(|e| chain(&e))?;
+        // The phone never says whether it applied the mark, so the address used is logged: a
+        // chat that stays unread on the phone can be traced to it. No number, no message text.
+        let address = if wid.is_lid() {
+            "LID"
+        } else if wid.is_pn() {
+            "phone number"
+        } else {
+            "group"
+        };
+        chatcli_core::log::info("whatsapp", &format!("read mark sent ({address} address)"));
+        Ok(())
     }
 
     async fn mark_receipts(
@@ -305,6 +341,7 @@ impl Wa for RealWa {
         sender: Option<Jid>,
         ids: Vec<String>,
     ) -> Result<(), String> {
+        let chat = self.wid(&chat).await;
         let refs: Vec<&str> = ids.iter().map(String::as_str).collect();
         self.client
             .mark_as_read(&chat, sender.as_ref(), &refs)
@@ -313,6 +350,7 @@ impl Wa for RealWa {
     }
 
     async fn set_flag(&self, chat: Jid, flag: ChatFlag, on: bool) -> Result<(), String> {
+        let chat = self.wid(&chat).await;
         let actions = self.client.chat_actions();
         match (flag, on) {
             (ChatFlag::Pinned, true) => actions.pin_chat(&chat).await,
@@ -465,6 +503,23 @@ impl Read for CountingReader {
 mod tests {
     use super::*;
     use std::sync::atomic::AtomicU64;
+
+    #[test]
+    fn a_migrated_account_files_1_1_chats_under_the_lid() {
+        let pn: Jid = "15550100000@s.whatsapp.net".parse().unwrap();
+        let group: Jid = "120363000000000001@g.us".parse().unwrap();
+        let lid = Some("100200300");
+        assert_eq!(chat_wid(&pn, true, lid).to_string(), "100200300@lid");
+        // Not migrated yet: the phone still files 1:1 chats under the number.
+        assert_eq!(chat_wid(&pn, false, lid), pn);
+        // No known LID: the number is all there is.
+        assert_eq!(chat_wid(&pn, true, None), pn);
+        assert_eq!(chat_wid(&pn, true, Some("")), pn);
+        // Groups and LID chats keep their address.
+        assert_eq!(chat_wid(&group, true, lid), group);
+        let l: Jid = "100200300@lid".parse().unwrap();
+        assert_eq!(chat_wid(&l, true, Some("999")), l);
+    }
 
     #[test]
     fn only_whatsapp_cdn_hosts_are_downloaded_from() {

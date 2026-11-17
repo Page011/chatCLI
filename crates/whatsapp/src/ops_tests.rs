@@ -2556,6 +2556,46 @@ async fn read_receipts_go_out_by_default() {
 }
 
 #[tokio::test]
+async fn sending_in_an_unread_chat_marks_it_read_on_the_phone() {
+    let (mut b, mut erx, mut rx) = backend_with(quiet());
+    let fake = linked(&mut b);
+    seed_chat(&b.store, 1000, "x", 3);
+    b.on_command(send_cmd(ALEX, "on it", "c1", None, vec![]))
+        .await;
+    assert_eq!(chat(&b, ALEX).unread, 0, "cleared at once");
+    pump(&mut b, &mut rx).await;
+    pump(&mut b, &mut rx).await;
+    let calls = fake.calls();
+    assert!(
+        calls
+            .iter()
+            .any(|c| matches!(c, Call::MarkRead(j) if j == &jid(ALEX))),
+        "{calls:?}"
+    );
+    assert!(
+        calls.iter().any(|c| matches!(c, Call::Send(..))),
+        "{calls:?}"
+    );
+    drain(&mut erx);
+}
+
+#[tokio::test]
+async fn sending_in_a_read_chat_costs_no_read_mark() {
+    let (mut b, mut erx, mut rx) = backend_with(quiet());
+    let fake = linked(&mut b);
+    seed_chat(&b.store, 1000, "x", 0);
+    b.on_command(send_cmd(ALEX, "on it", "c1", None, vec![]))
+        .await;
+    pump(&mut b, &mut rx).await;
+    let calls = fake.calls();
+    assert!(
+        !calls.iter().any(|c| matches!(c, Call::MarkRead(_))),
+        "{calls:?}"
+    );
+    drain(&mut erx);
+}
+
+#[tokio::test]
 async fn a_refused_read_mark_restores_the_unread_count_and_says_so() {
     let (mut b, mut erx, mut rx) = backend();
     let fake = linked(&mut b);
