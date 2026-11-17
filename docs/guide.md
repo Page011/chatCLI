@@ -471,7 +471,7 @@ A value is an ANSI name (`black` `red` `green` `yellow` `blue` `magenta` `cyan` 
 
 Roles: `text` (messages, chat titles, your draft), `dim` (times, previews, separators), `hint` (key hints, empty-state notes), `accent` (SIGNING IN and SCAN QR chips, "is typing"), `own_name` (your name), `unread` (counts and unread titles), `error`, `warn`, `ok` (send progress), `selected` (selected tab, row or message), `chip_live`, `chip_attention` (LIVE and SIGN-IN NEEDED / NOT LIVE chips), `network_teams`, `network_whatsapp` (tab names).
 
-The message status marks are `[theme]` keys too: `mark_sending` (default `◷`), `mark_sent` (`○`), `mark_delivered` (`●`) and `mark_read` (`✓`). Each is one character one column wide (an emoji takes two and is refused, keeping the default). Two the same are kept, with a warning: you could no longer tell those states apart.
+The message status marks are `[theme]` keys too: `mark_sending` (default `◷`), `mark_sent` (`○`), `mark_delivered` (`●`) and `mark_read` (`✓`). Each is one character one column wide (an emoji takes two and is refused, keeping the default). A space (`" "`) means no mark for that state: set all four to a space to hide the marks altogether. Two the same are kept, with a warning (except spaces): you could no longer tell those states apart.
 
 ```toml
 [theme]

@@ -310,13 +310,17 @@ impl Marks {
 
 /// A mark as typed: exactly one character that takes one terminal column (the status column
 /// is one wide; an emoji takes two).
+/// Spaces alone (`" "`) are a space: no mark for that state.
 pub fn mark_char(value: &str) -> Result<char, String> {
+    if !value.is_empty() && value.chars().all(|c| c == ' ') {
+        return Ok(' ');
+    }
     let v = value.trim();
     let mut chars = v.chars();
     match (chars.next(), chars.next()) {
         (Some(c), None) if !c.is_control() && crate::text::sw(v) == 1 => Ok(c),
         _ => Err(format!(
-            "\"{v}\" is not one character one column wide (try ◷ ○ ● ✓ ◌ ◉ ✔ ·)."
+            "\"{v}\" is not one character one column wide (try ◷ ○ ● ✓ ◌ ◉ ✔ ·, or \" \" for none)."
         )),
     }
 }
@@ -613,8 +617,9 @@ impl Theme {
                 )),
             }
         }
+        // A space is "no mark": several of them are a choice, not a mix-up.
         let marks = theme.marks.all();
-        if (1..marks.len()).any(|i| marks[..i].contains(&marks[i])) {
+        if (1..marks.len()).any(|i| marks[i] != ' ' && marks[..i].contains(&marks[i])) {
             let shown: String = marks.iter().flat_map(|c| [*c, ' ']).collect();
             problems.push(SettingsProblem {
                 severity: Severity::Warning,
@@ -815,6 +820,13 @@ mod tests {
         assert_eq!(p.len(), 1, "{p:?}");
         assert_eq!(p[0].severity, Severity::Warning);
         assert_eq!(p[0].key.as_deref(), Some("mark_read"));
+        // A space is no mark; several are a choice, so no warning.
+        let (t, p) = Theme::from_settings(
+            &settings("default", &[("mark_sent", " "), ("mark_delivered", " ")]),
+            false,
+        );
+        assert_eq!((t.marks.sent, t.marks.delivered), (' ', ' '));
+        assert!(p.is_empty(), "{p:?}");
         // NO_COLOR keeps them: they are shapes.
         let (t, _) = Theme::from_settings(&settings("default", &[("mark_read", "✔")]), true);
         assert_eq!(t.marks.read, '✔');

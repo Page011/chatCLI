@@ -333,7 +333,7 @@ const PANEL_ROWS: [(&str, Option<&str>); 6] = [
 ];
 
 /// Message mark choices for Left/Right (any one-column character can be typed).
-const MARK_CHOICES: [char; 9] = ['○', '●', '✓', '◌', '◉', '✔', '·', '*', '◷'];
+const MARK_CHOICES: [char; 10] = ['○', '●', '✓', '◌', '◉', '✔', '·', '*', '◷', ' '];
 
 /// Labels of the `MARK_KEYS` rows, in the same order.
 const MARK_LABELS: [&str; 4] = ["Sending mark", "Sent mark", "Delivered mark", "Read mark"];
@@ -576,12 +576,20 @@ pub(crate) fn rows(
             let marks = Marks::default();
             for (key, label) in MARK_KEYS.into_iter().zip(MARK_LABELS) {
                 let v = s.theme.overrides.get(key);
+                let mark = v
+                    .and_then(|v| mark_char(v).ok())
+                    .or_else(|| marks.get(key))
+                    .unwrap_or(' ');
                 out.push(row(
                     RowId::Mark(key),
                     label,
-                    v.cloned()
-                        .unwrap_or_else(|| marks.get(key).unwrap_or(' ').to_string()),
-                    "one character, e.g. ◷ ○ ● ✓ ◌ ◉ ✔ ·",
+                    // A blank value would look like a missing one.
+                    if mark == ' ' {
+                        "none (space)".to_string()
+                    } else {
+                        mark.to_string()
+                    },
+                    "one character, e.g. ◷ ○ ● ✓ ◌ ◉ ✔ ·, or a space for none",
                     v.is_some(),
                 ));
             }
@@ -971,9 +979,8 @@ pub(crate) fn change(s: &Settings, id: RowId, c: Change) -> Done {
                 .unwrap_or(default);
             let mark = match &c {
                 Change::Reset => default,
-                Change::Text(t)
-                    if t.trim().is_empty() || t.trim().eq_ignore_ascii_case("default") =>
-                {
+                // An empty box is the default; a space is a space (no mark).
+                Change::Text(t) if t.is_empty() || t.trim().eq_ignore_ascii_case("default") => {
                     default
                 }
                 Change::Text(t) => mark_char(t)?,
@@ -1487,6 +1494,26 @@ mod tests {
         assert_eq!(n.theme.overrides["mark_sent"], "●");
         assert_eq!(e[0].key, "mark_sent");
         let (n, e) = run(&n, id, Change::Prev);
+        assert!(!n.theme.overrides.contains_key("mark_sent"));
+        assert_eq!(e, vec![SettingEdit::remove("theme", "mark_sent")]);
+        // A space is "no mark", shown as words so the row does not look empty; an empty box is
+        // still the default.
+        let (n, e) = run(&s, id, Change::Text(" ".into()));
+        assert_eq!(n.theme.overrides["mark_sent"], " ");
+        assert_eq!(
+            e,
+            vec![SettingEdit::set(
+                "theme",
+                "mark_sent",
+                SettingValue::str(" ")
+            )]
+        );
+        let shown = rows(Section::Appearance, &n, &Keymap::default(), &[], &[])
+            .into_iter()
+            .find(|r| r.id == id)
+            .unwrap();
+        assert_eq!(shown.value, "none (space)");
+        let (n, e) = run(&n, id, Change::Text(String::new()));
         assert!(!n.theme.overrides.contains_key("mark_sent"));
         assert_eq!(e, vec![SettingEdit::remove("theme", "mark_sent")]);
         let (n, _) = run(&s, id, Change::Text("*".into()));
