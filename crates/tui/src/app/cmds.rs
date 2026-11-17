@@ -189,7 +189,8 @@ impl App {
         Vec::new()
     }
 
-    /// Enter on a chat in the bar: select it and open it like Enter in the list.
+    /// Enter on a chat in the bar: select it and go into it like Enter in the list (its newest
+    /// message selected, or its message box while it has none).
     fn open_chat_by_id(&mut self, id: &str) -> Out {
         let n = self.active;
         let ns = self.ns_mut(n);
@@ -197,7 +198,7 @@ impl App {
         ns.focus = Focus::List;
         ns.selected = Some(id.to_string());
         self.fix_selection(n, true);
-        self.open_selected(n)
+        self.select_chat(n)
     }
 
     // ---- `:` in the message box ----

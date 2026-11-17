@@ -4706,7 +4706,8 @@ mod tests {
             app.palette_items(),
             vec![crate::palette::PalItem::Chat("b".into())]
         );
-        // Enter opens that chat and moves to its message box.
+        // Enter goes into that chat like Enter in the list: it holds no message yet, so its
+        // message box.
         let out = app.handle_key(key(KeyCode::Enter));
         assert!(app.palette().is_none());
         assert_eq!(app.active().open.as_deref(), Some("b"));
@@ -4716,6 +4717,17 @@ mod tests {
                 .any(|(_, c)| matches!(c, Command::OpenChat { chat_id } if chat_id == "b")),
             "{out:?}"
         );
+    }
+
+    #[test]
+    fn a_chat_chosen_in_the_bar_opens_like_enter_in_the_list() {
+        // Chat "a" holds messages: the bar goes into it with the newest one selected.
+        let mut app = chat_with_text(&["one", "two"]);
+        colon(&mut app, "alex");
+        assert!(app.palette().is_none());
+        assert_eq!(app.active().open.as_deref(), Some("a"));
+        assert_eq!(app.active().focus, Focus::Select);
+        assert_eq!(app.active().sel_msg.as_deref(), Some("m1"));
     }
 
     #[test]
