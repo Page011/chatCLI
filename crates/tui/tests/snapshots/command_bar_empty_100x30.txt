@@ -36,7 +36,7 @@ row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
 row 0 cols 89-99: fg=Reset bg=Reset DIM
 row 1 cols 11-20: fg=Reset bg=Reset BOLD
 row 2 cols 11-11: fg=Reset bg=Reset BOLD
-row 2 cols 12-38: fg=DarkGray bg=Reset NONE
+row 2 cols 12-38: fg=Reset bg=Reset DIM
 row 3 cols 11-18: fg=Reset bg=Reset BOLD
 row 4 cols 11-27: fg=Reset bg=Reset BOLD | REVERSED
 row 4 cols 28-44: fg=Reset bg=Reset BOLD | DIM | REVERSED

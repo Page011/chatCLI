@@ -11,7 +11,7 @@ use chatcli_core::model::{
     Capabilities, ChatKind, ChatMessage, ChatSummary, Event, MessageState, Network, PersonRef,
     QuotedRef, Reaction, Status,
 };
-use chatcli_core::settings::Settings;
+use chatcli_core::settings::{PickerPlace, Settings};
 use chatcli_tui::{draw, App, Clock};
 use chrono::{FixedOffset, TimeZone};
 use crossterm::event::{
@@ -1060,6 +1060,78 @@ fn emoji_picker_on_the_smallest_screen() {
     ctrl_key(&mut app, 'e');
     let got = render_cursor(&mut app, 32, 8);
     check("emoji_picker_smallest", 32, 8, &got);
+}
+
+/// Teams, Alex Example open, the message box focused, `[layout] emoji_picker` set.
+fn placed_picker_app(place: PickerPlace) -> App {
+    let mut app = online_in(new_app_with(settings_with(|s| {
+        s.layout.emoji_picker = place
+    })));
+    press(&mut app, KeyCode::Char('i'));
+    app
+}
+
+/// `box`: the picker straight above the message box; the draft and the footer stay in view.
+#[test]
+fn emoji_picker_above_the_message_box() {
+    let mut app = placed_picker_app(PickerPlace::Box);
+    type_str(&mut app, "hi ");
+    ctrl_key(&mut app, 'e');
+    for (w, h) in [(100, 30), (80, 24)] {
+        let got = render_cursor(&mut app, w, h);
+        assert!(got.contains("> hi"), "{got}");
+        assert!(got.contains("Esc close"), "{got}");
+        check("emoji_picker_box", w, h, &got);
+    }
+}
+
+/// `inline`: one row of emoji in the message box under the draft. The search shows the
+/// category while it is empty; typing filters the strip.
+#[test]
+fn emoji_picker_inline_in_the_message_box() {
+    let mut app = placed_picker_app(PickerPlace::Inline);
+    type_str(&mut app, "hi ");
+    ctrl_key(&mut app, 'e');
+    for (w, h) in [(100, 30), (80, 24)] {
+        let got = render_cursor(&mut app, w, h);
+        assert!(got.contains("> hi"), "{got}");
+        assert!(got.contains("/Faces"), "{got}");
+        check("emoji_picker_inline", w, h, &got);
+    }
+    // More emoji to the right: `>` in the last column, no `<` until the strip has scrolled.
+    let strip = |got: &str| {
+        got.lines()
+            .find(|l| l.contains("/Faces"))
+            .unwrap_or_default()
+            .to_string()
+    };
+    let row = strip(&render_cursor(&mut app, 80, 24));
+    assert!(row.ends_with(">║") && !row.contains('<'), "{row}");
+    for _ in 0..20 {
+        press(&mut app, KeyCode::Right);
+    }
+    let row = strip(&render_cursor(&mut app, 80, 24));
+    assert!(row.contains('<') && row.ends_with(">║"), "{row}");
+    type_str(&mut app, "heart");
+    let got = render_cursor(&mut app, 80, 24);
+    assert!(got.contains("/heart"), "{got}");
+    check("emoji_picker_inline_search", 80, 24, &got);
+    type_str(&mut app, "zzzz");
+    let got = render_cursor(&mut app, 80, 24);
+    assert!(got.contains("No emoji match"), "{got}");
+}
+
+/// Too small for `box` or `inline`: the picker opens in the middle, exactly as `popup` does.
+#[test]
+fn emoji_picker_places_fall_back_to_the_middle_on_the_smallest_screen() {
+    let mut popup = placed_picker_app(PickerPlace::Popup);
+    ctrl_key(&mut popup, 'e');
+    let want = render_cursor(&mut popup, 32, 8);
+    for place in [PickerPlace::Box, PickerPlace::Inline] {
+        let mut app = placed_picker_app(place);
+        ctrl_key(&mut app, 'e');
+        assert_eq!(render_cursor(&mut app, 32, 8), want, "{place:?}");
+    }
 }
 
 /// 60x20: the grid, search row and status fit inside the screen.

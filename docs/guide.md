@@ -334,7 +334,7 @@ The mouse works too: click a tab, click a chat (previews it, like moving the cur
 
 - **Paste** inserts at the cursor and never sends. Line breaks stay, control characters are dropped, tabs become four spaces. Enter sends the whole multi-line message. Windows Terminal and the classic console have no bracketed paste, so Windows delivers a paste as key presses: chatcli treats several key presses that arrive together as a paste (line breaks stay in the message box, nothing is sent), and ignores such a burst when no text box is open. A terminal that does neither would still send each pasted line: test with a three-line paste before trusting it.
 - **Too long:** over the limit (Teams 80 KB of escaped HTML, WhatsApp 60000 characters) the message is not sent and the text stays.
-- **Emoji:** type `:thu` and `Enter` inserts one (`Up` / `Down` choose, `Esc` closes). It does not open inside `10:30` or `https://x`. `Ctrl+E` opens a picker with categories, search (type) and your last 30 emoji. Click or the wheel work in it.
+- **Emoji:** type `:thu` and `Enter` inserts one (`Up` / `Down` choose, `Esc` closes). It does not open inside `10:30` or `https://x`. `Ctrl+E` opens a picker with categories, search (type) and your last 30 emoji. Click or the wheel work in it. `[layout] emoji_picker` (Settings > Layout > Emoji picker) sets where it opens: `popup` in the middle of the screen (the default), `box` straight above the message box with the newest messages still in view, or `inline` as one row inside the message box under your draft (`Left` / `Right` move, typing filters, the search shows the category while empty). Where there is no room for `box` or `inline`, it opens in the middle. The reaction picker always opens in the middle.
 - **Mentions:** in a group chat type `@` and a letter or two, then `Up` / `Down` and `Enter`. `Backspace` right after a name removes it whole. Chats where you were mentioned show `@` after the unread count, and those messages are bold. Not offered in one-to-one chats.
 - **Replies** show the quoted message dimmed above the reply. An edited message shows `(edited)`, a deleted one `[message deleted]`. Reactions show as counts under a message, yours in bold.
 - **Links** are underlined. `u` asks `Open <host>? y/n` (the real host, whatever the link text says); several links get a `1`-`9` choice first. Only `http` and `https` open.
@@ -400,6 +400,8 @@ time_format = "24h"         # "24h" or "12h" (09:30 AM)
 date_order = "dmy"          # "dmy", "mdy" or "ymd" for dates older than this week
 density = "cozy"            # "cozy" or "compact" (compact: one row per chat)
 show_previews = true        # false: one row per chat, no preview line
+emoji_picker = "popup"      # where Ctrl+E opens: "popup" (middle of the screen), "box" (above the
+                            # message box) or "inline" (one row inside the message box)
 
 [notifications]
 enabled = true              # Windows toast for a new message
