@@ -1097,6 +1097,12 @@ impl App {
                 messages.iter_mut().for_each(clean_message);
                 messages.sort_by_key(|m| m.ts);
                 let follow = self.selecting_newest(network, &chat_id);
+                // An older message highlighted: newer messages in the batch (a catch-up) must not
+                // push it up the screen. Older history above does not move it.
+                let is_open = self.ns(network).open.as_deref() == Some(chat_id.as_str());
+                let below = (is_open && !follow)
+                    .then(|| self.lines_below_selection(network))
+                    .flatten();
                 let held = self
                     .ns_mut(network)
                     .messages
@@ -1106,6 +1112,12 @@ impl App {
                 self.keep_selection(network, &chat_id);
                 if follow {
                     self.follow_newest(network);
+                } else if let (Some(before), Some(after)) =
+                    (below, self.lines_below_selection(network))
+                {
+                    let ns = self.ns_mut(network);
+                    ns.scroll = (ns.scroll + after).saturating_sub(before);
+                    self.ensure_sel_visible(network);
                 }
             }
             Event::Message(mut m) => {

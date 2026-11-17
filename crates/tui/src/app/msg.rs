@@ -320,12 +320,26 @@ impl App {
             && ns.sel_msg.as_ref() == self.selectable_ids(n).last()
     }
 
-    /// Highlights the newest message that can be selected and scrolls it into view.
+    /// Highlights the newest message that can be selected, the pane pinned to the bottom like a
+    /// chat that follows (a new message taller than the pane shows its end, not its start).
     pub(super) fn follow_newest(&mut self, n: Network) {
         if let Some(last) = self.selectable_ids(n).last().cloned() {
-            self.ns_mut(n).sel_msg = Some(last);
-            self.ensure_sel_visible(n);
+            let ns = self.ns_mut(n);
+            ns.sel_msg = Some(last);
+            ns.scroll = 0;
         }
+    }
+
+    /// Message lines below the end of the highlighted message, when one is highlighted in the
+    /// open chat. A change to the messages that alters it is added to `scroll` so the highlight
+    /// stays where it was on screen.
+    pub(super) fn lines_below_selection(&self, n: Network) -> Option<usize> {
+        let ns = self.ns(n);
+        let id = ns.sel_msg.as_ref().filter(|_| ns.focus == Focus::Select)?;
+        let (w, _) = self.convo_size(n);
+        let (lines, spans) = ui::message_layout(ns, &self.look(), w);
+        let sp = spans.iter().find(|s| &s.id == id)?;
+        Some(lines.len().saturating_sub(sp.end))
     }
 
     /// Remembers `from` (in the open chat) before a big jump. The list keeps the last 50.
@@ -1068,6 +1082,40 @@ mod tests {
         press(&mut app, KeyCode::Up);
         app.handle_event(Event::Message(msg("new3", 5003, false, "c")));
         assert_eq!(sel(&app), Some("new1"));
+    }
+
+    #[test]
+    fn a_batch_of_newer_messages_keeps_an_older_selection_where_it_is() {
+        let mut app = app_with(ChatKind::Direct, many(40));
+        app.resize(80, 24);
+        to_selection(&mut app);
+        for _ in 0..4 {
+            press(&mut app, KeyCode::Up);
+        }
+        let held = sel(&app).map(str::to_string);
+        // Rows between the end of the highlight and the bottom of the pane.
+        let row =
+            |app: &App| app.lines_below_selection(Network::Teams).unwrap() - app.active().scroll;
+        let before = row(&app);
+        app.handle_event(Event::Messages {
+            network: Network::Teams,
+            chat_id: "a".into(),
+            messages: vec![msg("new1", 5001, false, "a"), msg("new2", 5002, false, "b")],
+        });
+        assert_eq!(sel(&app).map(str::to_string), held);
+        assert_eq!(row(&app), before, "the highlight did not move on screen");
+        assert!(in_view(&app));
+    }
+
+    #[test]
+    fn following_onto_a_message_taller_than_the_pane_keeps_the_bottom_in_view() {
+        let mut app = app_with(ChatKind::Direct, many(10));
+        app.resize(80, 16);
+        to_selection(&mut app);
+        let tall = vec!["line"; 60].join("\n");
+        app.handle_event(Event::Message(msg("tall", 5000, false, &tall)));
+        assert_eq!(sel(&app), Some("tall"));
+        assert_eq!(app.active().scroll, 0, "the pane stays at the bottom");
     }
 
     #[test]
