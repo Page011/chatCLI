@@ -12,7 +12,7 @@ use crate::list::keep_visible;
 use crate::settings_view::{Kind, PageEdit, Row, RowId, Section, SettingsPage};
 use crate::text::{fit, sw, truncate, wrap};
 use crate::theme::{Panel, Theme};
-use crate::ui::{bold, centered_note, pane};
+use crate::ui::{bold, pane};
 
 const SECTIONS_W: u16 = 18;
 const LABEL_W: usize = 19;
@@ -23,7 +23,6 @@ const KEYS_VALUE_W: usize = 30;
 /// line under the list shows the chosen row's hint.
 /// Rows the live preview needs: four sample lines, the first one named.
 const PREVIEW_ROWS: usize = 4;
-const TOO_SMALL: &str = "Terminal too small for settings, press Esc to close";
 
 /// Where the parts of the screen are: shared by drawing and the key handling (scroll maths).
 pub(crate) struct Geom {
@@ -105,11 +104,10 @@ pub(crate) fn draw(f: &mut Frame, app: &App, body: Rect) {
         return;
     };
     let t = app.theme();
-    f.render_widget(Clear, body);
     let Some(g) = geometry(body) else {
-        centered_note(f, body, TOO_SMALL, t);
-        return;
+        return crate::overlay::too_small(f, t, body, "settings");
     };
+    f.render_widget(Clear, body);
     let rows = app.page_rows();
     match g.left {
         Some(left) => {

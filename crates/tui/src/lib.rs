@@ -32,6 +32,7 @@ mod list;
 mod media_view;
 mod notify;
 mod older;
+mod overlay;
 mod palette;
 mod popup;
 mod search;

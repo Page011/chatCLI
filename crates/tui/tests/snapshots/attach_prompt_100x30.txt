@@ -58,7 +58,7 @@ row 13 cols 33-44: fg=Yellow bg=Reset BOLD
 row 13 cols 46-50: fg=DarkGray bg=Reset NONE
 row 16 cols 33-56: fg=Reset bg=Reset BOLD
 row 17 cols 33-53: fg=Reset bg=Reset BOLD
-row 19 cols 32-36: fg=Reset bg=Reset BOLD | REVERSED
+row 19 cols 32-97: fg=Reset bg=Reset BOLD | REVERSED
 row 20 cols 32-43: fg=Reset bg=Reset BOLD
 row 26 cols 31-43: fg=Reset bg=Reset BOLD
 row 27 cols 31-32: fg=Reset bg=Reset BOLD

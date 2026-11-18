@@ -3,9 +3,9 @@
 //! `App` applies the settings at once and queues the edits for the run loop to save.
 
 use chatcli_core::settings::{
-    Avatars, DateOrder, Density, ImageProtocol, NotifyPreview, SettingEdit, SettingValue, Settings,
-    SidebarWidth, TimeFormat, AVATARS, DATE_ORDERS, DENSITIES, IMAGE_PROTOCOLS, NOTIFY_PREVIEWS,
-    TIME_FORMATS,
+    Avatars, DateOrder, Density, ImageProtocol, NotifyPreview, PickerPlace, SettingEdit,
+    SettingValue, Settings, SidebarWidth, TimeFormat, AVATARS, DATE_ORDERS, DENSITIES,
+    IMAGE_PROTOCOLS, NOTIFY_PREVIEWS, PICKER_PLACES, TIME_FORMATS,
 };
 
 use crate::input::TextInput;
@@ -195,6 +195,7 @@ pub(crate) enum RowId {
     ShowPreviews,
     Avatars,
     Photos,
+    EmojiPicker,
     NotifEnabled,
     NotifPreview,
     NotifSound,
@@ -675,6 +676,13 @@ pub(crate) fn rows(
                 "in avatars, Sixel/Kitty/iTerm2 only",
                 l.photos != d.layout.photos,
             ));
+            out.push(row(
+                RowId::EmojiPicker,
+                "Emoji picker",
+                name_of(&PICKER_PLACES, l.emoji_picker),
+                "popup, box or inline",
+                l.emoji_picker != d.layout.emoji_picker,
+            ));
         }
         Section::Notifications => {
             let n = &s.notifications;
@@ -1113,6 +1121,16 @@ pub(crate) fn change(s: &Settings, id: RowId, c: Change) -> Done {
             n.layout.photos = v;
             one(n, mk("layout", "photos", reset, SettingValue::Bool(v)))
         }
+        RowId::EmojiPicker => {
+            let v = choice(
+                &PICKER_PLACES,
+                s.layout.emoji_picker,
+                PickerPlace::default(),
+                &c,
+            )?;
+            n.layout.emoji_picker = v;
+            one(n, mk("layout", "emoji_picker", reset, v.to_setting()))
+        }
         RowId::ShowPreviews => {
             let v = flip(s.layout.show_previews, d.layout.show_previews, &c)?;
             n.layout.show_previews = v;
@@ -1309,7 +1327,7 @@ mod tests {
         let ids = all_ids();
         assert_eq!(
             ids.len(),
-            18 + 3 + 1 + 5 + 6 + ROLES.len() + MARK_KEYS.len()
+            19 + 3 + 1 + 5 + 6 + ROLES.len() + MARK_KEYS.len()
         );
         for id in ids {
             for c in [Change::Prev, Change::Next, Change::Toggle, Change::Reset] {

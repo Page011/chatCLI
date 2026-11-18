@@ -18,8 +18,8 @@ use chatcli_core::model::{
 };
 use chatcli_core::runtime::{StartupNotice, Toast, UiCtx};
 use chatcli_core::settings::{
-    ImageProtocol, KeySettings, LayoutSettings, NotificationSettings, SettingEdit, Settings,
-    Severity,
+    ImageProtocol, KeySettings, LayoutSettings, NotificationSettings, PickerPlace, SettingEdit,
+    Settings, Severity,
 };
 use chatcli_core::store::Store;
 use chatcli_core::{limits, log, open};
@@ -760,11 +760,6 @@ impl App {
                 self.ensure_sel_visible(n);
             }
         }
-        if let Some(g) = self.picker_grid() {
-            if let Some(p) = self.picker.as_mut() {
-                p.keep_visible(g.cols, g.rows);
-            }
-        }
     }
 
     /// Makes `n` the active tab. What is on screen changes, so read timers follow.
@@ -901,6 +896,13 @@ impl App {
         for n in Network::ALL {
             self.refit(n);
         }
+        // The picker's grid can change size too (a resize, a new `emoji_picker` place): keep its
+        // selected cell on screen.
+        if let Some(g) = self.picker_grid() {
+            if let Some(p) = self.picker.as_mut() {
+                p.keep_visible(g.cols, g.rows);
+            }
+        }
     }
 
     /// Fits the sidebar viewport after the geometry may have changed. A selection that was in
@@ -1001,9 +1003,32 @@ impl App {
             self.wants_convo(n),
             ns.focus == Focus::Filter || !ns.filter.is_empty(),
             ns.draft(),
-            ns.extra_rows(),
+            self.box_rows(n),
             self.layout.sidebar_width,
+            self.picker_open_as(n, PickerPlace::Box),
         )
+    }
+
+    /// Rows the message box adds to the draft's: the reply or edit line, the file chip, and the
+    /// inline emoji strip while it is open on this tab.
+    fn box_rows(&self, n: Network) -> u16 {
+        let strip = self.picker_open_as(n, PickerPlace::Inline);
+        self.ns(n).extra_rows() + u16::from(strip)
+    }
+
+    /// True while tab `n` shows the picker at `place`: the layout makes room for `box` and
+    /// `inline`.
+    fn picker_open_as(&self, n: Network, place: PickerPlace) -> bool {
+        n == self.active && self.picker_place() == Some(place)
+    }
+
+    /// Where the open picker goes: the `[layout] emoji_picker` place for the message box's
+    /// picker, the middle for a reaction. None when no picker is open.
+    pub(crate) fn picker_place(&self) -> Option<PickerPlace> {
+        Some(match self.picker.as_ref()?.purpose {
+            PickerFor::Compose => self.layout.emoji_picker,
+            PickerFor::React { .. } => PickerPlace::Popup,
+        })
     }
 
     /// Layout of the active tab for the frame being drawn.
@@ -1021,8 +1046,9 @@ impl App {
             true,
             false,
             self.ns(n).draft(),
-            self.ns(n).extra_rows(),
+            self.box_rows(n),
             self.layout.sidebar_width,
+            self.picker_open_as(n, PickerPlace::Box),
         )
         .messages;
         (m.width as usize, m.height as usize)
@@ -1882,7 +1908,7 @@ impl App {
 
     /// Where the picker's grid is on screen, or None when the terminal is too small for it.
     fn picker_grid(&self) -> Option<ui::PickerGeom> {
-        ui::picker_geometry(self.layout_in(self.size).body)
+        ui::picker_geom(self, &self.layout_in(self.size))
     }
 
     /// Moves the picker's selection by cells and scrolls to keep it in view.
@@ -4628,6 +4654,182 @@ mod tests {
         let p = app.picker().unwrap();
         assert!(p.sel / g.cols >= p.top && p.sel / g.cols < p.top + g.rows);
         assert!(p.top > 0);
+    }
+
+    // ---- picker placement (#74) ----
+
+    /// Alex Example open, the picker opened from the message box, `[layout] emoji_picker` set.
+    fn placed_picker(place: PickerPlace) -> App {
+        let mut s = Settings::default();
+        s.layout.emoji_picker = place;
+        let mut app = online(App::with_settings(clock(), &s));
+        app.resize(80, 24);
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(ctrl('e'));
+        assert!(app.picker().is_some());
+        app
+    }
+
+    #[test]
+    fn box_picker_sits_above_the_message_box_and_never_covers_it() {
+        let mut app = placed_picker(PickerPlace::Box);
+        let lay = app.layout_in(app.size);
+        let g = app.picker_grid().unwrap();
+        assert!(!g.inline);
+        // Docked between the conversation and the message box, lined up with the box: the
+        // conversation ends where it starts (so its newest messages stay in view) and keeps
+        // at least 4 rows.
+        assert_eq!(g.outer.y + g.outer.height, lay.composer.y);
+        assert_eq!(g.outer.x, lay.composer.x);
+        assert_eq!(lay.convo.y + lay.convo.height, g.outer.y);
+        assert!(lay.convo.height >= 4);
+        assert!(
+            !g.outer.intersects(lay.composer)
+                && !g.outer.intersects(lay.footer)
+                && !g.outer.intersects(lay.convo)
+        );
+        // A click on a cell chooses it, as in the middle.
+        let want = app.picker().unwrap().items(app.recents())[1]
+            .as_str()
+            .to_string();
+        app.handle_mouse(click(g.grid.x + ui::PICKER_CELL as u16, g.grid.y));
+        assert!(app.picker().is_none());
+        assert_eq!(app.active().draft(), want);
+    }
+
+    #[test]
+    fn inline_strip_is_one_row_in_the_message_box_under_the_draft() {
+        let mut app = placed_picker(PickerPlace::Inline);
+        let lay = app.layout_in(app.size);
+        let g = app.picker_grid().unwrap();
+        assert!(g.inline && g.rows == 1 && g.cols >= 3);
+        // The strip is the box's last row inside its border; the draft row is still above it.
+        assert_eq!(g.outer.y, lay.composer.y + lay.composer.height - 2);
+        let text = ui::composer_text_area(&app, &lay);
+        assert!(text.height >= 1 && text.y + text.height <= g.outer.y);
+        // Right moves along the strip, typing filters it, Enter inserts and closes.
+        app.handle_key(key(KeyCode::Right));
+        assert_eq!(app.picker().unwrap().sel, 1);
+        for c in "heart".chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+        let first = app.picker().unwrap().items(app.recents())[0]
+            .as_str()
+            .to_string();
+        app.handle_key(key(KeyCode::Enter));
+        assert!(app.picker().is_none());
+        assert_eq!(app.active().draft(), first);
+    }
+
+    #[test]
+    fn the_message_box_grows_one_row_for_the_strip_and_shrinks_back() {
+        let mut s = Settings::default();
+        s.layout.emoji_picker = PickerPlace::Inline;
+        let mut app = online(App::with_settings(clock(), &s));
+        app.resize(80, 24);
+        app.handle_key(key(KeyCode::Enter));
+        let before = app.layout_in(app.size).composer.height;
+        app.handle_key(ctrl('e'));
+        assert_eq!(app.layout_in(app.size).composer.height, before + 1);
+        app.handle_key(key(KeyCode::Esc));
+        assert!(app.picker().is_none());
+        assert_eq!(app.layout_in(app.size).composer.height, before);
+    }
+
+    #[test]
+    fn box_and_inline_fall_back_to_the_middle_when_they_do_not_fit() {
+        for place in [PickerPlace::Box, PickerPlace::Inline] {
+            let mut app = placed_picker(place);
+            // 32 x 8: no room above the message box, no row to spare in it.
+            app.resize(32, 8);
+            let lay = app.layout_in(app.size);
+            let g = app.picker_grid().expect("the middle still fits");
+            let middle = ui::picker_geometry(lay.body).unwrap();
+            assert_eq!((g.outer, g.inline), (middle.outer, false), "{place:?}");
+            // Too small even for the middle: no geometry, keys and Esc still work.
+            app.resize(30, 7);
+            assert!(app.picker_grid().is_none(), "{place:?}");
+            app.handle_key(key(KeyCode::Right));
+            app.handle_key(key(KeyCode::Esc));
+            assert!(app.picker().is_none(), "{place:?}");
+        }
+    }
+
+    #[test]
+    fn the_reaction_picker_stays_in_the_middle_whatever_the_setting() {
+        for place in [PickerPlace::Box, PickerPlace::Inline] {
+            let mut app = placed_picker(place);
+            app.handle_key(key(KeyCode::Esc));
+            app.open_reaction_picker("alex", "m4");
+            assert_eq!(app.picker_place(), Some(PickerPlace::Popup), "{place:?}");
+            let lay = app.layout_in(app.size);
+            let middle = ui::picker_geometry(lay.body).unwrap();
+            assert_eq!(app.picker_grid().unwrap().outer, middle.outer, "{place:?}");
+        }
+    }
+
+    #[test]
+    fn a_new_place_applies_at_once_to_an_open_picker() {
+        let mut app = placed_picker(PickerPlace::Popup);
+        let middle = app.picker_grid().unwrap().outer;
+        let mut s = Settings::default();
+        s.layout.emoji_picker = PickerPlace::Box;
+        app.apply_settings(s);
+        assert!(app.picker().is_some(), "still open");
+        let lay = app.layout_in(app.size);
+        let g = app.picker_grid().unwrap();
+        assert_ne!(g.outer, middle);
+        assert_eq!(g.outer.y + g.outer.height, lay.composer.y);
+    }
+
+    #[test]
+    fn a_new_place_keeps_the_selected_emoji_on_screen() {
+        let mut app = placed_picker(PickerPlace::Popup);
+        for _ in 0..5 {
+            app.handle_key(key(KeyCode::Down));
+        }
+        assert_eq!(app.picker().unwrap().top, 0, "row 5 of 8 is in view");
+        // One row: the strip must scroll to the selected cell's row, not show row 0.
+        let mut s = Settings::default();
+        s.layout.emoji_picker = PickerPlace::Inline;
+        app.apply_settings(s);
+        let g = app.picker_grid().unwrap();
+        let p = app.picker().unwrap();
+        assert!(g.inline);
+        assert_eq!(p.top, p.sel / g.cols, "{} / {}", p.sel, g.cols);
+    }
+
+    #[test]
+    fn the_conversation_gives_the_box_its_rows_back_when_it_closes() {
+        let mut s = Settings::default();
+        s.layout.emoji_picker = PickerPlace::Box;
+        let mut app = online(App::with_settings(clock(), &s));
+        app.resize(80, 24);
+        app.handle_key(key(KeyCode::Enter));
+        let before = app.layout_in(app.size).convo;
+        app.handle_key(ctrl('e'));
+        let open = app.layout_in(app.size);
+        assert!(open.convo.height < before.height && open.picker_dock.height > 0);
+        app.handle_key(key(KeyCode::Esc));
+        let closed = app.layout_in(app.size);
+        assert_eq!((closed.convo, closed.picker_dock.height), (before, 0));
+    }
+
+    #[test]
+    fn the_shortcode_list_never_shows_under_an_open_picker() {
+        for place in [PickerPlace::Popup, PickerPlace::Box, PickerPlace::Inline] {
+            let mut app = placed_picker(place);
+            app.handle_key(key(KeyCode::Esc));
+            for c in ":sm".chars() {
+                app.handle_key(key(KeyCode::Char(c)));
+            }
+            let lay = app.layout_in(app.size);
+            assert!(ui::popup_geometry(&app, &lay).is_some(), "list open first");
+            app.handle_key(ctrl('e'));
+            let lay = app.layout_in(app.size);
+            assert!(app.picker().is_some());
+            assert!(ui::popup_geometry(&app, &lay).is_none(), "{place:?}");
+        }
     }
 
     // ---- links ----

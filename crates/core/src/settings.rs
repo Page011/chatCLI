@@ -24,7 +24,7 @@ const SECTIONS: [&str; 7] = [
     "teams",
     "whatsapp",
 ];
-const LAYOUT_KEYS: [&str; 7] = [
+const LAYOUT_KEYS: [&str; 8] = [
     "sidebar_width",
     "time_format",
     "date_order",
@@ -32,6 +32,7 @@ const LAYOUT_KEYS: [&str; 7] = [
     "show_previews",
     "avatars",
     "photos",
+    "emoji_picker",
 ];
 const NOTIFICATION_KEYS: [&str; 3] = ["enabled", "preview", "sound"];
 const MEDIA_KEYS: [&str; 5] = [
@@ -59,6 +60,11 @@ pub const AVATARS: [(&str, Avatars); 3] = [
     ("groups", Avatars::Groups),
     ("all", Avatars::All),
     ("off", Avatars::Off),
+];
+pub const PICKER_PLACES: [(&str, PickerPlace); 3] = [
+    ("popup", PickerPlace::Popup),
+    ("box", PickerPlace::Box),
+    ("inline", PickerPlace::Inline),
 ];
 pub const NOTIFY_PREVIEWS: [(&str, NotifyPreview); 3] = [
     ("off", NotifyPreview::Off),
@@ -152,6 +158,19 @@ pub enum Avatars {
     Off,
 }
 
+/// Where `Ctrl+E` opens the emoji picker for the message box. The reaction picker always opens
+/// in the middle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PickerPlace {
+    /// A box in the middle of the screen.
+    #[default]
+    Popup,
+    /// The same box, straight above the message box.
+    Box,
+    /// One row inside the message box, under the draft.
+    Inline,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct LayoutSettings {
     /// None = today's width.
@@ -163,6 +182,7 @@ pub struct LayoutSettings {
     pub avatars: Avatars,
     /// Profile photos over the avatars (Sixel/Kitty/iTerm2 terminals only).
     pub photos: bool,
+    pub emoji_picker: PickerPlace,
 }
 
 impl Default for LayoutSettings {
@@ -175,6 +195,7 @@ impl Default for LayoutSettings {
             show_previews: true,
             avatars: Avatars::default(),
             photos: true,
+            emoji_picker: PickerPlace::default(),
         }
     }
 }
@@ -656,6 +677,7 @@ fn layout_section(t: &Table, _text: &str) -> Result<LayoutSettings, Bad> {
         show_previews: flag(t, "show_previews", d.show_previews)?,
         avatars: choice(t, "avatars", d.avatars, &AVATARS)?,
         photos: flag(t, "photos", d.photos)?,
+        emoji_picker: choice(t, "emoji_picker", d.emoji_picker, &PICKER_PLACES)?,
     })
 }
 
@@ -920,6 +942,12 @@ impl Density {
 impl Avatars {
     pub fn to_setting(self) -> SettingValue {
         SettingValue::str(spelling(&AVATARS, self))
+    }
+}
+
+impl PickerPlace {
+    pub fn to_setting(self) -> SettingValue {
+        SettingValue::str(spelling(&PICKER_PLACES, self))
     }
 }
 
@@ -1208,6 +1236,7 @@ date_order = "ymd"
 density = "compact"
 show_previews = false
 photos = false
+emoji_picker = "inline"
 
 [notifications]
 enabled = false
@@ -1246,6 +1275,7 @@ download_images = false
         assert_eq!(s.layout.date_order, DateOrder::Ymd);
         assert_eq!(s.layout.density, Density::Compact);
         assert!(!s.layout.show_previews && !s.layout.photos);
+        assert_eq!(s.layout.emoji_picker, PickerPlace::Inline);
         assert!(!s.notifications.enabled && !s.notifications.sound);
         assert_eq!(s.notifications.preview, NotifyPreview::Sender);
         assert_eq!(s.media.cache_max_mb, 500);
@@ -1279,6 +1309,28 @@ download_images = false
             let r = load(&format!("[layout]\nsidebar_width = {bad}\n"));
             assert_eq!(errors(&r).len(), 1, "{bad} must be refused");
             assert_eq!(r.settings.layout, LayoutSettings::default());
+        }
+    }
+
+    #[test]
+    fn emoji_picker_takes_popup_box_or_inline() {
+        let place = |v: &str| {
+            load(&format!("[layout]\nemoji_picker = {v}\n"))
+                .settings
+                .layout
+                .emoji_picker
+        };
+        assert_eq!(place("\"popup\""), PickerPlace::Popup);
+        assert_eq!(place("\"box\""), PickerPlace::Box);
+        assert_eq!(place("\"inline\""), PickerPlace::Inline);
+        assert_eq!(LayoutSettings::default().emoji_picker, PickerPlace::Popup);
+        for bad in ["\"side\"", "true", "1"] {
+            let r = load(&format!("[layout]\nemoji_picker = {bad}\n"));
+            assert_eq!(errors(&r).len(), 1, "{bad} must be refused");
+            assert_eq!(r.settings.layout, LayoutSettings::default());
+        }
+        for (name, p) in PICKER_PLACES {
+            assert_eq!(p.to_setting(), SettingValue::str(name), "written as read");
         }
     }
 

@@ -3,7 +3,7 @@
 //! text or shape signal (status words, reverse video, double border on the focused pane).
 
 use chatcli_core::model::{ChatMessage, MessageState, Network, Status};
-use chatcli_core::settings::{Avatars, SidebarWidth};
+use chatcli_core::settings::{Avatars, PickerPlace, SidebarWidth};
 use qrcode::{Color as QrColor, EcLevel, QrCode};
 use ratatui::layout::{Alignment, Margin, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -15,13 +15,14 @@ use crate::app::msg::Target;
 use crate::app::{App, Focus, NetState, Prompt, Receipts, NARROW};
 use crate::chats;
 use crate::composer::{self, Composer};
-use crate::emoji::{PickerFor, CATEGORIES};
+use crate::emoji::{Picker, PickerFor, CATEGORIES};
 use crate::keymap::{Action, Context, Keymap};
 use crate::links::find_links;
 use crate::media_view::{
     human_size, kind_label, percent, strip_markers, Fetch, MediaKey, MediaState, View,
 };
 use crate::older::Older;
+use crate::overlay;
 use crate::settings_view::RowId;
 use crate::text::{clean_line, fit, sw, truncate, wrap, wrap_pieces, Clock, Fmt, Piece};
 use crate::theme::{Outline, Panel, Theme};
@@ -90,6 +91,9 @@ pub(crate) struct Layout {
     pub convo: Rect,
     pub messages: Rect,
     pub composer: Rect,
+    /// Rows between the conversation and the message box for the `box` emoji picker while it is
+    /// open; empty otherwise.
+    pub picker_dock: Rect,
 }
 
 /// Columns the draft can use in a message box `width` wide: the border and the `> ` prompt take 4.
@@ -114,7 +118,9 @@ pub(crate) fn sidebar_cols(width: u16, setting: Option<SidebarWidth>) -> u16 {
 
 /// Screen regions for a terminal of `area`. Under `NARROW` columns only one pane shows:
 /// the conversation when `show_convo`, else the chat list. A hidden pane is an empty rect,
-/// so mouse hit tests against it never match.
+/// so mouse hit tests against it never match. `dock` makes room for the `box` emoji picker
+/// between the conversation and the message box.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn layout(
     area: Rect,
     footer_h: u16,
@@ -123,6 +129,7 @@ pub(crate) fn layout(
     draft: &str,
     extra_rows: u16,
     sidebar_width: Option<SidebarWidth>,
+    dock: bool,
 ) -> Layout {
     let header = Rect::new(area.x, area.y, area.width, area.height.min(1));
     let footer_h = footer_h.min(area.height.saturating_sub(1));
@@ -159,8 +166,21 @@ pub(crate) fn layout(
     let composer_h = wanted
         .min(main.height.saturating_sub(4))
         .max(main.height.min(3));
-    let convo = Rect::new(main.x, main.y, main.width, main.height - composer_h);
-    let composer = Rect::new(main.x, main.y + convo.height, main.width, composer_h);
+    // The `box` picker takes rows from the conversation's bottom, at most `PICKER_BOX_ROWS` grid
+    // rows and always leaving it 4 rows, so the newest messages stay in view above it. No room
+    // for one grid row: no dock.
+    let above = main.height - composer_h;
+    let dock_h = if dock {
+        match above.saturating_sub(4 + PICKER_FIXED_ROWS) {
+            0 => 0,
+            rows => rows.min(PICKER_BOX_ROWS) + PICKER_FIXED_ROWS,
+        }
+    } else {
+        0
+    };
+    let convo = Rect::new(main.x, main.y, main.width, above - dock_h);
+    let picker_dock = Rect::new(main.x, main.y + convo.height, main.width, dock_h);
+    let composer = Rect::new(main.x, main.y + above, main.width, composer_h);
     let inner = sidebar.inner(Margin::new(1, 1));
     let (filter_row, list) = if filter_row && inner.height > 0 {
         (
@@ -180,6 +200,7 @@ pub(crate) fn layout(
         convo,
         messages: convo.inner(Margin::new(1, 1)),
         composer,
+        picker_dock,
     }
 }
 
@@ -1004,7 +1025,6 @@ fn draw_footer(f: &mut Frame, app: &App, area: Rect, screen_height: u16) {
 
 // ---- help overlay ----
 
-const HELP_TOO_SMALL: &str = "Terminal too small for help, press Esc to close";
 /// Smallest screen that fits the overlay: a header, a few rows of keys and a status row.
 const HELP_MIN_W: u16 = 34;
 const HELP_MIN_BODY_H: u16 = 8;
@@ -1085,14 +1105,10 @@ pub(crate) fn help_view_rows(app: &App, size: Rect) -> usize {
 fn draw_help(f: &mut Frame, app: &App, area: Rect, body: Rect) {
     let t = app.theme();
     let Some(top) = app.help_open() else { return };
-    f.render_widget(Clear, body);
     if !help_fits(area, body) {
-        centered_note(f, body, HELP_TOO_SMALL, t);
-        return;
+        return overlay::too_small(f, t, body, "help");
     }
-    let b = help_box(body);
-    f.render_widget(pane(app.theme(), Panel::Popup, "Help", true), b);
-    let inner = b.inner(Margin::new(1, 1));
+    let inner = overlay::page(f, t, body, help_box(body), "Help");
     let w = inner.width as usize;
     let user = app.keys().user_bindings();
     let header = if user == 0 {
@@ -2303,15 +2319,9 @@ fn draw_attach(f: &mut Frame, app: &App, lay: &Layout) {
     let Some((list, n)) = attach_list(lay, a.cands.len()) else {
         return;
     };
-    f.render_widget(Clear, list);
-    f.render_widget(pane(app.theme(), Panel::Popup, "Files", false), list);
-    let rows = list.inner(Margin::new(1, 1));
+    let rows = overlay::anchored(f, t, list, lay.messages, "Files", false);
     if a.cands.is_empty() {
-        f.render_widget(
-            Paragraph::new(Span::styled("No match: Enter says FILE NOT FOUND", t.hint)),
-            rows,
-        );
-        return;
+        return overlay::note(f, t, rows, "No match: Enter says FILE NOT FOUND");
     }
     // Keep the highlighted entry in the window.
     let top = attach_top(a.sel, n);
@@ -2321,24 +2331,31 @@ fn draw_attach(f: &mut Frame, app: &App, lay: &Layout) {
             &format!("{}{mark}", clean_line(&c.name)),
             rows.width as usize,
         );
-        let style = if top + k == a.sel {
-            t.selected
-        } else if c.dir {
-            bold()
-        } else {
-            Style::new()
-        };
-        f.render_widget(
-            Paragraph::new(Span::styled(text, style)),
+        let style = if c.dir { bold() } else { Style::new() };
+        overlay::row(
+            f,
+            t,
             Rect::new(rows.x, rows.y + k as u16, rows.width, 1),
+            Line::from(Span::styled(text, style)),
+            top + k == a.sel,
         );
     }
 }
 
-/// The rows of the message box that hold the draft: inside the border, under the reply or edit
-/// line and the file chip. Shared by drawing and the mouse.
-pub(crate) fn composer_text_area(app: &App, lay: &Layout) -> Rect {
+/// Inside the message box's border, less the inline emoji strip's row while it is open.
+fn composer_inner(app: &App, lay: &Layout) -> Rect {
     let inner = lay.composer.inner(Margin::new(1, 1));
+    let strip = picker_geom(app, lay).is_some_and(|g| g.inline);
+    Rect {
+        height: inner.height - u16::from(strip),
+        ..inner
+    }
+}
+
+/// The rows of the message box that hold the draft: inside the border, under the reply or edit
+/// line and the file chip, above the inline emoji strip. Shared by drawing and the mouse.
+pub(crate) fn composer_text_area(app: &App, lay: &Layout) -> Rect {
+    let inner = composer_inner(app, lay);
     let extras = composer_extras(app, app.active(), inner.width as usize).len();
     let take = (extras as u16).min(inner.height.saturating_sub(1));
     Rect::new(inner.x, inner.y + take, inner.width, inner.height - take)
@@ -2366,7 +2383,7 @@ fn draw_composer(f: &mut Frame, app: &App, lay: &Layout) {
         );
     }
     f.render_widget(block, lay.composer);
-    let inner = lay.composer.inner(Margin::new(1, 1));
+    let inner = composer_inner(app, lay);
     if inner.height == 0 {
         return;
     }
@@ -2488,9 +2505,8 @@ fn draw_popup(f: &mut Frame, app: &App, lay: &Layout) {
     let (Some(p), Some(g)) = (app.popup(), popup_geometry(app, lay)) else {
         return;
     };
-    let (r, inner, start, n) = (g.outer, g.rows, g.start, g.n);
-    f.render_widget(Clear, r);
-    f.render_widget(pane(app.theme(), Panel::Popup, p.title, false), r);
+    let (inner, start, n) = (g.rows, g.start, g.n);
+    overlay::anchored(f, t, g.outer, lay.messages, p.title, false);
     for (k, item) in p.items.iter().skip(start).take(n).enumerate() {
         let selected = start + k == p.selected;
         let detail = if selected { Style::new() } else { t.dim };
@@ -2506,10 +2522,7 @@ fn draw_popup(f: &mut Frame, app: &App, lay: &Layout) {
             ),
         ]);
         let row = Rect::new(inner.x, inner.y + k as u16, inner.width, 1);
-        f.render_widget(
-            Paragraph::new(line).style(if selected { t.selected } else { Style::new() }),
-            row,
-        );
+        overlay::row(f, t, row, line, selected);
     }
 }
 
@@ -2520,7 +2533,16 @@ fn draw_popup(f: &mut Frame, app: &App, lay: &Layout) {
 pub(crate) const PICKER_CELL: usize = 3;
 const PICKER_COLS: usize = 10;
 const PICKER_MAX_ROWS: usize = 8;
-const PICKER_TOO_SMALL: &str = "Terminal too small for the emoji picker, press Esc to close";
+
+/// Rows of the boxed picker besides the grid: two borders, the category row, the search row and
+/// the status row.
+const PICKER_FIXED_ROWS: u16 = 5;
+/// Grid rows of the `box` picker at most: it is as wide as the message box, so 5 rows show as
+/// many emoji as the middle's 8, and the conversation keeps more of its rows.
+const PICKER_BOX_ROWS: u16 = 5;
+/// Columns the inline strip's search takes at most, and at least.
+const STRIP_SEARCH_MAX: u16 = 16;
+const STRIP_SEARCH_MIN: u16 = 8;
 
 /// Where the parts of the picker are. Shared by drawing, the keys (scroll maths) and the mouse,
 /// so what is drawn is what is clicked.
@@ -2532,28 +2554,17 @@ pub(crate) struct PickerGeom {
     pub status: Rect,
     pub cols: usize,
     pub rows: usize,
+    /// The one-row strip in the message box: no border, no category row, no status row.
+    pub inline: bool,
+    /// What clearing around the box may reach: one more column each side, inside this.
+    pub clip: Rect,
 }
 
-/// The picker is centred in the body: a border, a category row, a search row, up to
-/// `PICKER_MAX_ROWS` rows of up to `PICKER_COLS` cells, and a status row. None when not even
-/// 3 columns and 1 row fit.
-pub(crate) fn picker_geometry(body: Rect) -> Option<PickerGeom> {
-    const FIXED_ROWS: u16 = 5;
-    if (body.width as usize) < 2 + 3 * PICKER_CELL || body.height < FIXED_ROWS + 1 {
-        return None;
-    }
-    let w = body.width.min((2 + PICKER_COLS * PICKER_CELL) as u16);
-    let cols = (w as usize - 2) / PICKER_CELL;
-    let rows = ((body.height - FIXED_ROWS) as usize).min(PICKER_MAX_ROWS);
-    let h = rows as u16 + FIXED_ROWS;
-    let outer = Rect::new(
-        body.x + (body.width - w) / 2,
-        body.y + (body.height - h) / 2,
-        w,
-        h,
-    );
+/// A bordered picker in `outer`: a category row, a search row, `rows` rows of `cols` cells and a
+/// status row.
+fn boxed_picker(outer: Rect, cols: usize, rows: usize, clip: Rect) -> PickerGeom {
     let inner = outer.inner(Margin::new(1, 1));
-    Some(PickerGeom {
+    PickerGeom {
         outer,
         cats: Rect::new(inner.x, inner.y, inner.width, 1),
         search: Rect::new(inner.x, inner.y + 1, inner.width, 1),
@@ -2561,7 +2572,83 @@ pub(crate) fn picker_geometry(body: Rect) -> Option<PickerGeom> {
         status: Rect::new(inner.x, inner.y + 2 + rows as u16, inner.width, 1),
         cols,
         rows,
+        inline: false,
+        clip,
+    }
+}
+
+/// Width and grid size of a bordered picker given `width` x `height` of room: up to `max_cols`
+/// cells across and `PICKER_MAX_ROWS` rows. None when not even 3 columns and 1 row fit.
+fn boxed_size(width: u16, height: u16, max_cols: usize) -> Option<(u16, usize, usize)> {
+    if (width as usize) < 2 + 3 * PICKER_CELL || height < PICKER_FIXED_ROWS + 1 {
+        return None;
+    }
+    let w = (width as usize).min(max_cols.saturating_mul(PICKER_CELL).saturating_add(2)) as u16;
+    let cols = (w as usize - 2) / PICKER_CELL;
+    let rows = ((height - PICKER_FIXED_ROWS) as usize).min(PICKER_MAX_ROWS);
+    Some((w, cols, rows))
+}
+
+/// `popup`: the picker centred in the body.
+pub(crate) fn picker_geometry(body: Rect) -> Option<PickerGeom> {
+    let (w, cols, rows) = boxed_size(body.width, body.height, PICKER_COLS)?;
+    let h = rows as u16 + PICKER_FIXED_ROWS;
+    let outer = Rect::new(
+        body.x + (body.width - w) / 2,
+        body.y + (body.height - h) / 2,
+        w,
+        h,
+    );
+    Some(boxed_picker(outer, cols, rows, body))
+}
+
+/// `box`: the picker in the dock the layout made between the conversation and the message box,
+/// as wide as the message box, with as many cells across as fit. It covers neither, and the
+/// newest messages stay in view above it.
+fn box_picker_geometry(lay: &Layout) -> Option<PickerGeom> {
+    let dock = lay.picker_dock;
+    let (w, cols, rows) = boxed_size(dock.width, dock.height, usize::MAX)?;
+    let outer = Rect::new(dock.x, dock.y, w, rows as u16 + PICKER_FIXED_ROWS);
+    Some(boxed_picker(outer, cols, rows, dock))
+}
+
+/// `inline`: one row at the bottom of the message box, under the draft. The search on the left,
+/// one column for `<`, the emoji, and the last column for `>`. The layout gives the box this
+/// row while the strip is open. None when the box has no row to spare or fewer than 3 emoji fit.
+fn inline_picker_geometry(lay: &Layout) -> Option<PickerGeom> {
+    let inner = lay.composer.inner(Margin::new(1, 1));
+    if inner.height < 2 {
+        return None;
+    }
+    let strip = Rect::new(inner.x, inner.y + inner.height - 1, inner.width, 1);
+    let search_w = (strip.width / 3).clamp(STRIP_SEARCH_MIN, STRIP_SEARCH_MAX);
+    let grid_w = strip.width.saturating_sub(search_w + 2);
+    let cols = grid_w as usize / PICKER_CELL;
+    if cols < 3 {
+        return None;
+    }
+    Some(PickerGeom {
+        outer: strip,
+        cats: Rect::default(),
+        search: Rect::new(strip.x, strip.y, search_w, 1),
+        grid: Rect::new(strip.x + search_w + 1, strip.y, grid_w, 1),
+        status: Rect::default(),
+        cols,
+        rows: 1,
+        inline: true,
+        clip: strip,
     })
+}
+
+/// The open picker's geometry: its place (`App::picker_place`), or the middle when that place
+/// does not fit. None when no picker is open or not even the middle fits.
+pub(crate) fn picker_geom(app: &App, lay: &Layout) -> Option<PickerGeom> {
+    let placed = match app.picker_place()? {
+        PickerPlace::Popup => None,
+        PickerPlace::Box => box_picker_geometry(lay),
+        PickerPlace::Inline => inline_picker_geometry(lay),
+    };
+    placed.or_else(|| picker_geometry(lay.body))
 }
 
 /// The category row: every name when they fit, else the current one between arrows.
@@ -2590,29 +2677,23 @@ fn category_spans(cat: usize, searching: bool, width: usize, t: &Theme) -> Vec<S
     )]
 }
 
-fn draw_picker(f: &mut Frame, app: &App, body: Rect) {
+fn draw_picker(f: &mut Frame, app: &App, lay: &Layout) {
     let t = app.theme();
     let Some(p) = app.picker() else { return };
-    let Some(g) = picker_geometry(body) else {
-        f.render_widget(Clear, body);
-        centered_note(f, body, PICKER_TOO_SMALL, t);
-        return;
+    let Some(g) = picker_geom(app, lay) else {
+        return overlay::too_small(f, t, lay.body, "the emoji picker");
     };
     let items = p.items(app.recents());
-    // Only the picker's own box is cleared, one column wider on each side so no half of a wide
-    // character underneath shows at its edges: the conversation stays visible around it, and a
-    // reaction still shows which message it goes to.
-    let left = g.outer.x.saturating_sub(1).max(body.x);
-    let right = (g.outer.x + g.outer.width + 1).min(body.x + body.width);
-    f.render_widget(
-        Clear,
-        Rect::new(left, g.outer.y, right - left, g.outer.height),
-    );
+    if g.inline {
+        // Part of the message box, not a popup over it: only its own row is cleared.
+        f.render_widget(Clear, g.outer);
+        return draw_picker_strip(f, app, p, &g, &items);
+    }
     let title = match p.purpose {
         PickerFor::Compose => "Emoji",
         PickerFor::React { .. } => "React",
     };
-    f.render_widget(pane(app.theme(), Panel::Popup, title, true), g.outer);
+    overlay::anchored(f, t, g.outer, g.clip, title, true);
     f.render_widget(
         Paragraph::new(Line::from(category_spans(
             p.cat,
@@ -2622,24 +2703,44 @@ fn draw_picker(f: &mut Frame, app: &App, body: Rect) {
         ))),
         g.cats,
     );
-    let (shown, col) = p.query.view(g.search.width.saturating_sub(1) as usize);
-    let query_line = if p.query.is_empty() {
-        Line::from(vec![
-            Span::styled("/", bold()),
-            Span::styled("type to search", t.hint),
-        ])
-    } else {
-        Line::from(vec![Span::styled("/", bold()), Span::raw(shown)])
-    };
-    f.render_widget(Paragraph::new(query_line), g.search);
+    overlay::query(f, t, g.search, "/", &p.query, "type to search");
     if items.is_empty() {
-        let note = if p.query.text().trim().is_empty() {
-            "No recent emoji yet"
-        } else {
-            "No emoji match"
-        };
-        centered_note(f, g.grid, note, t);
+        overlay::note(f, t, g.grid, empty_grid_note(p));
     }
+    draw_picker_cells(f, p, &g, &items, t);
+    let status = items.get(p.sel).map_or_else(
+        || "Esc close".to_string(),
+        |e| match e.shortcode() {
+            Some(sc) => format!("{} :{}:", e.name(), sc),
+            None => e.name().to_string(),
+        },
+    );
+    f.render_widget(
+        Paragraph::new(Span::styled(
+            truncate(&status, g.status.width as usize),
+            t.hint,
+        )),
+        g.status,
+    );
+}
+
+/// What an empty grid says.
+fn empty_grid_note(p: &Picker) -> &'static str {
+    if p.query.text().trim().is_empty() {
+        "No recent emoji yet"
+    } else {
+        "No emoji match"
+    }
+}
+
+/// The visible cells of the grid, the selected one highlighted.
+fn draw_picker_cells(
+    f: &mut Frame,
+    p: &Picker,
+    g: &PickerGeom,
+    items: &[&'static emojis::Emoji],
+    t: &Theme,
+) {
     let buf = f.buffer_mut();
     for (cell, e) in items
         .iter()
@@ -2660,20 +2761,52 @@ fn draw_picker(f: &mut Frame, app: &App, body: Rect) {
         buf.set_style(Rect::new(x, y, 2, 1), style);
         buf.set_stringn(x, y, e.as_str(), 2, style);
     }
-    let status = items.get(p.sel).map_or_else(
-        || "Esc close".to_string(),
-        |e| match e.shortcode() {
-            Some(sc) => format!("{} :{}:", e.name(), sc),
-            None => e.name().to_string(),
-        },
-    );
+}
+
+/// The inline strip: `/` and the search (the category's name while it is empty, as there is no
+/// category row), then one row of emoji, with `<` / `>` when more lie either side. The search is
+/// dim so it never reads as part of the draft above it. No border, no status row: the footer
+/// has the keys.
+fn draw_picker_strip(
+    f: &mut Frame,
+    app: &App,
+    p: &Picker,
+    g: &PickerGeom,
+    items: &[&'static emojis::Emoji],
+) {
+    let t = app.theme();
+    let (shown, col) = p.query.view(g.search.width.saturating_sub(1) as usize);
+    let text = if p.query.is_empty() {
+        truncate(CATEGORIES[p.cat], g.search.width.saturating_sub(1) as usize)
+    } else {
+        shown
+    };
     f.render_widget(
-        Paragraph::new(Span::styled(
-            truncate(&status, g.status.width as usize),
-            t.hint,
-        )),
-        g.status,
+        Paragraph::new(Line::from(vec![
+            Span::styled("/", t.hint),
+            Span::styled(text, t.hint),
+        ])),
+        g.search,
     );
+    let total_rows = items.len().div_ceil(g.cols.max(1));
+    if p.top > 0 {
+        f.buffer_mut()
+            .set_string(g.grid.x - 1, g.grid.y, "<", t.hint);
+    }
+    if p.top + 1 < total_rows {
+        let last = g.outer.x + g.outer.width - 1;
+        f.buffer_mut().set_string(last, g.grid.y, ">", t.hint);
+    }
+    if items.is_empty() {
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                truncate(empty_grid_note(p), g.grid.width as usize),
+                t.hint,
+            )),
+            g.grid,
+        );
+    }
+    draw_picker_cells(f, p, g, items, t);
     f.set_cursor_position((g.search.x + 1 + col as u16, g.search.y));
 }
 
@@ -2819,12 +2952,8 @@ fn draw_panel(f: &mut Frame, app: &App, area: Rect) {
         w,
         h,
     );
-    f.render_widget(
-        Paragraph::new(lines)
-            .alignment(Alignment::Center)
-            .block(pane(app.theme(), Panel::Popup, name, true)),
-        r,
-    );
+    let inner = overlay::anchored(f, t, r, area, name, true);
+    f.render_widget(Paragraph::new(lines).alignment(Alignment::Center), inner);
 }
 
 // ---- entry point ----
@@ -2859,7 +2988,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         draw_composer(f, app, &lay);
         draw_popup(f, app, &lay);
         draw_attach(f, app, &lay);
-        draw_picker(f, app, lay.body);
+        draw_picker(f, app, &lay);
     }
     draw_search(f, app, lay.body);
     draw_palette(f, app, lay.body);
@@ -2893,7 +3022,6 @@ fn draw_tour_bar(f: &mut Frame, app: &App, area: Rect) {
 
 // ---- command bar ----
 
-const PALETTE_TOO_SMALL: &str = "Terminal too small for commands, press Esc to close";
 const PALETTE_MAX_W: u16 = 80;
 const PALETTE_MIN_W: u16 = 30;
 /// Rows the box needs besides the list: border (2) and the query row.
@@ -2930,31 +3058,22 @@ pub(crate) fn palette_geometry(body: Rect) -> Option<PaletteGeom> {
 fn draw_palette(f: &mut Frame, app: &App, body: Rect) {
     let Some(p) = app.palette() else { return };
     let t = app.theme();
-    f.render_widget(Clear, body);
     let Some(g) = palette_geometry(body) else {
-        centered_note(f, body, PALETTE_TOO_SMALL, t);
-        return;
+        return overlay::too_small(f, t, body, "commands");
     };
-    f.render_widget(pane(app.theme(), Panel::Popup, "Commands", true), g.outer);
-    let (shown, col) = p.query.view(g.query.width.saturating_sub(1) as usize);
+    overlay::page(f, t, body, g.outer, "Commands");
     let prompt = prompt_for(app, Action::CommandBar, ":");
-    let query_line = if p.query.is_empty() {
-        Line::from(vec![
-            Span::styled(prompt, bold()),
-            Span::styled("type a command or chat name", t.dim),
-        ])
-    } else {
-        Line::from(vec![Span::styled(prompt, bold()), Span::raw(shown)])
-    };
-    f.render_widget(Paragraph::new(query_line), g.query);
-    f.set_cursor_position((g.query.x + 1 + col as u16, g.query.y));
+    overlay::query(
+        f,
+        t,
+        g.query,
+        &prompt,
+        &p.query,
+        "type a command or chat name",
+    );
     let items = app.palette_items();
     if items.is_empty() {
-        f.render_widget(
-            Paragraph::new(Span::styled("No command or chat matches", t.hint)),
-            Rect::new(g.list.x, g.list.y, g.list.width, g.list.height.min(1)),
-        );
-        return;
+        return overlay::note(f, t, g.list, "No command or chat matches");
     }
     let w = g.list.width as usize;
     let ns = app.active();
@@ -2997,21 +3116,12 @@ fn draw_palette(f: &mut Frame, app: &App, body: Rect) {
                 vec![Span::raw(clean_line(title))]
             }
         };
-        let selected = i == p.sel;
-        f.render_widget(
-            Paragraph::new(clip_spans(line, w)).style(if selected {
-                t.selected
-            } else {
-                Style::new()
-            }),
-            area,
-        );
+        overlay::row(f, t, area, clip_spans(line, w), i == p.sel);
     }
 }
 
 // ---- search ----
 
-const SEARCH_TOO_SMALL: &str = "Terminal too small for search, press Esc to close";
 const SEARCH_MAX_W: u16 = 100;
 const SEARCH_MIN_W: u16 = 30;
 /// Rows the box needs besides the hits: border (2), the query row and the status row.
@@ -3055,23 +3165,11 @@ fn snippet_text(s: &str) -> String {
 fn draw_search(f: &mut Frame, app: &App, body: Rect) {
     let Some(s) = app.search() else { return };
     let t = app.theme();
-    f.render_widget(Clear, body);
     let Some(g) = search_geometry(body) else {
-        centered_note(f, body, SEARCH_TOO_SMALL, t);
-        return;
+        return overlay::too_small(f, t, body, "search");
     };
-    f.render_widget(pane(app.theme(), Panel::Popup, "Search", true), g.outer);
-    let (shown, col) = s.query.view(g.query.width.saturating_sub(1) as usize);
-    let query_line = if s.query.is_empty() {
-        Line::from(vec![
-            Span::styled("/", bold()),
-            Span::styled("type to search every chat", t.hint),
-        ])
-    } else {
-        Line::from(vec![Span::styled("/", bold()), Span::raw(shown)])
-    };
-    f.render_widget(Paragraph::new(query_line), g.query);
-    f.set_cursor_position((g.query.x + 1 + col as u16, g.query.y));
+    overlay::page(f, t, body, g.outer, "Search");
+    overlay::query(f, t, g.query, "/", &s.query, "type to search every chat");
     let look = app.look();
     let w = g.list.width as usize;
     // Narrow: the network is one letter and the time goes, so the matched text keeps the room.
@@ -3118,19 +3216,16 @@ fn draw_search(f: &mut Frame, app: &App, body: Rect) {
             )
         }));
         let row = Rect::new(g.list.x, g.list.y + k as u16, g.list.width, 1);
-        f.render_widget(
-            Paragraph::new(clip_spans(spans, w)).style(if selected {
-                t.selected
-            } else {
-                Style::new()
-            }),
-            row,
-        );
+        overlay::row(f, t, row, clip_spans(spans, w), selected);
     }
-    let (status, style) = match (&s.error, s.query.text().trim().is_empty(), s.hits.len()) {
+    let typed = !s.query.text().trim().is_empty();
+    if typed && s.error.is_none() && s.hits.is_empty() {
+        overlay::note(f, t, g.list, "No messages match");
+    }
+    let (status, style) = match (&s.error, !typed, s.hits.len()) {
         (Some(e), _, _) => (e.clone(), t.error),
         (None, true, _) => ("Type to search".to_string(), t.hint),
-        (None, false, 0) => ("No messages match".to_string(), t.hint),
+        (None, false, 0) => ("0 hits".to_string(), t.hint),
         (None, false, n) if n as u32 >= crate::search::LIMIT => (
             format!("{} of {n}+ hits: add words to narrow it", s.sel + 1),
             t.hint,

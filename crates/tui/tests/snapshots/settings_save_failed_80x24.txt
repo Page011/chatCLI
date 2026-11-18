@@ -7,7 +7,7 @@
 │Teams           │║Show previews       on                                      ║
 │WhatsApp        │║Avatars             groups                                  ║
 │Keys            │║Photos              on                                      ║
-│About           │║                                                            ║
+│About           │║Emoji picker        popup                                   ║
 │                │║                                                            ║
 │                │║                                                            ║
 │                │║                                                            ║
