@@ -701,20 +701,6 @@ dependencies = [
 
 [[package]]
 name = "compact_str"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9dfdd1c2274d9aa354115b09dc9a901d6c5576818cdf70d14cae2bdb47df00ab"
-dependencies = [
- "castaway",
- "cfg-if",
- "itoa",
- "rustversion",
- "ryu",
- "static_assertions",
-]
-
-[[package]]
-name = "compact_str"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "79fcda08c33bb58b97008b2cdada6622500e949e060f5913361763121abd2416"
@@ -2030,6 +2016,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3278,8 +3273,7 @@ dependencies = [
 [[package]]
 name = "ratatui"
 version = "0.30.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3274ba0a2c5e1bcad2a2005d20f4dc59dad26b2eb0940fb094500dba4099d57d"
+source = "git+https://github.com/ratatui/ratatui?rev=67019321ab6aa49896708e203d6723dc592c0cdd#67019321ab6aa49896708e203d6723dc592c0cdd"
 dependencies = [
  "instability",
  "ratatui-core",
@@ -3294,14 +3288,13 @@ dependencies = [
 [[package]]
 name = "ratatui-core"
 version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbb175c433c8e28a809d1f5773a2ae96e68c0ce40db865cbab1020bf33ae479c"
+source = "git+https://github.com/ratatui/ratatui?rev=67019321ab6aa49896708e203d6723dc592c0cdd#67019321ab6aa49896708e203d6723dc592c0cdd"
 dependencies = [
  "bitflags 2.13.2",
- "compact_str 0.9.1",
+ "compact_str",
  "critical-section",
  "hashbrown 0.17.1",
- "itertools",
+ "itertools 0.15.0",
  "kasuari",
  "lru",
  "palette",
@@ -3316,8 +3309,7 @@ dependencies = [
 [[package]]
 name = "ratatui-crossterm"
 version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "567584a3b0e6a8203c23de40b4861497266725eb5363dbfd18a1edd603cca9f0"
+source = "git+https://github.com/ratatui/ratatui?rev=67019321ab6aa49896708e203d6723dc592c0cdd#67019321ab6aa49896708e203d6723dc592c0cdd"
 dependencies = [
  "cfg-if",
  "crossterm",
@@ -3346,8 +3338,7 @@ dependencies = [
 [[package]]
 name = "ratatui-macros"
 version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed7dc68daa7498a43e4d68e0eb078427e10c38fbcfbb1e42d955f1fa2140d814"
+source = "git+https://github.com/ratatui/ratatui?rev=67019321ab6aa49896708e203d6723dc592c0cdd#67019321ab6aa49896708e203d6723dc592c0cdd"
 dependencies = [
  "ratatui-core",
  "ratatui-widgets",
@@ -3356,8 +3347,7 @@ dependencies = [
 [[package]]
 name = "ratatui-termina"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0bf912d9e66f057a759d92e386a280ea886b352ab757d6ac4d653c7ed2c43c2"
+source = "git+https://github.com/ratatui/ratatui?rev=67019321ab6aa49896708e203d6723dc592c0cdd#67019321ab6aa49896708e203d6723dc592c0cdd"
 dependencies = [
  "instability",
  "ratatui-core",
@@ -3367,8 +3357,7 @@ dependencies = [
 [[package]]
 name = "ratatui-termwiz"
 version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "faf03e0380b7744054d6cb74224fe3adf062a029754933f575ca1e3b4c2ce977"
+source = "git+https://github.com/ratatui/ratatui?rev=67019321ab6aa49896708e203d6723dc592c0cdd#67019321ab6aa49896708e203d6723dc592c0cdd"
 dependencies = [
  "ratatui-core",
  "termwiz",
@@ -3377,14 +3366,13 @@ dependencies = [
 [[package]]
 name = "ratatui-widgets"
 version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66e3d19bcc9130ca376277d93b60767ff121ace3be06f5f95f81dd68956407d1"
+source = "git+https://github.com/ratatui/ratatui?rev=67019321ab6aa49896708e203d6723dc592c0cdd#67019321ab6aa49896708e203d6723dc592c0cdd"
 dependencies = [
  "bitflags 2.13.2",
  "hashbrown 0.17.1",
  "indoc",
  "instability",
- "itertools",
+ "itertools 0.15.0",
  "line-clipping",
  "ratatui-core",
  "serde",
@@ -4622,7 +4610,7 @@ version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "16b380a1238663e5f8a691f9039c73e1cdae598a30e9855f541d29b08b53e9a5"
 dependencies = [
- "itertools",
+ "itertools 0.14.0",
  "unicode-segmentation",
  "unicode-width",
 ]
@@ -4773,7 +4761,7 @@ dependencies = [
  "buffa-build",
  "bytes",
  "chrono",
- "compact_str 0.10.0",
+ "compact_str",
  "ctr",
  "event-listener",
  "futures",
@@ -4833,7 +4821,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e56452f93ac1e6167a6ebafec23971fe1ca9332b27cc887520f4a6753956fde"
 dependencies = [
  "bytes",
- "compact_str 0.10.0",
+ "compact_str",
  "itoa",
  "serde",
  "serde_json",

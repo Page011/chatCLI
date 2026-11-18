@@ -20,7 +20,7 @@ A terminal chat client for WhatsApp and Microsoft Teams chats, so the heavy desk
 | `chatcli` (bin) | `crates/app` | `main.rs` wiring (settings, stores, media cache, contexts), `cli.rs` subcommands, `doctor.rs`, `toast.rs` (the one Windows toast implementation) | all |
 | relay Worker | `relay/` | Cloudflare Worker + Durable Object (TypeScript, Bun) | nothing |
 
-Dependency notes: crate versions used by more than one crate (`image` among them) live in the root `[workspace.dependencies]`. `rusqlite` is pinned to 0.39 because whatsapp-rust's SQLite storage links `libsqlite3-sys` 0.37 and only one crate may link sqlite. whatsapp-rust runs with `default-features = false` because its default `simd` feature needs nightly Rust.
+Dependency notes: crate versions used by more than one crate (`image` among them) live in the root `[workspace.dependencies]`. `rusqlite` is pinned to 0.39 because whatsapp-rust's SQLite storage links `libsqlite3-sys` 0.37 and only one crate may link sqlite. whatsapp-rust runs with `default-features = false` because its default `simd` feature needs nightly Rust. Every ratatui crate comes from one git rev (`[patch.crates-io]` in the root `Cargo.toml`, with its hash in `nix/package.nix` `outputHashes`) until a release carries ratatui#2721 and ratatui#2686: ratatui-core 0.1.2 repaints the column after an emoji ending in VS16 without a cursor move, so on a terminal that draws it two columns wide the rest of the row shifts right and leaves stale characters (ratatui#2651). `crates/tui/tests/wide_emoji.rs` replays the backend's output and fails if the pin is dropped too early.
 
 ## Data on disk
 
