@@ -113,9 +113,24 @@ impl Screen {
     }
 }
 
+/// Makes crossterm write ANSI into the buffer on every platform. On Windows it decides once per
+/// process (`ansi_support::supports_ansi`): escape codes if it can switch the console to VT mode,
+/// which fails when output is not a console (CI), or else if `TERM` is set and not `dumb`.
+/// Otherwise it moves the cursor through the console API and nothing reaches the buffer. This
+/// file is its own test binary, so setting `TERM` before the first crossterm call touches only it.
+fn force_ansi() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        if cfg!(windows) {
+            std::env::set_var("TERM", "xterm-256color");
+        }
+    });
+}
+
 /// Draws each frame (a line per row, optionally reversed like a selected message) and checks the
 /// replayed screen against what ratatui drew after every one.
 fn check(frames: &[(&[&str], bool)]) {
+    force_ansi();
     let area = Rect::new(0, 0, W, H);
     let out = Out::default();
     let mut term = Terminal::with_options(
