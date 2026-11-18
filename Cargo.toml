@@ -38,3 +38,17 @@ whatsapp-rust = { version = "0.7", default-features = false, features = ["sqlite
 [profile.release]
 lto = "thin"
 strip = true
+
+# Ratatui from git until the next release (still 0.30.2 / core 0.1.2 on crates.io). This rev is
+# the merge of ratatui#2686, which with ratatui#2721 before it stops an emoji ending in VS16
+# (U+FE0F, e.g. ♻️ ❤️) from shifting the rest of its row one column right and leaving stale
+# characters behind (ratatui#2651). Every ratatui crate comes from the same rev so they match.
+# Drop this block once a release includes both PRs.
+[patch.crates-io]
+ratatui = { git = "https://github.com/ratatui/ratatui", rev = "67019321ab6aa49896708e203d6723dc592c0cdd" }
+ratatui-core = { git = "https://github.com/ratatui/ratatui", rev = "67019321ab6aa49896708e203d6723dc592c0cdd" }
+ratatui-crossterm = { git = "https://github.com/ratatui/ratatui", rev = "67019321ab6aa49896708e203d6723dc592c0cdd" }
+ratatui-macros = { git = "https://github.com/ratatui/ratatui", rev = "67019321ab6aa49896708e203d6723dc592c0cdd" }
+ratatui-termina = { git = "https://github.com/ratatui/ratatui", rev = "67019321ab6aa49896708e203d6723dc592c0cdd" }
+ratatui-termwiz = { git = "https://github.com/ratatui/ratatui", rev = "67019321ab6aa49896708e203d6723dc592c0cdd" }
+ratatui-widgets = { git = "https://github.com/ratatui/ratatui", rev = "67019321ab6aa49896708e203d6723dc592c0cdd" }
