@@ -556,6 +556,7 @@ dependencies = [
  "chatcli-tui",
  "chatcli-whatsapp",
  "chrono",
+ "dbus",
  "tokio",
  "windows",
 ]

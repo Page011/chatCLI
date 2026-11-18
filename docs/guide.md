@@ -404,10 +404,10 @@ emoji_picker = "popup"      # where Ctrl+E opens: "popup" (middle of the screen)
                             # message box) or "inline" (one row inside the message box)
 
 [notifications]
-enabled = true              # Windows toast for a new message
+enabled = true              # desktop notification for a new message (Windows and Linux)
 preview = "full"            # "full": "Name: text" (cut to 120 characters); "sender": "Name: new message";
                             # "off": chat title + "New message"
-sound = true
+sound = true                # Linux: asks the daemon for the "message-new-instant" sound
 
 [media]
 cache_max_mb = 200          # 1-100000. Oldest files go first when the cache is over this
@@ -496,12 +496,13 @@ Nothing downloads until you press `o` or `v` on a message, except WhatsApp pictu
 
 ### Notifications
 
-A Windows toast appears for a new incoming message when chatcli's window is not focused or the chat is not the open one. Never for your own messages, the open chat while the window is focused, muted chats, loaded history or edits.
+A desktop notification appears for a new incoming message when chatcli's window is not focused or the chat is not the open one. Never for your own messages, the open chat while the window is focused, muted chats, loaded history or edits. On Windows it is a toast. On Linux it goes over the session D-Bus to whatever notification daemon runs (dunst, mako, swaync, GNOME Shell, KDE Plasma); with no daemon, nothing shows and the log says why once. macOS has no notifications yet.
 
 - The toast shows the sender and the message text by default. `preview` decides how much text leaves chatcli (see the settings above): `sender` shows `Name: new message`, `off` shows the chat title and `New message`. The text can show on a locked screen: set `preview = "off"` or `"sender"` to keep message text off it.
 - At most one toast per chat per 10 seconds; the rest fold into `N new messages`.
 - chatcli learns about focus from the terminal. If your terminal never reports it, chatcli treats the window as unfocused and toasts for the open chat too.
-- Windows' Focus Assist or Do Not Disturb silences toasts by design.
+- Windows' Focus Assist or Do Not Disturb silences toasts by design, as does a Linux daemon's do-not-disturb mode.
+- Sound on Linux: chatcli asks the daemon for the sound theme's `message-new-instant` sound (`sound = false` asks for silence instead) and plays nothing itself. GNOME and KDE play it. dunst and mako play no sounds on their own: add a rule that runs a player, for example in `dunstrc` a `[chatcli]` section with `appname = chatcli` and `script = ~/.config/dunst/chatcli-sound.sh`, where the script runs `canberra-gtk-play -i message-new-instant` or `paplay` on a file of your choice. chatcli's notifications have category `im.received`.
 - A toast that fails logs one line and never crashes or repeats.
 
 ### Search
@@ -514,7 +515,7 @@ A Windows toast appears for a new incoming message when chatcli's window is not 
 
 ## Linux and macOS (experimental)
 
-Only the Windows build is tested by hand. CI also builds and tests on Linux and macOS. Secrets use the macOS Keychain or the Linux Secret Service (GNOME Keyring or KWallet); on Linux with no Secret Service (a headless box, a minimal window manager), set `CHATCLI_SECRET_STORE=file` to keep them in `secrets.json` in the data folder instead. That file is readable by you only (mode 0600) but is not encrypted, so anyone who can read your files can read your sign-in. Desktop notifications are Windows only. The data folder is `~/Library/Application Support/chatcli` on macOS and `$XDG_DATA_HOME/chatcli` (or `~/.local/share/chatcli`) on Linux.
+Only the Windows build is tested by hand. CI also builds and tests on Linux and macOS. Secrets use the macOS Keychain or the Linux Secret Service (GNOME Keyring or KWallet); on Linux with no Secret Service (a headless box, a minimal window manager), set `CHATCLI_SECRET_STORE=file` to keep them in `secrets.json` in the data folder instead. That file is readable by you only (mode 0600) but is not encrypted, so anyone who can read your files can read your sign-in. Desktop notifications work on Windows and Linux, not macOS. The data folder is `~/Library/Application Support/chatcli` on macOS and `$XDG_DATA_HOME/chatcli` (or `~/.local/share/chatcli`) on Linux.
 
 There is no Linux or macOS release yet: build from source (see [Build](#build)). On Linux with Nix, the repository is a flake: `nix build` builds chatcli, `nix shell github:Page011/chatCLI` puts it on your `PATH`, and `nix develop` opens a shell with the Rust toolchain and Bun.
 

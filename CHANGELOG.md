@@ -24,7 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Open links from messages in the browser (`u` in message selection), after an `Open <host>? y/n` line that shows the real host.
 - Colour themes with named roles (`[theme]`, `high-contrast`, `light`, `dark`) and `NO_COLOR` support.
 - Layout options: sidebar width, 12-hour time, date order, compact rows, hidden previews.
-- Windows toast notifications for new messages, with a choice of how much text shows (`[notifications] preview`), folded per chat.
+- Desktop notifications for new messages: a toast on Windows, a freedesktop notification on Linux (any notification daemon: dunst, mako, GNOME, KDE). A choice of how much text shows (`[notifications] preview`), folded per chat.
 - Scroll past the top to load older messages on Teams (one page per scroll) and WhatsApp (asks your phone).
 - `n` and `N` jump to the next and previous unread chat; `R` marks the chat read, and `:readall` every chat after a y/n.
 - Pin, mute and hide chats (`p`, `m`, `z`, `Z`). WhatsApp syncs them with the phone.

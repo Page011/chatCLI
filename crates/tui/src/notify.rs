@@ -1,6 +1,6 @@
 //! Desktop notifications for new messages (issue 24): the decision, the 10 s per-chat fold and
 //! the toast text. Pure: the clock is a parameter, nothing here talks to the OS. The app crate
-//! owns the Windows toast (`Notifier`); the TUI only hands it a `Toast`.
+//! owns the desktop notifier (`Notifier`); the TUI only hands it a `Toast`.
 //!
 //! A toast comes only from `Event::Message` (a message that just arrived), never from history,
 //! never from a timer that calls a network.
