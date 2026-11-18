@@ -118,6 +118,8 @@ mod linux {
 
     const DEST: &str = "org.freedesktop.Notifications";
     const PATH: &str = "/org/freedesktop/Notifications";
+    const BUS: &str = "org.freedesktop.DBus";
+    const BUS_PATH: &str = "/org/freedesktop/DBus";
     /// A daemon that does not answer in this time counts as a failure. Only the worker waits.
     const TIMEOUT: Duration = Duration::from_secs(5);
     /// Toasts waiting for the worker. A hung daemon makes each one wait out `TIMEOUT`; past this
@@ -175,37 +177,59 @@ mod linux {
 
     struct Bus {
         conn: Connection,
-        /// The daemon reads markup in the body (capability `body-markup`).
-        body_markup: bool,
+        /// The daemon whose capabilities are known: its unique bus name (`:1.38`) and whether it
+        /// reads markup in the body (capability `body-markup`). Another daemon can take over the
+        /// well-known name while we run (dunst restarted, swapped for mako), so every call goes
+        /// to this unique name: a call can never reach a daemon we have not asked.
+        daemon: Option<(String, bool)>,
+    }
+
+    fn failed(what: &'static str) -> impl Fn(dbus::Error) -> String {
+        move |e| format!("{what} ({})", e.name().unwrap_or("no reply"))
+    }
+
+    /// The unique name that owns `org.freedesktop.Notifications` now, starting the daemon by
+    /// D-Bus activation when none runs.
+    fn daemon_owner(conn: &Connection) -> std::result::Result<String, String> {
+        let bus = conn.with_proxy(BUS, BUS_PATH, TIMEOUT);
+        let owner = || {
+            bus.method_call(BUS, "GetNameOwner", (DEST,))
+                .map(|(o,): (String,)| o)
+        };
+        match owner() {
+            Ok(o) => Ok(o),
+            Err(_) => {
+                let _: (u32,) = bus
+                    .method_call(BUS, "StartServiceByName", (DEST, 0u32))
+                    .map_err(failed("no notification service"))?;
+                owner().map_err(failed("no notification service"))
+            }
+        }
     }
 
     fn send(bus: &mut Option<Bus>, toast: &Toast) -> std::result::Result<(), String> {
-        let fail = |e: dbus::Error| {
-            format!(
-                "the notification service refused it ({})",
-                e.name().unwrap_or("no reply")
-            )
-        };
         if bus.is_none() {
-            let conn = Connection::new_session().map_err(|e| {
-                format!(
-                    "no D-Bus session bus ({})",
-                    e.name().unwrap_or("not reachable")
-                )
-            })?;
-            let (caps,): (Vec<String>,) = conn
-                .with_proxy(DEST, PATH, TIMEOUT)
-                .method_call(DEST, "GetCapabilities", ())
-                .map_err(fail)?;
-            *bus = Some(Bus {
-                conn,
-                body_markup: caps.iter().any(|c| c == "body-markup"),
-            });
+            let conn = Connection::new_session().map_err(failed("no D-Bus session bus"))?;
+            *bus = Some(Bus { conn, daemon: None });
         }
-        let Some(b) = bus.as_ref() else {
+        let Some(b) = bus.as_mut() else {
             return Err("no D-Bus connection".into());
         };
-        let note = fdo_note(toast, b.body_markup);
+        let owner = daemon_owner(&b.conn)?;
+        let body_markup = match &b.daemon {
+            Some((known, markup)) if *known == owner => *markup,
+            _ => {
+                let (caps,): (Vec<String>,) = b
+                    .conn
+                    .with_proxy(owner.as_str(), PATH, TIMEOUT)
+                    .method_call(DEST, "GetCapabilities", ())
+                    .map_err(failed("the notification service did not answer"))?;
+                let markup = caps.iter().any(|c| c == "body-markup");
+                b.daemon = Some((owner.clone(), markup));
+                markup
+            }
+        };
+        let note = fdo_note(toast, body_markup);
         let mut hints = PropMap::new();
         hints.insert(
             "category".into(),
@@ -223,7 +247,7 @@ mod linux {
         };
         let _: (u32,) = b
             .conn
-            .with_proxy(DEST, PATH, TIMEOUT)
+            .with_proxy(owner.as_str(), PATH, TIMEOUT)
             .method_call(
                 DEST,
                 "Notify",
@@ -238,8 +262,137 @@ mod linux {
                     -1i32, // expire_timeout: the daemon's default
                 ),
             )
-            .map_err(fail)?;
+            .map_err(failed("the notification service refused it"))?;
         Ok(())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::process::{Child, Command, Stdio};
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::mpsc::{channel, Receiver};
+        use std::sync::Arc;
+        use std::thread::JoinHandle;
+
+        use dbus::channel::MatchingReceiver;
+        use dbus::message::MatchRule;
+
+        use super::*;
+
+        /// A private bus, so the test never touches the desktop's daemon. `None` (test skipped)
+        /// where no `dbus-daemon` is installed.
+        /// Killed on drop, so a failing test leaves no daemon behind.
+        struct PrivateBus(Child);
+
+        impl Drop for PrivateBus {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+
+        fn private_bus() -> Option<(PrivateBus, String)> {
+            let mut bus = PrivateBus(
+                Command::new("dbus-daemon")
+                    .args(["--session", "--nofork", "--print-address"])
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .ok()?,
+            );
+            let mut line = String::new();
+            std::io::BufRead::read_line(
+                &mut std::io::BufReader::new(bus.0.stdout.take()?),
+                &mut line,
+            )
+            .ok()?;
+            let addr = line.trim().to_string();
+            (!addr.is_empty()).then_some((bus, addr))
+        }
+
+        struct Fake {
+            stop: Arc<AtomicBool>,
+            thread: JoinHandle<()>,
+            bodies: Receiver<String>,
+        }
+
+        impl Fake {
+            /// Owns `org.freedesktop.Notifications` on `addr` before it returns.
+            fn start(addr: &str, caps: &'static [&'static str]) -> Fake {
+                let (ready_tx, ready) = channel();
+                let (body_tx, bodies) = channel();
+                let stop = Arc::new(AtomicBool::new(false));
+                let flag = stop.clone();
+                let addr = addr.to_string();
+                let thread = std::thread::spawn(move || {
+                    let conn = Connection::new_address(&addr).unwrap();
+                    conn.request_name(DEST, false, false, true).unwrap();
+                    conn.start_receive(
+                        MatchRule::new_method_call(),
+                        Box::new(move |msg, c| {
+                            let reply = match msg.member().as_deref() {
+                                Some("GetCapabilities") => msg.method_return().append1(
+                                    caps.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+                                ),
+                                Some("Notify") => {
+                                    let (_, _, _, _, body): (String, u32, String, String, String) =
+                                        msg.read5().unwrap();
+                                    body_tx.send(body).unwrap();
+                                    msg.method_return().append1(1u32)
+                                }
+                                _ => return true,
+                            };
+                            let _ = dbus::channel::Sender::send(c, reply);
+                            true
+                        }),
+                    );
+                    ready_tx.send(()).unwrap();
+                    while !flag.load(Ordering::Relaxed) {
+                        conn.process(Duration::from_millis(20)).unwrap();
+                    }
+                });
+                ready.recv().unwrap();
+                Fake {
+                    stop,
+                    thread,
+                    bodies,
+                }
+            }
+
+            /// Leaves the bus, which gives up the name.
+            fn quit(self) {
+                self.stop.store(true, Ordering::Relaxed);
+                self.thread.join().unwrap();
+            }
+        }
+
+        #[test]
+        fn a_daemon_that_takes_over_the_name_gets_its_own_capability_check() {
+            let Some((_daemon, addr)) = private_bus() else {
+                eprintln!("no dbus-daemon: skipped");
+                return;
+            };
+            let toast = Toast {
+                title: "t".into(),
+                body: "<b>x</b>".into(),
+                sound: true,
+            };
+            let mut bus = Some(Bus {
+                conn: Connection::new_address(&addr).unwrap(),
+                daemon: None,
+            });
+
+            let plain = Fake::start(&addr, &[]);
+            send(&mut bus, &toast).unwrap();
+            assert_eq!(plain.bodies.recv().unwrap(), "<b>x</b>");
+            plain.quit();
+
+            // Same connection, new daemon that reads markup: the text must be escaped for it.
+            let marked = Fake::start(&addr, &["body", "body-markup"]);
+            send(&mut bus, &toast).unwrap();
+            assert_eq!(marked.bodies.recv().unwrap(), "&lt;b&gt;x&lt;/b&gt;");
+            marked.quit();
+        }
     }
 }
 
