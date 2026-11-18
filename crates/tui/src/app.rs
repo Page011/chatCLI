@@ -760,11 +760,6 @@ impl App {
                 self.ensure_sel_visible(n);
             }
         }
-        if let Some(g) = self.picker_grid() {
-            if let Some(p) = self.picker.as_mut() {
-                p.keep_visible(g.cols, g.rows);
-            }
-        }
     }
 
     /// Makes `n` the active tab. What is on screen changes, so read timers follow.
@@ -900,6 +895,13 @@ impl App {
     fn relayout(&mut self) {
         for n in Network::ALL {
             self.refit(n);
+        }
+        // The picker's grid can change size too (a resize, a new `emoji_picker` place): keep its
+        // selected cell on screen.
+        if let Some(g) = self.picker_grid() {
+            if let Some(p) = self.picker.as_mut() {
+                p.keep_visible(g.cols, g.rows);
+            }
         }
     }
 
@@ -4778,6 +4780,23 @@ mod tests {
         let g = app.picker_grid().unwrap();
         assert_ne!(g.outer, middle);
         assert_eq!(g.outer.y + g.outer.height, lay.composer.y);
+    }
+
+    #[test]
+    fn a_new_place_keeps_the_selected_emoji_on_screen() {
+        let mut app = placed_picker(PickerPlace::Popup);
+        for _ in 0..5 {
+            app.handle_key(key(KeyCode::Down));
+        }
+        assert_eq!(app.picker().unwrap().top, 0, "row 5 of 8 is in view");
+        // One row: the strip must scroll to the selected cell's row, not show row 0.
+        let mut s = Settings::default();
+        s.layout.emoji_picker = PickerPlace::Inline;
+        app.apply_settings(s);
+        let g = app.picker_grid().unwrap();
+        let p = app.picker().unwrap();
+        assert!(g.inline);
+        assert_eq!(p.top, p.sel / g.cols, "{} / {}", p.sel, g.cols);
     }
 
     #[test]
