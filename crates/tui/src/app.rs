@@ -129,6 +129,10 @@ pub(crate) struct NetState {
     /// The highlighted message of the open chat while `focus` is `Select`. Kept by id, so an
     /// incoming message, a resize or a wheel scroll never moves it.
     pub sel_msg: Option<String>,
+    /// A chat entered from the list before any of its messages were loaded: the message box got
+    /// the focus for now, and the newest message is selected when they arrive. Any key, click or
+    /// paste in between cancels it.
+    pub(crate) select_on_load: Option<String>,
     /// Where the selection was before each big jump (`G`, `g`, `H`, `M`, `L`), newest last, as
     /// (chat id, message id). `jump_back` (Ctrl+O) walks back through it.
     pub(crate) jumps: Vec<(String, String)>,
@@ -189,6 +193,7 @@ impl NetState {
             drafts: HashMap::new(),
             scroll: 0,
             sel_msg: None,
+            select_on_load: None,
             jumps: Vec::new(),
             targets: HashMap::new(),
             caps: Capabilities::default(),
@@ -1196,6 +1201,7 @@ impl App {
                     ns.scroll = (ns.scroll + after).saturating_sub(before);
                     self.ensure_sel_visible(network);
                 }
+                self.select_when_loaded(network, &chat_id);
             }
             Event::Message(mut m) => {
                 clean_message(&mut m);
@@ -1215,7 +1221,10 @@ impl App {
                 let anchored =
                     !follow && (self.ns(n).scroll > 0 || self.ns(n).focus == Focus::Select);
                 let before = (is_open && anchored).then(|| self.convo_lines(n));
-                upsert_message(self.ns_mut(n).messages.entry(chat_id).or_default(), m);
+                upsert_message(
+                    self.ns_mut(n).messages.entry(chat_id.clone()).or_default(),
+                    m,
+                );
                 if let Some(before) = before {
                     let added = self.convo_lines(n).saturating_sub(before);
                     self.ns_mut(n).scroll += added;
@@ -1223,6 +1232,7 @@ impl App {
                 if follow {
                     self.follow_newest(n);
                 }
+                self.select_when_loaded(n, &chat_id);
                 if is_open && !from_me {
                     out.extend(self.auto_images(n));
                 }
@@ -1403,6 +1413,8 @@ impl App {
     /// A key press as the user would type it: the tour presses its keys through here too.
     pub(crate) fn key_now(&mut self, key: KeyEvent) -> Out {
         self.popup_alive = false;
+        // A key is the user acting: a chat waiting to select its newest message stops waiting.
+        self.ns_mut(self.active).select_on_load = None;
         let (net, chat) = (self.active, self.active().open.clone());
         let was_empty = self.active().draft().is_empty();
         let mut out = self.dispatch_key(key);
@@ -2126,11 +2138,13 @@ impl App {
     }
 
     /// Accept on the chat list: into the chat, its newest message selected. A chat with no
-    /// message to select (empty, or not loaded yet) goes to its message box.
+    /// message to select (empty, or not loaded yet) goes to its message box, and selects the
+    /// newest message once one arrives (`select_on_load`).
     fn select_chat(&mut self, n: Network) -> Out {
         let out = self.open_selected(n);
-        if self.ns(n).focus == Focus::Composer {
-            self.try_select(n);
+        if self.ns(n).focus == Focus::Composer && !self.try_select(n) {
+            let ns = self.ns_mut(n);
+            ns.select_on_load = ns.open.clone();
         }
         out
     }
@@ -2202,6 +2216,7 @@ impl App {
             return Vec::new();
         }
         let n = self.active;
+        self.ns_mut(n).select_on_load = None;
         let chat = self.active().open.clone();
         let was_empty = self.active().draft().is_empty();
         let before = self.active().draft().to_string();
@@ -2477,6 +2492,8 @@ impl App {
         ) {
             return Vec::new();
         }
+        // A click or the wheel is the user acting, as a key is (`select_on_load`).
+        self.ns_mut(self.active).select_on_load = None;
         // Nothing is drawn but a notice: nothing can be clicked.
         if ui::too_small(self.size) {
             return Vec::new();
@@ -3251,6 +3268,7 @@ mod tests {
     fn mouse_wheel_scrolls_the_conversation() {
         let mut app = online_app();
         app.handle_key(key(KeyCode::Enter));
+        app.ns_mut(Network::Teams).select_on_load = None;
         let msgs: Vec<ChatMessage> = (0..80)
             .map(|i| ChatMessage {
                 network: Network::Teams,

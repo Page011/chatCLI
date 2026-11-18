@@ -1074,6 +1074,8 @@ mod tests {
             }],
         ));
         press(&mut app, KeyCode::Enter);
+        // The message box keeps the focus when the history arrives, as after a key press.
+        app.ns_mut(Network::Teams).select_on_load = None;
         app.handle_event(Event::Messages {
             network: Network::Teams,
             chat_id: "a".into(),
