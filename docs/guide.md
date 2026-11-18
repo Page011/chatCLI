@@ -280,7 +280,7 @@ Chat list:
 | Key | Does |
 |---|---|
 | `Up` / `Down`, `k` / `j` | Move in the chat list. The chat under the cursor shows in the message pane at once (a preview) |
-| `Enter`, `l` or `Right` | Into the chat: its newest message is selected (see message selection below) |
+| `Enter`, `l` or `Right` | Into the chat: its newest message is selected (see message selection below). A chat still loading opens in the message box and selects its newest message when it arrives, unless you pressed a key first |
 | `i` | Straight to the chat's message box |
 | `Esc` | Clear the filter; with no filter, close the chat in the message pane |
 | `r` | Refresh the chat list (you trigger it; chatcli never polls) |

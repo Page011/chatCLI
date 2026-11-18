@@ -896,6 +896,8 @@ mod tests {
     fn app_with_history(count: usize) -> App {
         let mut app = app();
         press(&mut app, KeyCode::Enter);
+        // The message box keeps the focus when the history arrives, as after a key press.
+        app.ns_mut(Network::Teams).select_on_load = None;
         let msgs = (0..count)
             .map(|i| {
                 message(

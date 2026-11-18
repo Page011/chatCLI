@@ -205,6 +205,23 @@ impl App {
         true
     }
 
+    /// Messages for `chat_id` arrived: if it was entered from the list before any were loaded
+    /// (`select_on_load`) and is still in its message box, its newest message is selected now.
+    /// A batch with nothing selectable yet keeps it waiting.
+    pub(super) fn select_when_loaded(&mut self, n: Network, chat_id: &str) {
+        let ns = self.ns(n);
+        if ns.select_on_load.as_deref() != Some(chat_id) {
+            return;
+        }
+        if ns.open.as_deref() != Some(chat_id) || ns.focus != Focus::Composer {
+            self.ns_mut(n).select_on_load = None;
+            return;
+        }
+        if self.try_select(n) {
+            self.ns_mut(n).select_on_load = None;
+        }
+    }
+
     /// Back from selection: the chat list, with the chat still shown.
     pub(crate) fn select_to_list(&mut self, n: Network) {
         self.leave_select(n);
@@ -859,6 +876,8 @@ mod tests {
         let mut app = App::new(clock());
         online(&mut app, kind);
         press(&mut app, KeyCode::Enter);
+        // The message box keeps the focus when the history arrives, as after a key press.
+        app.ns_mut(Network::Teams).select_on_load = None;
         app.handle_event(Event::Messages {
             network: Network::Teams,
             chat_id: "a".into(),
@@ -1019,6 +1038,67 @@ mod tests {
     }
 
     // ---- selection (issue 11) ----
+
+    /// Teams signed in, chat "a" entered from the list before any of its messages were loaded.
+    fn entered_before_load() -> App {
+        let mut app = App::new(clock());
+        online(&mut app, ChatKind::Direct);
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(app.active().focus, Focus::Composer, "nothing to select yet");
+        app
+    }
+
+    fn history(app: &mut App, messages: Vec<ChatMessage>) {
+        app.handle_event(Event::Messages {
+            network: Network::Teams,
+            chat_id: "a".into(),
+            messages,
+        });
+    }
+
+    #[test]
+    fn a_chat_entered_before_its_messages_load_selects_the_newest_when_they_come() {
+        let mut app = entered_before_load();
+        history(&mut app, three());
+        assert_eq!(app.active().focus, Focus::Select);
+        assert_eq!(sel(&app), Some("m3"));
+        assert!(in_view(&app));
+        // Only once: back in the box, more history leaves the focus alone.
+        press(&mut app, KeyCode::Char('i'));
+        assert_eq!(app.active().focus, Focus::Composer);
+        history(&mut app, three());
+        assert_eq!(app.active().focus, Focus::Composer);
+    }
+
+    #[test]
+    fn a_key_before_the_messages_load_keeps_the_message_box() {
+        let mut app = entered_before_load();
+        press(&mut app, KeyCode::Char('h'));
+        history(&mut app, three());
+        assert_eq!(app.active().focus, Focus::Composer);
+        assert_eq!(app.active().draft(), "h");
+    }
+
+    #[test]
+    fn an_empty_first_answer_waits_for_a_message_to_select() {
+        let mut app = entered_before_load();
+        history(&mut app, Vec::new());
+        assert_eq!(app.active().focus, Focus::Composer);
+        // WhatsApp's history from the phone, or a live message, comes later.
+        app.handle_event(Event::Message(msg("m9", 9000, false, "late")));
+        assert_eq!(app.active().focus, Focus::Select);
+        assert_eq!(sel(&app), Some("m9"));
+    }
+
+    #[test]
+    fn leaving_the_chat_before_its_messages_load_selects_nothing() {
+        let mut app = entered_before_load();
+        press(&mut app, KeyCode::Esc);
+        assert_eq!(app.active().focus, Focus::List);
+        history(&mut app, three());
+        assert_eq!(app.active().focus, Focus::List);
+        assert_eq!(sel(&app), None);
+    }
 
     #[test]
     fn esc_from_the_message_box_selects_the_newest_message() {
@@ -1980,6 +2060,7 @@ mod tests {
         let mut app = App::with_ctx(clock(), &ctx);
         online(&mut app, ChatKind::Group);
         press(&mut app, KeyCode::Enter);
+        app.ns_mut(Network::Teams).select_on_load = None;
         app.handle_event(Event::Messages {
             network: Network::Teams,
             chat_id: "a".into(),
