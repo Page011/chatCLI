@@ -1,9 +1,9 @@
 //! Sharper thumbnails with the terminal's own graphics (issue 37): Sixel, Kitty or iTerm2.
 //!
 //! The half-block thumbnail is always in the conversation lines, so every terminal gets one and
-//! it clips with the lines when it scrolls. Where the terminal can draw pixels, an image that is
-//! wholly on screen is drawn over those half-blocks. Anything unsure falls back to half-blocks:
-//! a wrong guess must never print garbage.
+//! it clips with the lines when it scrolls. Where the terminal can draw pixels, an image on
+//! screen is drawn over those half-blocks, cut row by row where the top or bottom edge cuts it.
+//! Anything unsure falls back to half-blocks: a wrong guess must never print garbage.
 //!
 //! `choose` is the decision (pure, tested). `detect` asks the terminal once, before the event
 //! loop, with a short timeout. `Graphics` keeps the encoded images and draws them.
@@ -18,8 +18,8 @@ use ratatui::layout::{Rect, Size};
 use ratatui::Frame;
 use ratatui_image::picker::cap_parser::QueryStdioOptions;
 use ratatui_image::picker::{Picker, ProtocolType};
-use ratatui_image::protocol::Protocol;
-use ratatui_image::{FilterType, Image, Resize};
+use ratatui_image::sliced::{SlicedImage, SlicedProtocol};
+use ratatui_image::{FilterType, Resize};
 
 use crate::media_view::{decode_checked, one_at_a_time};
 use crate::ui::VisibleImage;
@@ -126,35 +126,37 @@ pub(crate) struct GfxKey {
 }
 
 /// Decodes `path` and encodes it for the picker's protocol, scaled to fill `cols` x `rows`
-/// cells. Slow (a Sixel encode of a photo can take a while): run it on a worker thread.
+/// cells, in rows that can be drawn on their own. Slow (a Sixel encode of a photo can take a
+/// while): run it on a worker thread.
 pub(crate) fn encode(
     picker: &Picker,
     path: &Path,
     cols: u16,
     rows: u16,
     max_bytes: u64,
-) -> Result<Protocol, String> {
+) -> Result<SlicedProtocol, String> {
     one_at_a_time(|| {
         let img = decode_checked(path, max_bytes)?;
-        picker
-            .new_protocol(
-                img,
-                Size::new(cols, rows),
-                Resize::Scale(Some(FilterType::Triangle)),
-            )
-            .map_err(|e| format!("PREVIEW FAILED: {e}"))
+        SlicedProtocol::new_with_resize(
+            picker,
+            img,
+            Size::new(cols, rows),
+            Resize::Scale(Some(FilterType::Triangle)),
+        )
+        .map_err(|e| format!("PREVIEW FAILED: {e}"))
     })
 }
 
 /// The encoded images and what was drawn last frame.
 pub(crate) struct Graphics {
     picker: Picker,
-    ready: HashMap<GfxKey, Protocol>,
+    ready: HashMap<GfxKey, SlicedProtocol>,
     pending: HashSet<GfxKey>,
     failed: HashSet<GfxKey>,
-    /// What the last frame overlaid. Where an image was and is not drawn again, its cells are
-    /// rewritten, so a Sixel image that moved or went away leaves no pixels behind.
-    last: Vec<(GfxKey, Rect)>,
+    /// What the last frame overlaid: the image, its box on screen and the rows cut off its top.
+    /// Where an image was and is not drawn again, its cells are rewritten, so a Sixel image that
+    /// moved or went away leaves no pixels behind.
+    last: Vec<(GfxKey, Rect, u16)>,
 }
 
 impl Graphics {
@@ -172,7 +174,7 @@ impl Graphics {
         GfxKey {
             path: v.path.clone(),
             cols: v.rect.width,
-            rows: v.rect.height,
+            rows: v.rows,
         }
     }
 
@@ -201,7 +203,7 @@ impl Graphics {
 
     /// A worker finished: keep the encoding, or remember that this one cannot be done (it stays
     /// half-blocks, and is not retried every frame).
-    pub fn store(&mut self, key: GfxKey, result: Result<Protocol, String>) {
+    pub fn store(&mut self, key: GfxKey, result: Result<SlicedProtocol, String>) {
         self.pending.remove(&key);
         match result {
             Ok(p) => {
@@ -215,10 +217,10 @@ impl Graphics {
     }
 
     /// What `render` will overlay for `vis`.
-    fn overlay(&self, vis: &[VisibleImage]) -> Vec<(GfxKey, Rect)> {
+    fn overlay(&self, vis: &[VisibleImage]) -> Vec<(GfxKey, Rect, u16)> {
         vis.iter()
-            .map(|v| (Self::key_of(v), v.rect))
-            .filter(|(k, _)| self.ready.contains_key(k))
+            .map(|v| (Self::key_of(v), v.rect, v.skip))
+            .filter(|(k, _, _)| self.ready.contains_key(k))
             .collect()
     }
 
@@ -231,17 +233,18 @@ impl Graphics {
             .last
             .iter()
             .filter(|e| !now.contains(e))
-            .map(|(_, r)| *r)
+            .map(|(_, r, _)| *r)
             .collect();
         self.last = now;
         out
     }
 
-    /// Draws each ready image over its half-block thumbnail.
+    /// Draws each ready image over its half-block thumbnail: only its rows inside `rect`.
     pub fn render(&self, f: &mut Frame, vis: &[VisibleImage]) {
         for v in vis {
             if let Some(p) = self.ready.get(&Self::key_of(v)) {
-                f.render_widget(Image::new(p), v.rect);
+                let above = -i16::try_from(v.skip).unwrap_or(i16::MAX);
+                f.render_widget(SlicedImage::new(p, (0, above).into()), v.rect);
             }
         }
     }
@@ -306,6 +309,8 @@ mod tests {
         VisibleImage {
             path: PathBuf::from(path),
             rect: Rect::new(x, y, 6, 3),
+            rows: 3,
+            skip: 0,
         }
     }
 
@@ -355,6 +360,8 @@ mod tests {
         let v = VisibleImage {
             path: path.clone(),
             rect: Rect::new(2, 1, 6, 3),
+            rows: 3,
+            skip: 0,
         };
         assert!(
             g.stale(std::slice::from_ref(&v)).is_empty(),
@@ -376,6 +383,8 @@ mod tests {
         let moved = VisibleImage {
             path: path.clone(),
             rect: Rect::new(2, 2, 6, 3),
+            rows: 3,
+            skip: 0,
         };
         assert_eq!(
             g.stale(std::slice::from_ref(&moved)),
@@ -403,6 +412,52 @@ mod tests {
         assert!(
             !painted(12, 6) && !painted(1, 1) && !painted(8, 1),
             "and nowhere else"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_image_cut_by_the_top_edge_stays_sharp_and_draws_only_its_rows_on_screen() {
+        let dir = temp("cut");
+        let path = png(&dir, "p.png");
+        let mut g = Graphics::new(Picker::halfblocks());
+        let whole = visible(path.to_str().unwrap(), 2, 1);
+        let (key, picker) = g.wanted(std::slice::from_ref(&whole))[0].clone();
+        let proto = encode(&picker, &path, key.cols, key.rows, 1 << 20).unwrap();
+        g.store(key, Ok(proto));
+        // Scrolled up two rows: its first row is above the screen, two are on it.
+        let cut = VisibleImage {
+            path: path.clone(),
+            rect: Rect::new(2, 0, 6, 2),
+            rows: 3,
+            skip: 1,
+        };
+        assert!(
+            g.wanted(std::slice::from_ref(&cut)).is_empty(),
+            "the same encoding, not a new one per scroll step"
+        );
+        g.stale(std::slice::from_ref(&whole));
+        assert_eq!(
+            g.stale(std::slice::from_ref(&cut)),
+            vec![whole.rect],
+            "the box it left is rewritten"
+        );
+        assert!(g.stale(std::slice::from_ref(&cut)).is_empty());
+
+        let mut term = Terminal::new(TestBackend::new(20, 8)).unwrap();
+        term.draw(|f| g.render(f, std::slice::from_ref(&cut)))
+            .unwrap();
+        let buf = term.backend().buffer();
+        let painted = |x, y| {
+            let c = &buf[(x, y)];
+            c.fg != ratatui::style::Color::Reset || c.bg != ratatui::style::Color::Reset
+        };
+        // The picture fills two of its three rows: with one cut off, its second row is the
+        // only one left, on the screen's top row.
+        assert!(painted(2, 0) && painted(7, 0), "its second row, across");
+        assert!(
+            !painted(2, 1) && !painted(2, 2) && !painted(8, 0),
+            "nothing below it or beside it"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

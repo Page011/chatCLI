@@ -287,7 +287,7 @@ enum Internal {
     /// An image was encoded for the terminal's graphics protocol (or could not be).
     Encoded(
         gfx::GfxKey,
-        std::result::Result<ratatui_image::protocol::Protocol, String>,
+        std::result::Result<ratatui_image::sliced::SlicedProtocol, String>,
     ),
 }
 
@@ -706,6 +706,8 @@ mod tests {
         let now = [crate::ui::VisibleImage {
             path: "a.png".into(),
             rect: Rect::new(2, 2, 4, 2),
+            rows: 2,
+            skip: 0,
         }];
         // The image moved down one row: its old box was rows 1-2.
         term.draw(|f| super::mark_stale(f, &[Rect::new(2, 1, 4, 2)], &now))

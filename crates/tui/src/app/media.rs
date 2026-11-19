@@ -1418,6 +1418,63 @@ mod tests {
     }
 
     #[test]
+    fn a_thumbnail_cut_by_the_top_or_bottom_edge_is_still_drawn_sharp() {
+        let mut list = vec![with_attachments(
+            "m1",
+            "[image] sunset",
+            vec![attachment(MediaKind::Image, "sunset.png")],
+        )];
+        // Lines above and below it, so it can reach either edge.
+        list.extend((2..60).map(|i| ChatMessage {
+            ts: 1000 + i,
+            ..with_attachments(&format!("m{i}"), "hello", Vec::new())
+        }));
+        list.extend((1..60).map(|i| ChatMessage {
+            ts: i,
+            ..with_attachments(&format!("old{i}"), "hello", Vec::new())
+        }));
+        list.sort_by_key(|m| m.ts);
+        let mut app = app_with(list);
+        app.resize(100, 30);
+        let item = app.ns_mut(Network::Teams).media.entry(MediaKey {
+            chat: "a".into(),
+            msg: "m1".into(),
+            idx: 0,
+        });
+        item.fetch = Fetch::Ready("sunset.png".into());
+        // 4 x 10 pixels: 4 columns, 5 rows.
+        item.view = View::Shown(Thumb::from_rgb(4, 10, &[[255, 0, 0]; 40], Depth::True));
+        let lay = app.layout_in(ratatui::layout::Rect::new(0, 0, 100, 30));
+        let (mut whole, mut top_cut, mut bottom_cut) = (false, false, false);
+        for scroll in 0..200 {
+            app.ns_mut(Network::Teams).scroll = scroll;
+            for v in crate::ui::visible_images(&app, &lay).images {
+                assert_eq!((v.rect.width, v.rows), (4, 5), "scroll {scroll}");
+                assert!(
+                    v.rect.height > 0 && v.skip + v.rect.height <= 5,
+                    "scroll {scroll}"
+                );
+                assert!(
+                    v.rect.y >= lay.messages.y && v.rect.bottom() <= lay.messages.bottom(),
+                    "on screen, scroll {scroll}"
+                );
+                match (v.skip, v.rect.height) {
+                    (0, 5) => whole = true,
+                    (0, _) => bottom_cut = true,
+                    (s, h) => {
+                        assert_eq!(s + h, 5, "a top cut shows the bottom rows");
+                        top_cut = true;
+                    }
+                }
+            }
+        }
+        assert!(
+            whole && top_cut && bottom_cut,
+            "{whole} {top_cut} {bottom_cut}"
+        );
+    }
+
+    #[test]
     fn a_picture_already_in_the_cache_is_decoded_without_a_download() {
         let dir = temp("view");
         let file = dir.join("p.png");

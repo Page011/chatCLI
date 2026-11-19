@@ -2143,12 +2143,17 @@ fn bottom_anchored(area: Rect, rows: usize) -> Rect {
     Rect::new(area.x, area.y + area.height - rows, area.width, rows)
 }
 
-/// A thumbnail that is wholly on screen: where, and the cached file it comes from. The terminal
-/// graphics overlay (Sixel, Kitty, iTerm2) draws these over the half-block thumbnail. A
-/// thumbnail only partly on screen keeps its half-blocks, which clip with the lines.
+/// A thumbnail on screen: the cached file it comes from, the box it fills, and the part of that
+/// box on screen. The terminal graphics overlay (Sixel, Kitty, iTerm2) draws these over the
+/// half-block thumbnail; one cut by the top or bottom edge is drawn cut, never left blurry.
 pub(crate) struct VisibleImage {
     pub path: PathBuf,
+    /// The rows on screen.
     pub rect: Rect,
+    /// The whole thumbnail's height in rows (`rect` may hold only part of it).
+    pub rows: u16,
+    /// Rows above the screen's top edge.
+    pub skip: u16,
 }
 
 /// What the overlay draws, and the people whose avatars are fully on screen (newest first), whose
@@ -2192,12 +2197,17 @@ pub(crate) fn visible_images(app: &App, lay: &Layout) -> Visible {
                         2,
                     )
                     .intersection(lay.messages),
+                    rows: 2,
+                    skip: 0,
                 });
             }
         }
     }
     for slot in spans.iter().flat_map(|s| &s.images) {
-        if slot.line < start || slot.line + slot.rows > end || slot.cols == 0 {
+        let (top, bottom) = (slot.line.max(start), (slot.line + slot.rows).min(end));
+        // Off screen, or cut at both edges: ratatui-image 11 draws a Sixel cut at both edges
+        // too tall, over the message box, so that one keeps its half-blocks.
+        if top >= bottom || slot.cols == 0 || (top > slot.line && bottom < slot.line + slot.rows) {
             continue;
         }
         let Some(Fetch::Ready(path)) = ns.media.items.get(&slot.key).map(|i| i.fetch.clone())
@@ -2208,11 +2218,13 @@ pub(crate) fn visible_images(app: &App, lay: &Layout) -> Visible {
             path,
             rect: Rect::new(
                 area.x + slot.indent as u16,
-                area.y + (slot.line - start) as u16,
+                area.y + (top - start) as u16,
                 slot.cols as u16,
-                slot.rows as u16,
+                (bottom - top) as u16,
             )
             .intersection(lay.messages),
+            rows: slot.rows as u16,
+            skip: (top - slot.line) as u16,
         });
     }
     out
