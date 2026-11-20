@@ -16,6 +16,11 @@
 //!
 //! A reader is stored by user part (phone number or LID, whichever the receipt named) and
 //! matched to a member by either address, through the phone-number/LID links in `names`.
+//!
+//! The library decrypts messages in a per-chat queue but hands receipts over at once, so on
+//! a reconnect a receipt can name one of our messages before that message is stored (#83).
+//! Such a receipt is parked by message id and applied when the message is stored, wherever
+//! it comes from (the offline queue, a send confirmation, a history chunk).
 
 use chatcli_core::store::BASELINE_READER;
 use whatsapp_rust::wacore::types::events::Receipt;
@@ -23,6 +28,56 @@ use whatsapp_rust::wacore::types::presence::ReceiptType;
 
 use super::ops::{wa_log, within};
 use super::*;
+
+/// Most message ids kept waiting for their message; past it the oldest is forgotten. A
+/// receipt for a message that never arrives (older than our history) would otherwise stay.
+const PARKED_MAX: usize = 2000;
+
+/// One receipt waiting for its message: who, in which chat (as the receipt named it), and
+/// whether it was a read.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Waiting {
+    chat_id: String,
+    reader: String,
+    read: bool,
+}
+
+/// Receipts waiting for their message, by message id, oldest id first.
+#[derive(Default)]
+pub(crate) struct Parked {
+    by_id: HashMap<String, Vec<Waiting>>,
+    order: VecDeque<String>,
+}
+
+impl Parked {
+    fn park(&mut self, id: &str, w: Waiting) {
+        if let Some(list) = self.by_id.get_mut(id) {
+            if !list.contains(&w) {
+                list.push(w);
+            }
+            return;
+        }
+        if self.order.len() >= PARKED_MAX {
+            if let Some(old) = self.order.pop_front() {
+                self.by_id.remove(&old);
+            }
+        }
+        self.by_id.insert(id.to_string(), vec![w]);
+        self.order.push_back(id.to_string());
+    }
+
+    fn take(&mut self, id: &str) -> Vec<Waiting> {
+        let Some(list) = self.by_id.remove(id) else {
+            return Vec::new();
+        };
+        self.order.retain(|o| o != id);
+        list
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.by_id.is_empty()
+    }
+}
 
 impl Backend {
     pub(super) fn on_receipt(&mut self, r: &Receipt) {
@@ -42,37 +97,104 @@ impl Backend {
             return;
         }
         let chat_id = self.canonical_id(&raw);
-        let newest = r
-            .message_ids
-            .iter()
-            .filter_map(|id| self.store.message(NET, &chat_id, id).ok().flatten())
-            .filter(|m| m.from_me)
-            .map(|m| m.ts)
-            .max();
-        // A receipt for a message we never stored (older than our history) says nothing usable.
+        let mut newest = None;
+        for id in &r.message_ids {
+            match self.store.message(NET, &chat_id, id) {
+                Ok(Some(m)) if m.from_me => newest = newest.max(Some(m.ts)),
+                // Their message: a receipt from someone else about it says nothing.
+                Ok(Some(_)) => {}
+                // Not stored yet: still being decrypted, or a message older than our history
+                // (that one never comes and is forgotten in time).
+                Ok(None) => self.parked_receipts.park(
+                    id,
+                    Waiting {
+                        chat_id: chat_id.clone(),
+                        reader: reader.user.to_string(),
+                        read,
+                    },
+                ),
+                Err(e) => self.store_failed("read message", &e),
+            }
+        }
         let Some(ts) = newest else {
             return;
         };
         let started = self.start_delivery_tracking(&chat_id, now_ms());
-        let moved = if read {
-            self.store
-                .advance_read_mark(NET, &chat_id, &reader.user, ts)
-        } else {
-            self.store
-                .advance_delivered_mark(NET, &chat_id, &reader.user, ts)
-        };
-        match moved {
-            Ok(moved) if moved || started => self.emit_receipts(&chat_id),
-            Ok(_) => {}
-            Err(e) => self.store_failed("save receipt", &e),
+        if self.advance_mark(&chat_id, &reader.user, read, ts) || started {
+            self.emit_receipts(&chat_id);
         }
     }
 
-    /// One of our messages at `ts` was stored (sent from here, or from the phone): delivery
-    /// tracking starts in its chat if it had not, with everything before it counted delivered.
-    pub(super) fn own_message_stored(&mut self, chat_id: &str, ts: i64) {
-        if self.start_delivery_tracking(chat_id, ts - 1) {
+    /// Moves the reader's read (or delivered) mark forward to `ts`. True when it moved.
+    fn advance_mark(&self, chat_id: &str, reader: &str, read: bool, ts: i64) -> bool {
+        let moved = if read {
+            self.store.advance_read_mark(NET, chat_id, reader, ts)
+        } else {
+            self.store.advance_delivered_mark(NET, chat_id, reader, ts)
+        };
+        moved.unwrap_or_else(|e| {
+            self.store_failed("save receipt", &e);
+            false
+        })
+    }
+
+    /// One of our messages, `id` at `ts`, was stored (sent from here, or from the phone):
+    /// delivery tracking starts in its chat if it had not, with everything before it counted
+    /// delivered, and receipts that arrived for it before it did are applied now.
+    pub(super) fn own_message_stored(&mut self, chat_id: &str, id: &str, ts: i64) {
+        let started = self.start_delivery_tracking(chat_id, ts - 1);
+        let moved = self.apply_parked(chat_id, id, ts);
+        if started || moved {
             self.emit_receipts(chat_id);
+        }
+    }
+
+    /// Applies the receipts parked for our message `id` at `ts`, now stored in `chat_id` (the
+    /// stored chat wins over the one the receipt named: a LID chat may have merged into its
+    /// phone-number twin since). True when a mark moved.
+    fn apply_parked(&mut self, chat_id: &str, id: &str, ts: i64) -> bool {
+        let mut moved = false;
+        for w in self.parked_receipts.take(id) {
+            moved |= self.advance_mark(chat_id, &w.reader, w.read, ts);
+        }
+        moved
+    }
+
+    /// A history chunk was written: parked receipts whose message it carried are applied.
+    pub(super) fn apply_parked_from_history(&mut self) {
+        if self.parked_receipts.is_empty() {
+            return;
+        }
+        let waiting: Vec<(String, String)> = self
+            .parked_receipts
+            .by_id
+            .iter()
+            .filter_map(|(id, ws)| ws.first().map(|w| (id.clone(), w.chat_id.clone())))
+            .collect();
+        let mut chats = HashSet::new();
+        for (id, receipt_chat) in waiting {
+            // The chunk may have linked a LID chat to its phone number since the receipt came.
+            let chat_id = match receipt_chat.parse::<Jid>() {
+                Ok(jid) => self.canonical_id(&jid),
+                Err(_) => receipt_chat,
+            };
+            match self.store.message(NET, &chat_id, &id) {
+                Ok(Some(m)) if m.from_me => {
+                    let started = self.start_delivery_tracking(&m.chat_id, now_ms());
+                    if self.apply_parked(&m.chat_id, &id, m.ts) || started {
+                        chats.insert(m.chat_id);
+                    }
+                }
+                // Someone else's message after all: nothing to apply, ever.
+                Ok(Some(_)) => {
+                    self.parked_receipts.take(&id);
+                }
+                Ok(None) => {}
+                Err(e) => self.store_failed("read message", &e),
+            }
+        }
+        for chat_id in chats {
+            self.emit_receipts(&chat_id);
         }
     }
 
@@ -225,5 +347,34 @@ impl Backend {
                 log::error(AREA, &format!("group members for receipts: {}", wa_log(&e)));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn w(reader: &str) -> Waiting {
+        Waiting {
+            chat_id: "c".into(),
+            reader: reader.into(),
+            read: true,
+        }
+    }
+
+    #[test]
+    fn parked_receipts_are_capped_oldest_first_and_kept_once() {
+        let mut p = Parked::default();
+        p.park("a", w("x"));
+        p.park("a", w("x"));
+        p.park("a", w("y"));
+        assert_eq!(p.take("a"), [w("x"), w("y")]);
+        assert!(p.take("a").is_empty());
+        for i in 0..=PARKED_MAX {
+            p.park(&i.to_string(), w("x"));
+        }
+        assert_eq!(p.by_id.len(), PARKED_MAX);
+        assert!(p.take("0").is_empty(), "the oldest is forgotten");
+        assert_eq!(p.take(&PARKED_MAX.to_string()), [w("x")]);
     }
 }
