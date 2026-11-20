@@ -8,7 +8,7 @@
 use crate::input::TextInput;
 use crate::list;
 use chatcli_core::model::Network;
-use chatcli_core::store::{SearchHit, SearchScope, Store};
+use chatcli_core::store::{Correction, SearchHit, SearchScope, Store};
 
 /// Hits shown at most. The store clamps to 200; a screen shows far fewer.
 pub const LIMIT: u32 = 50;
@@ -41,8 +41,20 @@ pub struct Search {
     /// The current text waits for, or is being run by, the search worker. The hits shown are
     /// still the last text's, so the list does not flash empty while typing.
     pub pending: bool,
-    /// The text the hits shown are for: what `n` and `N` step through after Enter.
+    /// The text the hits shown are for (the corrected one when typos were swapped): what `n`
+    /// and `N` step through after Enter.
     pub shown: String,
+    /// The words swapped to find the hits shown (none when the text as typed found them).
+    pub fixes: Vec<Correction>,
+}
+
+/// What a query found: the hits, and, when the text as typed found none, the corrected text
+/// that found these and the words swapped.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Found {
+    pub hits: Vec<SearchHit>,
+    pub corrected: Option<String>,
+    pub fixes: Vec<Correction>,
 }
 
 /// One query for the search worker (the TUI loop runs it on a blocking thread): everything it
@@ -56,12 +68,43 @@ pub struct SearchJob {
 }
 
 impl SearchJob {
-    pub fn run(&self) -> Result<Vec<SearchHit>, String> {
+    /// The hits for the text. When there are none, the text with its typos corrected
+    /// (`Store::correct_query`) is searched instead, and `Found` says what was swapped.
+    pub fn run(&self) -> Result<Found, String> {
         let scope = match &self.scope {
             Some((n, id)) => SearchScope::Chat(*n, id),
             None => SearchScope::All,
         };
-        self.store.search(&self.query, scope, LIMIT)
+        let hits = self.store.search(&self.query, scope, LIMIT)?;
+        if !hits.is_empty() {
+            return Ok(Found {
+                hits,
+                ..Found::default()
+            });
+        }
+        // Best effort: a correction that fails (the vocabulary cannot be read) is logged, and
+        // the answer is the honest "nothing", not an error for a search that did run.
+        let corrected = self
+            .store
+            .correct_query(&self.query, scope)
+            .unwrap_or_else(|e| {
+                chatcli_core::log::error("search", &format!("typo correction: {e}"));
+                None
+            });
+        let Some((text, fixes)) = corrected else {
+            return Ok(Found::default());
+        };
+        let hits = self.store.search(&text, scope, LIMIT)?;
+        // A correction that finds nothing either is not worth mentioning.
+        Ok(if hits.is_empty() {
+            Found::default()
+        } else {
+            Found {
+                hits,
+                corrected: Some(text),
+                fixes,
+            }
+        })
     }
 }
 
@@ -102,19 +145,24 @@ impl Search {
     }
 
     /// Shows the answer for the current text.
-    pub fn apply(&mut self, result: Result<Vec<SearchHit>, String>) {
+    pub fn apply(&mut self, result: Result<Found, String>) {
         self.pending = false;
-        self.shown = self.query.text().trim().to_string();
         // The old hits may have been moved through while this ran: start at the top again.
         self.sel = 0;
         self.top = 0;
         match result {
-            Ok(hits) => {
-                self.hits = hits;
+            Ok(found) => {
+                self.shown = found
+                    .corrected
+                    .unwrap_or_else(|| self.query.text().trim().to_string());
+                self.hits = found.hits;
+                self.fixes = found.fixes;
                 self.error = None;
             }
             Err(e) => {
+                self.shown = self.query.text().trim().to_string();
                 self.hits.clear();
+                self.fixes.clear();
                 self.error = Some(e);
             }
         }
@@ -126,7 +174,7 @@ impl Search {
         self.edited();
         self.pending = false;
         let result = if self.blank() {
-            Ok(Vec::new())
+            Ok(Found::default())
         } else {
             self.job(store.clone()).run()
         };

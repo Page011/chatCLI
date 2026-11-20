@@ -3267,6 +3267,20 @@ fn draw_search(f: &mut Frame, app: &App, body: Rect) {
         (Some(e), _, _) => (e.clone(), t.error),
         (None, true, _) => ("Type to search".to_string(), t.hint),
         (None, false, 0) => ("0 hits".to_string(), t.hint),
+        // The text as typed found nothing; its typos corrected did. Say what was searched.
+        (None, false, n) if !s.fixes.is_empty() => (
+            format!(
+                "No exact match: {} of {n}{} for \"{}\"",
+                s.sel + 1,
+                if n as u32 >= crate::search::LIMIT {
+                    "+"
+                } else {
+                    ""
+                },
+                clean_line(&s.shown)
+            ),
+            t.hint,
+        ),
         (None, false, n) if n as u32 >= crate::search::LIMIT => (
             format!("{} of {n}+ hits: add words to narrow it", s.sel + 1),
             t.hint,

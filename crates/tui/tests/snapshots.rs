@@ -2744,6 +2744,20 @@ fn search_box_on_small_screens() {
     check("search_hits_tiny", 30, 8, &got);
 }
 
+/// A typo: the corrected text's hits, and the status row says what was searched.
+#[test]
+fn search_box_corrects_a_typo() {
+    let mut app = search_app();
+    ctrl_f(&mut app);
+    type_str(&mut app, "budjet");
+    let got = render(&mut app, 80, 24);
+    assert!(
+        got.contains("No exact match: 1 of 3 for \"budget\""),
+        "{got}"
+    );
+    check("search_typo", 80, 24, &got);
+}
+
 /// With the worker the box says when a query is running, and never "no match" meanwhile.
 #[test]
 fn search_box_searching() {

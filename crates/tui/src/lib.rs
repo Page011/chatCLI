@@ -54,7 +54,6 @@ use chatcli_core::media::MAX_PIXELS;
 use chatcli_core::model::{now_ms, Command, CommandTx, Event as BackendEvent, EventRx, Network};
 use chatcli_core::runtime::UiCtx;
 use chatcli_core::settings::{Settings, SettingsProblem};
-use chatcli_core::store::SearchHit;
 use chatcli_core::{log, Result};
 use crossterm::cursor::Show;
 use crossterm::event::{
@@ -291,7 +290,7 @@ enum Internal {
         std::result::Result<ratatui_image::sliced::SlicedProtocol, String>,
     ),
     /// A search query ran: its box, its number, and the hits or why it failed.
-    Search(u64, u64, std::result::Result<Vec<SearchHit>, String>),
+    Search(u64, u64, std::result::Result<search::Found, String>),
 }
 
 /// What the user reads when a worker thread dies before it answers: the chip or the clipboard

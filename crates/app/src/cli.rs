@@ -218,7 +218,18 @@ fn search(text: &str) -> Result<()> {
     if !db.exists() {
         return Err("No store yet: start chatcli once, then search.".to_string());
     }
-    let hits = Store::open_read_only(&db)?.search(text, SearchScope::All, SEARCH_LIMIT)?;
+    let store = Store::open_read_only(&db)?;
+    let mut hits = store.search(text, SearchScope::All, SEARCH_LIMIT)?;
+    // Nothing as typed: try the text with its typos corrected, as the search box does.
+    if hits.is_empty() {
+        // Best effort, as in the box: a correction that cannot be read is no correction.
+        if let Ok(Some((fixed, _))) = store.correct_query(text, SearchScope::All) {
+            hits = store.search(&fixed, SearchScope::All, SEARCH_LIMIT)?;
+            if !hits.is_empty() {
+                println!("No exact match: showing \"{fixed}\".");
+            }
+        }
+    }
     for line in hit_lines(&hits) {
         println!("{line}");
     }
