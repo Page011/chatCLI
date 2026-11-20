@@ -33,6 +33,36 @@ pub struct Search {
     pub top: usize,
     /// Why the last query failed (shown in the status row); `None` when it ran.
     pub error: Option<String>,
+    /// Which box this is (`App` numbers each one it opens): an answer for a box that closed is
+    /// never shown in the next one, whose `seq` starts again.
+    pub id: u64,
+    /// Bumped each time the query changes: an answer for an earlier text is dropped.
+    pub seq: u64,
+    /// The current text waits for, or is being run by, the search worker. The hits shown are
+    /// still the last text's, so the list does not flash empty while typing.
+    pub pending: bool,
+    /// The text the hits shown are for: what `n` and `N` step through after Enter.
+    pub shown: String,
+}
+
+/// One query for the search worker (the TUI loop runs it on a blocking thread): everything it
+/// needs, so the UI thread never waits on the store while the user types.
+pub struct SearchJob {
+    pub id: u64,
+    pub seq: u64,
+    query: String,
+    scope: Option<(Network, String)>,
+    store: Store,
+}
+
+impl SearchJob {
+    pub fn run(&self) -> Result<Vec<SearchHit>, String> {
+        let scope = match &self.scope {
+            Some((n, id)) => SearchScope::Chat(*n, id),
+            None => SearchScope::All,
+        };
+        self.store.search(&self.query, scope, LIMIT)
+    }
 }
 
 impl Search {
@@ -48,15 +78,37 @@ impl Search {
         }
     }
 
-    /// Runs the query again after its text changed. The selection goes back to the top.
-    pub fn run(&mut self, store: &Store) {
+    /// Nothing to search: no letter or digit at all. The hits clear without asking the store.
+    pub fn blank(&self) -> bool {
+        !self.query.text().chars().any(char::is_alphanumeric)
+    }
+
+    /// The text changed: a new query number, and the selection goes back to the top.
+    pub fn edited(&mut self) {
+        self.seq += 1;
         self.sel = 0;
         self.top = 0;
-        let scope = match &self.scope {
-            Some(c) => SearchScope::Chat(c.network, &c.chat_id),
-            None => SearchScope::All,
-        };
-        match store.search(self.query.text(), scope, LIMIT) {
+    }
+
+    /// The current text as a job for the worker.
+    pub fn job(&self, store: Store) -> SearchJob {
+        SearchJob {
+            id: self.id,
+            seq: self.seq,
+            query: self.query.text().to_string(),
+            scope: self.scope.as_ref().map(|c| (c.network, c.chat_id.clone())),
+            store,
+        }
+    }
+
+    /// Shows the answer for the current text.
+    pub fn apply(&mut self, result: Result<Vec<SearchHit>, String>) {
+        self.pending = false;
+        self.shown = self.query.text().trim().to_string();
+        // The old hits may have been moved through while this ran: start at the top again.
+        self.sel = 0;
+        self.top = 0;
+        match result {
             Ok(hits) => {
                 self.hits = hits;
                 self.error = None;
@@ -66,6 +118,19 @@ impl Search {
                 self.error = Some(e);
             }
         }
+    }
+
+    /// Runs the query again after its text changed, here and now (tests, and with no worker).
+    /// The selection goes back to the top.
+    pub fn run(&mut self, store: &Store) {
+        self.edited();
+        self.pending = false;
+        let result = if self.blank() {
+            Ok(Vec::new())
+        } else {
+            self.job(store.clone()).run()
+        };
+        self.apply(result);
     }
 
     /// Moves the selection by `delta` rows, kept inside the hits.
@@ -148,6 +213,31 @@ mod tests {
         s.scope = None;
         s.run(&store);
         assert_eq!(s.hits.len(), 2, "every chat without a scope");
+    }
+
+    #[test]
+    fn every_letter_searches_and_a_blank_text_clears_the_hits() {
+        let store = store_with(&["a quick answer", "東京"]);
+        let mut s = Search::default();
+        for (q, blank) in [
+            ("", true),
+            ("  ", true),
+            ("!!!", true),
+            ("a", false),
+            ("東", false),
+        ] {
+            s.query = q.into();
+            assert_eq!(s.blank(), blank, "{q:?}");
+        }
+        for q in ["a", "a.", "quick a", "東"] {
+            s.query = q.into();
+            s.run(&store);
+            assert_eq!(s.hits.len(), 1, "{q:?}");
+            assert_eq!(s.shown, q);
+        }
+        s.query = "  ".into();
+        s.run(&store);
+        assert!(s.hits.is_empty());
     }
 
     #[test]

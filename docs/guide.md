@@ -509,11 +509,13 @@ A desktop notification appears for a new incoming message when chatcli's window 
 
 ### Search
 
-`Ctrl+F` opens a search over every message stored on this PC, both networks, newest first. Type to search, `Up` / `Down` choose, `Enter` opens that chat with the message selected, `Esc` closes. After `Enter` on a hit in the chat you were already selecting in, `Ctrl+O` goes back to the message you had selected before. Places are kept per chat: after a hit in another chat, `Ctrl+O` there has nowhere earlier to go. A message far back in a long chat comes up with the messages around it; the newer ones load as you move or scroll down (`G` still goes straight to the newest).
+`Ctrl+F` opens a search over every message stored on this PC, both networks, newest first. Type to search, `Up` / `Down` choose, `Enter` opens that chat with the message selected, `Esc` closes. The search runs in the background, so typing never waits: `Searching...` shows until the hits come. `chatcli search <text>` prints the hits. Only what is in `store.db` is searched: messages you have loaded or received, not the full history of a chat. Quotes, `*` and other odd input never raise an error.
+
+After `Enter` on a hit in the chat you were already selecting in, `Ctrl+O` goes back to the message you had selected before. Places are kept per chat: after a hit in another chat, `Ctrl+O` there has nowhere earlier to go. A message far back in a long chat comes up with the messages around it; the newer ones load as you move or scroll down (`G` still goes straight to the newest).
 
 `/` in message selection (or `:searchchat`) opens the same box over the open chat only: its name is the title, and each hit shows who wrote it. `Enter` selects the message in place and `Ctrl+O` comes back. In the chat list `/` still filters the chats, and in the message box it is just a character.
 
-After a search, `n` selects the next older message in the open chat that it matches and `N` the next newer one, without opening the box: the whole chat as stored, not only the hits the box listed. Each step is a place `Ctrl+O` comes back to. `chatcli search <text>` prints the hits. Only what is in `store.db` is searched: messages you have loaded or received, not the full history of a chat. Quotes, `*` and other odd input never raise an error.
+After a search, `n` selects the next older message in the open chat that it matches and `N` the next newer one, without opening the box: the whole chat as stored, not only the hits the box listed. Each step is a place `Ctrl+O` comes back to.
 
 ### Doctor
 

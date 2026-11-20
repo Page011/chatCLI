@@ -201,6 +201,11 @@ pub struct SearchHit {
     pub snippet: Vec<SnippetPart>,
 }
 
+/// What `search` and `next_match` say when FTS5 cannot read the query: one sentence, never a panic.
+fn unreadable(_: rusqlite::Error) -> String {
+    "Search could not read that query: try plain words.".to_string()
+}
+
 fn db_err(context: &str) -> impl Fn(rusqlite::Error) -> String + '_ {
     move |e| format!("local store ({context}): {e}")
 }
@@ -281,6 +286,21 @@ impl Store {
     pub fn open(path: &Path) -> Result<Store> {
         let conn = Connection::open(path).map_err(db_err("open"))?;
         Store::init(conn)
+    }
+
+    /// A second, read-only connection to the same file, for a worker thread: a long read there
+    /// never holds the lock this connection's reads wait on (WAL lets both read at once). An
+    /// in-memory store has no file to open again: it shares this connection.
+    pub fn reader(&self) -> Result<Store> {
+        let path = self
+            .lock()?
+            .path()
+            .filter(|p| !p.is_empty())
+            .map(std::path::PathBuf::from);
+        match path {
+            Some(p) => Store::open_read_only(&p),
+            None => Ok(self.clone()),
+        }
     }
 
     /// Opens an existing store for reading only (`doctor`, `search`): never creates, never
@@ -1040,8 +1060,6 @@ impl Store {
             SearchScope::All => (None, None),
             SearchScope::Chat(n, id) => (Some(n), Some(id)),
         };
-        let unreadable =
-            |_: rusqlite::Error| "Search could not read that query: try plain words.".to_string();
         let conn = self.lock()?;
         let mut stmt = conn
             .prepare_cached(
@@ -1114,8 +1132,6 @@ impl Store {
         } else {
             ("(m.ts > ?4 OR (m.ts = ?4 AND m.id > ?5))", "ASC")
         };
-        let unreadable =
-            |_: rusqlite::Error| "Search could not read that query: try plain words.".to_string();
         let conn = self.lock()?;
         let mut stmt = conn
             .prepare_cached(&format!(
@@ -1702,6 +1718,29 @@ mod tests {
             fetch_ref: FetchRef::new(format!("{{\"id\":\"{name}\"}}")),
             open_url: None,
         }
+    }
+
+    /// Review: the search worker shared the UI thread's connection, so a long query held the lock
+    /// its reads wait on. `reader` is a connection of its own (read-only), except in memory.
+    #[test]
+    fn reader_is_its_own_read_only_connection_to_the_same_file() {
+        let dir = temp_dir("reader");
+        let s = Store::open(&dir.join("store.db")).unwrap();
+        s.upsert_chats(&[chat("c", Some(1))]).unwrap();
+        s.upsert_messages(&[text_msg("m1", 1, "harbour lights")])
+            .unwrap();
+        let r = s.reader().unwrap();
+        assert!(!Arc::ptr_eq(&s.conn, &r.conn));
+        // It reads while the other connection is held, and cannot write.
+        let held = s.lock().unwrap();
+        assert_eq!(r.search("harbour", SearchScope::All, 5).unwrap().len(), 1);
+        drop(held);
+        assert!(r.upsert_messages(&[text_msg("m2", 2, "x")]).is_err());
+        drop((s, r));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let mem = Store::open_in_memory().unwrap();
+        assert!(Arc::ptr_eq(&mem.conn, &mem.reader().unwrap().conn));
     }
 
     fn temp_dir(tag: &str) -> std::path::PathBuf {

@@ -15,7 +15,7 @@ use crate::chats;
 use crate::keymap::{Action, Context};
 use crate::notify::{self, Admit, Arrived, Verdict};
 use crate::older::{self, Older};
-use crate::search::Search;
+use crate::search::{Search, SearchJob};
 use crate::text::{clean_line, clean_msg};
 use crate::theme::Theme;
 use crate::typing;
@@ -481,26 +481,80 @@ impl App {
         self.open_search_box(Search::in_chat(n, &chat_id, &title));
     }
 
-    fn open_search_box(&mut self, search: Search) {
+    fn open_search_box(&mut self, mut search: Search) {
         if self.store.is_none() {
             self.push_global_notice("Search needs the local store: restart chatcli.", true);
             return;
         }
+        self.search_boxes += 1;
+        search.id = self.search_boxes;
         self.popup = None;
         self.search = Some(search);
     }
 
-    /// Runs the query again after the text changed. A failure is shown in the box and as a notice.
+    /// The text changed: run the query again. With the worker (the TUI loop) it is queued and
+    /// the answer comes to `search_done`; without (tests) it runs here. A text too short to
+    /// search clears the hits at once.
     pub(super) fn search_rerun(&mut self) {
-        let rows = ui::search_geometry(self.layout_in(self.size).body).map_or(1, |g| g.rows);
         let (Some(s), Some(store)) = (self.search.as_mut(), self.store.as_ref()) else {
             return;
         };
-        s.run(store);
+        if s.blank() || !self.search_worker {
+            s.run(store);
+            return self.search_shown();
+        }
+        s.edited();
+        s.pending = true;
+    }
+
+    /// After an answer: the window follows the selection, and a failure is also a notice.
+    fn search_shown(&mut self) {
+        let rows = ui::search_geometry(self.layout_in(self.size).body).map_or(1, |g| g.rows);
+        let Some(s) = self.search.as_mut() else {
+            return;
+        };
         s.keep_visible(rows);
         if let Some(e) = s.error.clone() {
             self.push_global_notice(&e, true);
         }
+    }
+
+    /// The TUI loop runs search queries on a worker thread from now on (`take_search`).
+    pub fn use_search_worker(&mut self) {
+        self.search_worker = true;
+        // Its own connection; without one (an in-memory store) it shares the UI thread's.
+        self.search_reader = self.store.as_ref().and_then(|s| match s.reader() {
+            Ok(r) => Some(r),
+            Err(e) => {
+                chatcli_core::log::error("tui", &format!("search reader: {e}"));
+                None
+            }
+        });
+    }
+
+    /// The query the worker should run next: the box's current text when it waits and no other
+    /// query is running. One at a time, so fast typing never piles up reads on the store; a text
+    /// typed meanwhile is asked for when the running one answers.
+    pub fn take_search(&mut self) -> Option<SearchJob> {
+        if self.search_running {
+            return None;
+        }
+        let s = self.search.as_ref().filter(|s| s.pending)?;
+        let job = s.job(self.search_reader.clone().or_else(|| self.store.clone())?);
+        self.search_running = true;
+        Some(job)
+    }
+
+    /// The worker's answer for query `seq` of box `id`. An answer for a text that has changed
+    /// since, or for a box that closed, is dropped (the next `take_search` asks for the current
+    /// text).
+    pub fn search_done(&mut self, id: u64, seq: u64, result: Result<Vec<SearchHit>, String>) {
+        self.search_running = false;
+        let Some(s) = self.search.as_mut().filter(|s| s.id == id && s.seq == seq) else {
+            return;
+        };
+        s.apply(result);
+        self.search_shown();
     }
 
     pub(super) fn search_type(&mut self, text: &str) {
@@ -570,7 +624,8 @@ impl App {
             return Vec::new();
         };
         if let Some(s) = self.search.take() {
-            self.last_query = Some(s.query.text().trim().to_string());
+            // The text the hits on screen are for (a too-short last word was not searched).
+            self.last_query = Some(s.shown);
         }
         self.open_hit(&hit)
     }
@@ -1644,6 +1699,109 @@ mod tests {
                 }
             )]
         );
+    }
+
+    /// The worker as the TUI loop drives it: the job taken, run, its answer handed back.
+    fn run_worker(app: &mut App) -> bool {
+        match app.take_search() {
+            Some(job) => {
+                let r = job.run();
+                app.search_done(job.id, job.seq, r);
+                true
+            }
+            None => false,
+        }
+    }
+
+    #[test]
+    fn with_the_worker_typing_queues_one_query_at_a_time_and_stale_answers_are_dropped() {
+        let mut app = search_app();
+        app.use_search_worker();
+        ctrl_f(&mut app);
+        typed(&mut app, "bud");
+        assert!(
+            app.search().unwrap().pending,
+            "queued, not run on the UI thread"
+        );
+        assert!(app.search().unwrap().hits.is_empty());
+        let first = app.take_search().expect("the worker gets it");
+        assert!(app.take_search().is_none(), "one at a time");
+        // More typing while it runs: it waits.
+        typed(&mut app, "get");
+        assert!(app.take_search().is_none());
+        // The answer for "bud" is for an old text: dropped, and "budget" goes next.
+        let r = first.run();
+        app.search_done(first.id, first.seq, r);
+        assert!(app.search().unwrap().pending);
+        assert!(app.search().unwrap().hits.is_empty());
+        assert!(run_worker(&mut app));
+        let s = app.search().unwrap();
+        assert!(!s.pending);
+        assert_eq!(s.hits.len(), 4, "budget in a, b, h and on WhatsApp");
+        assert!(!run_worker(&mut app), "nothing left to ask");
+        // An empty box clears the hits at once, with nothing asked of the store.
+        for _ in 0..6 {
+            press(&mut app, KeyCode::Backspace);
+        }
+        assert_eq!(app.search().unwrap().query, "");
+        assert!(app.search().unwrap().hits.is_empty());
+        assert!(app.take_search().is_none());
+    }
+
+    /// Review: every box numbered its queries from 0, so the answer for a closed box could be
+    /// shown in the next one, under a different text.
+    #[test]
+    fn an_answer_for_a_closed_box_never_shows_in_the_next_one() {
+        let mut app = search_app();
+        app.use_search_worker();
+        ctrl_f(&mut app);
+        typed(&mut app, "budget");
+        let old = app.take_search().unwrap();
+        press(&mut app, KeyCode::Esc);
+        ctrl_f(&mut app);
+        typed(&mut app, "budget");
+        assert_eq!(app.search().unwrap().seq, old.seq, "same text, same number");
+        let r = old.run();
+        app.search_done(old.id, old.seq, r);
+        let s = app.search().unwrap();
+        assert!(s.pending, "the old box's answer is not this box's");
+        assert!(s.hits.is_empty());
+        assert!(run_worker(&mut app));
+        assert_eq!(app.search().unwrap().hits.len(), 4);
+    }
+
+    /// Enter while a newer text is still being searched takes a hit of the text on screen: `n`
+    /// steps through that text, not the one still running.
+    #[test]
+    fn n_uses_the_text_the_shown_hits_are_for() {
+        let mut app = search_app();
+        app.use_search_worker();
+        ctrl_f(&mut app);
+        typed(&mut app, "budget");
+        assert!(run_worker(&mut app));
+        typed(&mut app, " appr");
+        assert!(app.search().unwrap().pending);
+        assert_eq!(app.search().unwrap().shown, "budget");
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(app.last_query.as_deref(), Some("budget"));
+    }
+
+    #[test]
+    fn with_the_worker_an_answer_after_the_box_closed_is_dropped() {
+        let mut app = search_app();
+        app.use_search_worker();
+        ctrl_f(&mut app);
+        typed(&mut app, "budget");
+        let job = app.take_search().unwrap();
+        press(&mut app, KeyCode::Esc);
+        let r = job.run();
+        app.search_done(job.id, job.seq, r);
+        assert!(app.search().is_none());
+        // A new box asks again: the worker is free.
+        ctrl_f(&mut app);
+        typed(&mut app, "budget");
+        assert!(run_worker(&mut app));
+        assert_eq!(app.search().unwrap().hits.len(), 4);
     }
 
     /// `search_app` with chat `a` open in message selection, holding `a1` and a newer `a2`.

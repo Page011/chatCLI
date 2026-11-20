@@ -55,6 +55,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Search no longer stalls typing: queries run in the background (`Searching...` shows until the hits come). A one-letter query, which matches nearly every message, was the slow keystroke on a big store.
 - Every popup (help, commands, search, the emoji picker, the `:shortcode` / `@mention` list, the file list, the sign-in panel) is drawn by one component, so they look and behave alike. Help, commands and search hide the screen behind them; the others keep it in view around them. The same search row, the same "no match" note on the list's first row (the emoji picker and search showed it elsewhere), the same full-width highlight on the chosen row (the file list highlighted only the name), the same hint style for the empty search row (the command bar was dimmer), and one "Terminal too small for ..." message.
 - Tabs: signed-in networks come first and the ones waiting for a sign-in after, so a WhatsApp-only setup starts with WhatsApp in front; `Alt+1` / `Alt+2` follow the order shown. chatcli starts on the tab you used last (kept in the local store).
 - `:` opens the command bar and `/` filters the chat list. In the message box, `:word` runs a command only when `Enter` takes it from the list (a space or `Esc` first sends it as text); a message that starts with `/` is plain text, so `//` escaping is gone.

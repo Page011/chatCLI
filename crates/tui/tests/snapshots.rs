@@ -2744,6 +2744,19 @@ fn search_box_on_small_screens() {
     check("search_hits_tiny", 30, 8, &got);
 }
 
+/// With the worker the box says when a query is running, and never "no match" meanwhile.
+#[test]
+fn search_box_searching() {
+    let mut app = search_app();
+    app.use_search_worker();
+    ctrl_f(&mut app);
+    type_str(&mut app, "budget");
+    let got = render(&mut app, 80, 24);
+    assert!(got.contains("Searching..."), "{got}");
+    assert!(!got.contains("No messages match"), "{got}");
+    check("search_searching", 80, 24, &got);
+}
+
 /// `/` in message selection: the same box over the open chat. Its name is the title, and the
 /// rows name the sender instead of the network and the chat ("budget" is in three chats).
 #[test]

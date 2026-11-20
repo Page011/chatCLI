@@ -3258,10 +3258,12 @@ fn draw_search(f: &mut Frame, app: &App, body: Rect) {
         overlay::row(f, t, row, clip_spans(spans, w), selected);
     }
     let typed = !s.query.text().trim().is_empty();
-    if typed && s.error.is_none() && s.hits.is_empty() {
+    if typed && !s.pending && s.error.is_none() && s.hits.is_empty() {
         overlay::note(f, t, g.list, "No messages match");
     }
     let (status, style) = match (&s.error, !typed, s.hits.len()) {
+        // The hits shown are the last text's until the worker answers.
+        _ if s.pending => ("Searching...".to_string(), t.hint),
         (Some(e), _, _) => (e.clone(), t.error),
         (None, true, _) => ("Type to search".to_string(), t.hint),
         (None, false, 0) => ("0 hits".to_string(), t.hint),

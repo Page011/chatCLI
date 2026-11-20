@@ -364,6 +364,16 @@ pub struct App {
     /// The text of the last search a hit was taken from (Enter): `n` and `N` step through its
     /// matches in the open chat.
     last_query: Option<String>,
+    /// Search queries go to the TUI loop's worker thread (`take_search`) instead of running on
+    /// the UI thread. Off in tests, which read hits right after typing.
+    search_worker: bool,
+    /// A query is with the worker: the next waits for its answer.
+    search_running: bool,
+    /// Search boxes opened so far: each gets the next number (`Search::id`).
+    search_boxes: u64,
+    /// The worker's own read-only connection to the store, so a long query never holds the lock
+    /// the UI thread's reads (a jump, `n`, Ctrl+O) wait on.
+    search_reader: Option<Store>,
     /// `[notifications]` and what toasts need (issue 24).
     notif: NotificationSettings,
     /// The terminal window has focus. False until a focus event says so.
@@ -561,6 +571,10 @@ impl App {
             fmt: Fmt::default(),
             search: None,
             last_query: None,
+            search_worker: false,
+            search_running: false,
+            search_boxes: 0,
+            search_reader: None,
             notif: NotificationSettings::default(),
             focused: false,
             started_ms: clock.now_ms,
