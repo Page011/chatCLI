@@ -43,6 +43,9 @@ impl App {
             CmdId::SignOut if matches!(ns.status, Status::NeedsLogin { .. }) => {
                 Some(format!("Not signed in to {label}"))
             }
+            CmdId::SearchChat if self.active().open.is_none() => {
+                Some("SEARCHCHAT - open a chat first".to_string())
+            }
             CmdId::Tour if !self.demo => Some("TOUR - run chatcli --demo --tour".to_string()),
             _ => None,
         }
@@ -80,6 +83,7 @@ impl App {
             CmdId::Notifications => self.open_settings(Section::Notifications),
             CmdId::About => self.open_settings(Section::About),
             CmdId::Search => self.open_search(),
+            CmdId::SearchChat => self.open_chat_search(n),
             CmdId::Refresh => return self.refresh(n),
             CmdId::ReadAll => self.ask_mark_all_read(n),
             CmdId::SignIn => return vec![(n, Command::Login)],

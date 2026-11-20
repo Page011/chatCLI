@@ -7,7 +7,7 @@
 ║:keys                                 ║
 ║:theme                                ║
 ║:layout                               ║
-║lines 1-6 of 92                       ║
+║lines 1-6 of 94                       ║
 ╚══════════════════════════════════════╝
 Esc close  Up/Down scroll
 --- styled runs (everything else is default style) ---

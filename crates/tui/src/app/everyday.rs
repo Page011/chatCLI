@@ -462,12 +462,32 @@ impl App {
     }
 
     pub(super) fn open_search(&mut self) {
+        self.open_search_box(Search::default());
+    }
+
+    /// `search_chat` (`/` in message selection): the same box, over the open chat only. Enter on
+    /// a hit selects it there (`open_hit`), and Ctrl+O comes back.
+    pub(super) fn open_chat_search(&mut self, n: Network) {
+        let ns = self.ns(n);
+        let Some(chat_id) = ns.open.clone() else {
+            self.push_notice(n, "Open a chat to search it.", false);
+            return;
+        };
+        let title = ns
+            .chats
+            .iter()
+            .find(|c| c.id == chat_id)
+            .map_or_else(String::new, |c| c.title.clone());
+        self.open_search_box(Search::in_chat(n, &chat_id, &title));
+    }
+
+    fn open_search_box(&mut self, search: Search) {
         if self.store.is_none() {
             self.push_global_notice("Search needs the local store: restart chatcli.", true);
             return;
         }
         self.popup = None;
-        self.search = Some(Search::default());
+        self.search = Some(search);
     }
 
     /// Runs the query again after the text changed. A failure is shown in the box and as a notice.
@@ -1586,6 +1606,120 @@ mod tests {
                 }
             )]
         );
+    }
+
+    /// `search_app` with chat `a` open in message selection, holding `a1` and a newer `a2`.
+    fn selecting_in_a() -> App {
+        let mut app = search_app();
+        let mut a2 = message(Network::Teams, "a", "a2", 1_500, "Alex Example", false);
+        a2.text = "lunch?".into();
+        app.handle_event(Event::Messages {
+            network: Network::Teams,
+            chat_id: "a".into(),
+            messages: vec![
+                message(Network::Teams, "a", "a1", 1_000, "Alex Example", false),
+                a2,
+            ],
+        });
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(app.active().focus, Focus::Select);
+        assert_eq!(app.active().sel_msg.as_deref(), Some("a2"));
+        app
+    }
+
+    #[test]
+    fn slash_in_selection_searches_the_open_chat_only_and_enter_selects_the_hit() {
+        let mut app = selecting_in_a();
+        let out = ch(&mut app, '/');
+        assert!(out.is_empty());
+        let s = app.search().expect("the box opens");
+        assert_eq!(
+            s.scope.as_ref().map(|c| c.title.as_str()),
+            Some("Alex Example")
+        );
+        assert_eq!(app.context(), Context::Popup);
+        // "budget" is in chats a, b, h and on WhatsApp: only a's hit shows.
+        typed(&mut app, "budget");
+        let ids: Vec<&str> = app
+            .search()
+            .unwrap()
+            .hits
+            .iter()
+            .map(|h| h.message_id.as_str())
+            .collect();
+        assert_eq!(ids, ["a1"]);
+        let out = press(&mut app, KeyCode::Enter);
+        assert!(out.is_empty(), "the chat is open already: {out:?}");
+        assert!(app.search().is_none());
+        assert_eq!(app.active().focus, Focus::Select);
+        assert_eq!(app.active().sel_msg.as_deref(), Some("a1"));
+        // Ctrl+O: back where the search started.
+        app.handle_key(key_with(KeyCode::Char('o'), KeyModifiers::CONTROL));
+        assert_eq!(app.active().sel_msg.as_deref(), Some("a2"));
+        // Esc closes the box with the selection where it was.
+        ch(&mut app, '/');
+        press(&mut app, KeyCode::Esc);
+        assert!(app.search().is_none());
+        assert_eq!(app.active().sel_msg.as_deref(), Some("a2"));
+    }
+
+    #[test]
+    fn slash_still_filters_the_chat_list_and_types_in_the_message_box() {
+        let mut app = selecting_in_a();
+        press(&mut app, KeyCode::Esc);
+        assert_eq!(app.context(), Context::List);
+        ch(&mut app, '/');
+        assert!(app.search().is_none());
+        assert_eq!(app.context(), Context::Filter);
+        press(&mut app, KeyCode::Esc);
+        press(&mut app, KeyCode::Char('i'));
+        assert_eq!(app.context(), Context::Composer);
+        ch(&mut app, '/');
+        assert!(app.search().is_none());
+        assert_eq!(app.active().draft(), "/");
+    }
+
+    #[test]
+    fn the_searchchat_command_needs_an_open_chat() {
+        let mut app = search_app();
+        assert!(app.active().open.is_none());
+        app.run_cmd(crate::commands::CmdId::SearchChat, None);
+        assert!(app.search().is_none());
+        assert_eq!(
+            app.current_notice().map(|n| n.text.as_str()),
+            Some("SEARCHCHAT - open a chat first")
+        );
+        let mut app = selecting_in_a();
+        app.run_cmd(crate::commands::CmdId::SearchChat, None);
+        assert!(app.search().is_some_and(|s| s.scope.is_some()));
+    }
+
+    #[test]
+    fn search_chat_follows_a_rebinding() {
+        let mut settings = Settings::default();
+        settings
+            .keys
+            .bindings
+            .entry("select".into())
+            .or_default()
+            .insert("f".into(), "search_chat".into());
+        let mut app = search_app();
+        app.apply_settings(settings);
+        app.handle_event(Event::Messages {
+            network: Network::Teams,
+            chat_id: "a".into(),
+            messages: vec![message(
+                Network::Teams,
+                "a",
+                "a1",
+                1_000,
+                "Alex Example",
+                false,
+            )],
+        });
+        press(&mut app, KeyCode::Enter);
+        ch(&mut app, 'f');
+        assert!(app.search().is_some_and(|s| s.scope.is_some()));
     }
 
     #[test]

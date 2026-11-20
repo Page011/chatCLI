@@ -4,9 +4,9 @@
 ║Commands                              ║
 ║:settings        theme, layout, keys …║
 ║:search          search every stored …║
+║:searchchat      SEARCHCHAT - open a …║
 ║Chats                                 ║
 ║Release Planning for the Autumn Quart…║
-║                                      ║
 ║                                      ║
 ╚══════════════════════════════════════╝
 Up/Down choose  Esc close  Enter run
@@ -21,5 +21,7 @@ row 4 cols 1-17: fg=Reset bg=Reset BOLD | REVERSED
 row 4 cols 18-38: fg=Reset bg=Reset BOLD | DIM | REVERSED
 row 5 cols 1-16: fg=Reset bg=Reset BOLD
 row 5 cols 18-38: fg=Reset bg=Reset DIM
-row 6 cols 1-5: fg=Reset bg=Reset BOLD
+row 6 cols 1-16: fg=DarkGray bg=Reset NONE
+row 6 cols 18-38: fg=DarkGray bg=Reset NONE
+row 7 cols 1-5: fg=Reset bg=Reset BOLD
 row 11 cols 0-35: fg=Reset bg=Reset DIM

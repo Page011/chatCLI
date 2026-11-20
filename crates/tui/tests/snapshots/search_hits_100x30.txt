@@ -27,7 +27,7 @@
 ║                                                                                                  ║
 ║2 of 3 hits                                                                                       ║
 ╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
-Type to search  Up/Down choose  Enter open chat  Esc close
+Type to search  Up/Down choose  Enter go to message  Esc close
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -48,4 +48,4 @@ row 5 cols 10-31: fg=Reset bg=Reset BOLD
 row 5 cols 33-40: fg=DarkGray bg=Reset NONE
 row 5 cols 58-63: fg=Reset bg=Reset BOLD
 row 27 cols 1-11: fg=Reset bg=Reset DIM
-row 29 cols 0-57: fg=Reset bg=Reset DIM
+row 29 cols 0-61: fg=Reset bg=Reset DIM

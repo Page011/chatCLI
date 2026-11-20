@@ -1634,6 +1634,7 @@ impl App {
             Action::ViewImage if ctx == Context::Select => return self.view_image(n),
             Action::SelectMessages if !panel => return self.enter_select(n),
             Action::Search => self.open_search(),
+            Action::SearchChat if !panel => self.open_chat_search(n),
             Action::NextUnread if !panel => self.jump_unread(n, 1),
             Action::PrevUnread if !panel => self.jump_unread(n, -1),
             Action::MarkAllRead if !panel => self.ask_mark_all_read(n),
@@ -5300,9 +5301,9 @@ mod tests {
         let p = app.popup().expect("commands popup");
         assert_eq!(p.title, COMMANDS_TITLE);
         let labels: Vec<&str> = p.items.iter().map(|i| i.label.trim_end()).collect();
-        assert_eq!(&labels[..2], [":settings", ":search"]);
+        assert_eq!(&labels[..3], [":settings", ":search", ":searchchat"]);
         assert!(
-            p.items[2..].iter().all(|i| i.command.is_none()) && p.items.len() > 2,
+            p.items[3..].iter().all(|i| i.command.is_none()) && p.items.len() > 3,
             "emoji follow the commands: {labels:?}"
         );
         assert_eq!(p.items[0].label.trim_end(), ":settings");

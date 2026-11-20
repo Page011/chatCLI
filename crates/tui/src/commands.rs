@@ -10,6 +10,7 @@ pub(crate) enum CmdId {
     Layout,
     Notifications,
     Search,
+    SearchChat,
     Refresh,
     ReadAll,
     SignIn,
@@ -69,6 +70,12 @@ pub(crate) const COMMANDS: &[Cmd] = &[
         "search",
         &["find"],
         "search every stored message",
+    ),
+    cmd(
+        CmdId::SearchChat,
+        "searchchat",
+        &["findchat", "chatsearch"],
+        "search the open chat",
     ),
     cmd(CmdId::Refresh, "refresh", &[], "reload the chat list"),
     cmd(
@@ -233,7 +240,10 @@ mod tests {
         let ids = |w: &str| -> Vec<CmdId> { typed_matches(w).iter().map(|c| c.id).collect() };
         assert_eq!(ids("").len(), COMMANDS.len());
         assert_eq!(ids("he"), [CmdId::Help]);
-        assert_eq!(ids("se"), [CmdId::Settings, CmdId::Search]);
+        assert_eq!(
+            ids("se"),
+            [CmdId::Settings, CmdId::Search, CmdId::SearchChat]
+        );
         // Whole aliases, one letter or more.
         assert_eq!(ids("q"), [CmdId::Quit]);
         assert_eq!(ids("h"), [CmdId::Help]);

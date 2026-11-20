@@ -7,7 +7,7 @@
 ║This help                             ║
 ║Home      Top                         ║
 ║End       Bottom                      ║
-║lines 87-92 of 92                     ║
+║lines 89-94 of 94                     ║
 ╚══════════════════════════════════════╝
 Esc close  Up/Down scroll
 --- styled runs (everything else is default style) ---

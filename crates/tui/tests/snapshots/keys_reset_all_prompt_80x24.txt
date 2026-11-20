@@ -1,16 +1,16 @@
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ┌ Settings ──────┐╔ Keys - Message selection ══════════════════════════════════╗
-│Appearance      │║Top                 Home                                    ║
-│Layout          │║Bottom              End                                     ║
-│Notifications   │║Screen middle       M                                       ║
-│Media           │║Reply               r                                       ║
-│Teams           │║React               e                                       ║
-│WhatsApp        │║Edit                c                                       ║
-│Keys            │║Delete              x, d                                    ║
-│About           │║Open link           u                                       ║
-│                │║Open media          o                                       ║
+│Appearance      │║Bottom              End                                     ║
+│Layout          │║Screen middle       M                                       ║
+│Notifications   │║Reply               r                                       ║
+│Media           │║React               e                                       ║
+│Teams           │║Edit                c                                       ║
+│WhatsApp        │║Delete              x, d                                    ║
+│Keys            │║Open link           u                                       ║
+│About           │║Open media          o                                       ║
 │                │║View image          v                                       ║
 │                │║Copy                y                                       ║
+│                │║Search chat         /                                       ║
 │                │║Jump back           Ctrl+O                                  ║
 │                │║Confirm (link, delete, mark read)                           ║
 │                │║Confirm yes         y                                       ║

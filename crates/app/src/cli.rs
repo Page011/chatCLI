@@ -7,7 +7,7 @@ use std::path::Path;
 use chatcli_core::media::MediaCache;
 use chatcli_core::model::Network;
 use chatcli_core::settings::{self, LoadReport, SettingsProblem, Severity};
-use chatcli_core::store::{SearchHit, Store};
+use chatcli_core::store::{SearchHit, SearchScope, Store};
 use chatcli_core::{config, paths, Result};
 use chatcli_teams::{auth, graph::Graph, graph::MAX_PAGE};
 
@@ -218,7 +218,7 @@ fn search(text: &str) -> Result<()> {
     if !db.exists() {
         return Err("No store yet: start chatcli once, then search.".to_string());
     }
-    let hits = Store::open_read_only(&db)?.search(text, None, SEARCH_LIMIT)?;
+    let hits = Store::open_read_only(&db)?.search(text, SearchScope::All, SEARCH_LIMIT)?;
     for line in hit_lines(&hits) {
         println!("{line}");
     }

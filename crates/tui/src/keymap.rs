@@ -189,6 +189,7 @@ actions! {
     Hide "hide" "hide the selected chat from the list, or show it again",
     ShowHidden "show_hidden" "show or hide the chats you hid",
     Search "search" "search every message stored on this PC, both networks",
+    SearchChat "search_chat" "search the messages of the open chat; Enter selects the one found",
     CommandBar "command_bar" "open the command bar: commands and chats",
     Settings "settings" "open the settings screen",
 }
@@ -592,6 +593,7 @@ const OWN: &[Row] = &[
     (Context::Select, "o", Action::OpenMedia),
     (Context::Select, "v", Action::ViewImage),
     (Context::Select, "y", Action::Copy),
+    (Context::Select, "/", Action::SearchChat),
     (Context::Select, "ctrl+o", Action::JumpBack),
     // The message box (its editing keys are in `common`).
     (Context::Composer, "enter", Action::Send),
@@ -1432,6 +1434,7 @@ mod tests {
             (Select, "x", Delete),
             (Select, "d", Delete),
             (Select, "o", OpenMedia),
+            (Select, "/", SearchChat),
             (Confirm, "y", ConfirmYes),
             (Confirm, "n", ConfirmNo),
             (Confirm, "esc", Back),
@@ -1453,7 +1456,6 @@ mod tests {
             (Context::List, "M"),
             (Context::List, "x"),
             (Context::Select, "E"),
-            (Context::Select, "/"),
             (Context::Popup, "tab"),
             (Context::Help, "q"),
             (Context::Help, "?"),
