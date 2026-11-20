@@ -168,7 +168,7 @@ actions! {
     OpenLink "open_link" "open a link from the selected message (chat list: from the newest message that has one)",
     ConfirmYes "confirm_yes" "yes: open the link, delete the message, send the file or mark all read",
     ConfirmNo "confirm_no" "no, do not open it, delete it or send it",
-    JumpBack "jump_back" "back to the message selected before the last big jump (G, g, H, M, L)",
+    JumpBack "jump_back" "back to where the last jump started (G, g, H, M, L, a search hit)",
     SelectMessages "select_messages" "select a message in the open chat",
     Reply "reply" "reply to the selected message (quote it)",
     CancelReply "cancel_reply" "drop the reply or edit in the message box (back does it too)",

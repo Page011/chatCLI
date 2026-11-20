@@ -314,7 +314,7 @@ Message selection (`Enter` on a chat, or `Esc` from the message box). The footer
 |---|---|
 | `Up` / `Down`, `k` / `j`, `PgUp` / `PgDn`, `g` / `G`, `Home` / `End` | Move the selection. Up from the oldest message held loads older ones. With the newest message selected, a new one takes the selection with it |
 | `H` / `M` / `L` | The first / middle / last message on screen |
-| `Ctrl+O` | Back to the message selected before the last big jump (`G`, `g`, `H`, `M`, `L`); again for the one before |
+| `Ctrl+O` | Back to the message selected before the last big jump in this chat (`G`, `g`, `H`, `M`, `L`, a search hit in it); again for the one before |
 | `i` | To the message box |
 | `Esc`, `h` or `Left` | Back to the chat list |
 | `r` | Reply: quote this message |
@@ -507,7 +507,7 @@ A desktop notification appears for a new incoming message when chatcli's window 
 
 ### Search
 
-`Ctrl+F` opens a search over every message stored on this PC, both networks, newest first. Type to search, `Up` / `Down` choose, `Enter` opens that chat, `Esc` closes. `chatcli search <text>` prints the hits. Only what is in `store.db` is searched: messages you have loaded or received, not the full history of a chat. Quotes, `*` and other odd input never raise an error.
+`Ctrl+F` opens a search over every message stored on this PC, both networks, newest first. Type to search, `Up` / `Down` choose, `Enter` opens that chat with the message selected, `Esc` closes. After `Enter` on a hit in the chat you were already selecting in, `Ctrl+O` goes back to the message you had selected before. Places are kept per chat: after a hit in another chat, `Ctrl+O` there has nowhere earlier to go. A message far back in a long chat comes up with the messages around it; the newer ones load as you move or scroll down (`G` still goes straight to the newest). `chatcli search <text>` prints the hits. Only what is in `store.db` is searched: messages you have loaded or received, not the full history of a chat. Quotes, `*` and other odd input never raise an error.
 
 ### Doctor
 

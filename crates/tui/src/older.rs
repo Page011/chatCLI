@@ -24,15 +24,32 @@ impl Older {
     }
 }
 
+/// A send of yours the network has not confirmed (pending, or failed): it has only a local id,
+/// is in no one else's order, and the store and the backends cannot place it.
+pub fn unconfirmed(m: &ChatMessage) -> bool {
+    m.from_me && matches!(m.state, MessageState::Pending | MessageState::Failed(_))
+}
+
 /// The (ts, id) the backend should load before: the oldest message that really exists on the
 /// network. A local send that is still pending or failed has no network id yet.
 pub fn request_point(msgs: &[ChatMessage]) -> Option<(i64, String)> {
     msgs.iter()
-        .filter(|m| {
-            !(m.from_me && matches!(m.state, MessageState::Pending | MessageState::Failed(_)))
-        })
+        .filter(|m| !unconfirmed(m))
         .min_by(|a, b| (a.ts, &a.id).cmp(&(b.ts, &b.id)))
         .map(|m| (m.ts, m.id.clone()))
+}
+
+/// Orders held messages the way the store and the backends page them: by time, then id. WhatsApp
+/// times are whole seconds, so time alone leaves messages of one second in arrival order, which can
+/// differ from the store's, and the gap left by a jump (`app/jump.rs`) is a `(ts, id)` edge. Your
+/// unconfirmed sends have only a local id: they go after the confirmed messages of their second,
+/// in the order you sent them (the sort is stable).
+pub fn sort_messages(list: &mut [ChatMessage]) {
+    fn rank(m: &ChatMessage) -> (i64, bool, Option<&str>) {
+        let local = unconfirmed(m);
+        (m.ts, local, (!local).then_some(m.id.as_str()))
+    }
+    list.sort_by(|a, b| rank(a).cmp(&rank(b)));
 }
 
 /// Puts an older batch in front of what is held. Messages already held win (they may have
@@ -48,8 +65,7 @@ pub fn merge_older(held: Vec<ChatMessage>, batch: Vec<ChatMessage>) -> (Vec<Chat
     }
     let added = fresh.len();
     fresh.extend(held);
-    // Stable: equal times keep the older batch first.
-    fresh.sort_by_key(|m| m.ts);
+    sort_messages(&mut fresh);
     (fresh, added)
 }
 

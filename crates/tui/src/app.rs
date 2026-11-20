@@ -4,6 +4,7 @@
 
 pub(crate) mod cmds;
 pub(crate) mod everyday;
+pub(crate) mod jump;
 pub(crate) mod media;
 pub(crate) mod mouse;
 pub(crate) mod msg;
@@ -136,6 +137,10 @@ pub(crate) struct NetState {
     /// Where the selection was before each big jump (`G`, `g`, `H`, `M`, `L`), newest last, as
     /// (chat id, message id). `jump_back` (Ctrl+O) walks back through it.
     pub(crate) jumps: Vec<(String, String)>,
+    /// Per chat id: the held message after which newer messages are left out, because a jump far
+    /// back (a search hit) loaded only a window around its message. Moving down to it reads the
+    /// next page from the store (`app/jump.rs`).
+    pub(crate) gaps: HashMap<String, (i64, String)>,
     /// A reply or an edit being composed, per chat id (shown above the message box).
     pub(crate) targets: HashMap<String, Target>,
     /// What the backend can do now. All false until its first `Capabilities` event.
@@ -154,6 +159,9 @@ pub(crate) struct NetState {
     pub progress: HashMap<String, (u64, u64)>,
     /// Loading older history, per chat id (absent = idle).
     pub(crate) older: HashMap<String, Older>,
+    /// Where the last older-history request started, per chat id: the oldest message held when it
+    /// was asked. An answer for another start (a jump replaced the window meanwhile) is stale.
+    pub(crate) older_from: HashMap<String, (i64, String)>,
     /// Who is typing now, per chat id (WhatsApp only).
     pub(crate) typing: HashMap<String, Typers>,
     /// How far everyone else has read and received your messages, per chat id (the last
@@ -195,6 +203,7 @@ impl NetState {
             sel_msg: None,
             select_on_load: None,
             jumps: Vec::new(),
+            gaps: HashMap::new(),
             targets: HashMap::new(),
             caps: Capabilities::default(),
             members: HashMap::new(),
@@ -204,6 +213,7 @@ impl NetState {
             pending: HashMap::new(),
             progress: HashMap::new(),
             older: HashMap::new(),
+            older_from: HashMap::new(),
             typing: HashMap::new(),
             receipts: HashMap::new(),
             typed_at: HashMap::new(),
@@ -484,8 +494,7 @@ fn merge_history(held: Vec<ChatMessage>, batch: Vec<ChatMessage>) -> Vec<ChatMes
             if in_batch.contains(&m.id) {
                 return false;
             }
-            let unresolved =
-                m.from_me && matches!(m.state, MessageState::Pending | MessageState::Failed(_));
+            let unresolved = crate::older::unconfirmed(m);
             let older = oldest
                 .as_ref()
                 .is_none_or(|(ts, id)| (m.ts, m.id.as_str()) < (*ts, id.as_str()));
@@ -493,7 +502,7 @@ fn merge_history(held: Vec<ChatMessage>, batch: Vec<ChatMessage>) -> Vec<ChatMes
         })
         .collect();
     out.extend(batch);
-    out.sort_by_key(|m| m.ts);
+    crate::older::sort_messages(&mut out);
     out
 }
 
@@ -503,7 +512,7 @@ fn upsert_message(list: &mut Vec<ChatMessage>, m: ChatMessage) {
         Some(slot) => *slot = m,
         None => list.push(m),
     }
-    list.sort_by_key(|x| x.ts);
+    crate::older::sort_messages(list);
 }
 
 impl App {
@@ -1067,6 +1076,9 @@ impl App {
         let max = self.convo_lines(n).saturating_sub(self.convo_size(n).1) as isize;
         let ns = self.ns_mut(n);
         ns.scroll = (ns.scroll as isize + delta).clamp(0, max) as usize;
+        if delta != 0 {
+            self.fill_gap_in_view(n, delta > 0);
+        }
     }
 
     fn list_rows(&self, n: Network) -> usize {
@@ -1174,7 +1186,7 @@ impl App {
                 mut messages,
             } => {
                 messages.iter_mut().for_each(clean_message);
-                messages.sort_by_key(|m| m.ts);
+                crate::older::sort_messages(&mut messages);
                 let follow = self.selecting_newest(network, &chat_id);
                 // An older message highlighted: newer messages in the batch (a catch-up) must not
                 // push it up the screen. Older history above does not move it.
@@ -1182,11 +1194,17 @@ impl App {
                 let below = (is_open && !follow)
                     .then(|| self.lines_below_selection(network))
                     .flatten();
-                let held = self
-                    .ns_mut(network)
-                    .messages
-                    .entry(chat_id.clone())
-                    .or_default();
+                let ns = self.ns_mut(network);
+                // A batch that starts at or before a gap fills it: the gap is gone.
+                let covered = messages.first().is_some_and(|first| {
+                    ns.gaps
+                        .get(&chat_id)
+                        .is_some_and(|(ts, id)| (first.ts, first.id.as_str()) <= (*ts, id.as_str()))
+                });
+                if covered {
+                    ns.gaps.remove(&chat_id);
+                }
+                let held = ns.messages.entry(chat_id.clone()).or_default();
                 *held = merge_history(std::mem::take(held), messages);
                 if is_open {
                     out.extend(self.auto_images(network));
@@ -1221,10 +1239,14 @@ impl App {
                 let anchored =
                     !follow && (self.ns(n).scroll > 0 || self.ns(n).focus == Focus::Select);
                 let before = (is_open && anchored).then(|| self.convo_lines(n));
-                upsert_message(
-                    self.ns_mut(n).messages.entry(chat_id.clone()).or_default(),
-                    m,
-                );
+                // A message timed before what is held, or inside a jump's gap (an offline
+                // redelivery), stays in the store until its stretch loads (`takes_live`).
+                if self.holds(n, &chat_id, &m.id) || self.takes_live(n, &m) {
+                    upsert_message(
+                        self.ns_mut(n).messages.entry(chat_id.clone()).or_default(),
+                        m,
+                    );
+                }
                 if let Some(before) = before {
                     let added = self.convo_lines(n).saturating_sub(before);
                     self.ns_mut(n).scroll += added;
@@ -1289,7 +1311,12 @@ impl App {
             Event::MessageChanged(mut m) => {
                 clean_message(&mut m);
                 let (n, chat_id) = (m.network, m.chat_id.clone());
-                if let Some(list) = self.ns_mut(n).messages.get_mut(&chat_id) {
+                // A held message is replaced. One not held goes in when it fits (a redelivery
+                // of a stored message newer than what is held), not above what is loaded or in
+                // a jump's gap, where the gap and older history would take it for an edge
+                // (`takes_live`): it shows when its stretch loads.
+                let fits = self.holds(n, &chat_id, &m.id) || self.takes_live(n, &m);
+                if let Some(list) = self.ns_mut(n).messages.get_mut(&chat_id).filter(|_| fits) {
                     upsert_message(list, m);
                     self.keep_selection(n, &chat_id);
                 }

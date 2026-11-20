@@ -7,6 +7,7 @@ use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use ratatui::layout::Position;
 use unicode_segmentation::UnicodeSegmentation;
 
+use super::jump::Fill;
 use super::{too_long, App, Focus, Out, Prompt};
 use crate::composer::{self, Composer};
 use crate::keymap::Action;
@@ -147,7 +148,7 @@ const JUMPS_KEPT: usize = 50;
 impl App {
     // ---- selection (issue 11) ----
 
-    fn selectable_ids(&self, n: Network) -> Vec<String> {
+    pub(super) fn selectable_ids(&self, n: Network) -> Vec<String> {
         let ns = self.ns(n);
         ns.open
             .as_ref()
@@ -241,6 +242,15 @@ impl App {
     /// Moves the highlight. Page keys move by about a screenful of lines, always at least one
     /// message; every move ends with the highlight in view.
     pub(super) fn select_move(&mut self, n: Network, action: Action) -> Out {
+        // `bottom` with a gap that runs to the newest stored message: the newest held is not the
+        // chat's newest, so the newest stored page is read first (`G` means the newest).
+        if action == Action::Bottom && self.gap_open_ended(n) {
+            match self.fill_gap(n, true) {
+                Fill::Read => return self.select_move(n, action),
+                Fill::Failed => return Vec::new(),
+                Fill::Nothing => {}
+            }
+        }
         let ids = self.selectable_ids(n);
         if ids.is_empty() {
             return Vec::new();
@@ -307,6 +317,21 @@ impl App {
                 i
             }
         };
+        // One step over a gap left by a jump far back: read the next page of it from this side,
+        // then move again. `top` and `bottom` go to the ends without reading it.
+        let up = matches!(action, Action::Up | Action::PageUp | Action::ScreenTop);
+        if matches!(
+            action,
+            Action::Up | Action::Down | Action::PageUp | Action::PageDown
+        ) {
+            let down = matches!(action, Action::Down | Action::PageDown);
+            match self.fill_gap_before_move(n, &ids, cur, to, down) {
+                Fill::Read => return self.select_move(n, action),
+                // The gap could not be read: moving would skip it. The notice says why.
+                Fill::Failed => return Vec::new(),
+                Fill::Nothing => {}
+            }
+        }
         let big = matches!(
             action,
             Action::Top
@@ -320,6 +345,7 @@ impl App {
         }
         self.ns_mut(n).sel_msg = Some(ids[to].clone());
         self.ensure_sel_visible(n);
+        self.fill_gap_after_select(n, up);
         // Up, page up or first at the oldest message held: the user wants more history.
         let wants_older = to == 0 && matches!(action, Action::Up | Action::PageUp | Action::Top);
         if wants_older {
@@ -362,7 +388,7 @@ impl App {
     }
 
     /// Remembers `from` (in the open chat) before a big jump. The list keeps the last 50.
-    fn push_jump(&mut self, n: Network, from: String) {
+    pub(super) fn push_jump(&mut self, n: Network, from: String) {
         let ns = self.ns_mut(n);
         let Some(chat) = ns.open.clone() else {
             return;
@@ -374,22 +400,40 @@ impl App {
     }
 
     /// `jump_back` (Ctrl+O): the newest remembered place in this chat whose message can still be
-    /// selected. Places in other chats and messages that went away are dropped on the way.
+    /// selected. A place a later jump far back took out of the held messages is read from the
+    /// store again. Messages that went away are dropped on the way; other chats' places stay for
+    /// when that chat is open again.
     pub(super) fn jump_back(&mut self, n: Network) {
-        let ids = self.selectable_ids(n);
         let Some(open) = self.ns(n).open.clone() else {
             return;
         };
-        // This chat's places, newest first; a message that went away is dropped, other chats'
-        // places stay for when that chat is open again.
-        let jumps = &mut self.ns_mut(n).jumps;
-        while let Some(i) = jumps.iter().rposition(|(chat, _)| *chat == open) {
-            let (_, id) = jumps.remove(i);
-            if ids.contains(&id) {
+        while let Some(i) = self.ns(n).jumps.iter().rposition(|(chat, _)| *chat == open) {
+            let id = self.ns(n).jumps[i].1.clone();
+            // Read each time: a place read from the store below swaps the window, and with it
+            // what can be selected.
+            if self.selectable_ids(n).contains(&id) {
+                self.ns_mut(n).jumps.remove(i);
                 self.ns_mut(n).sel_msg = Some(id);
                 self.ensure_sel_visible(n);
+                self.fill_gap_after_select(n, false);
                 return;
             }
+            // A place is dropped only once it is known to be gone or unselectable. A store that
+            // cannot be read, or a window that cannot be loaded, keeps it for the next Ctrl+O.
+            let stored = match self.store.as_ref().map(|s| s.message(n, &open, &id)) {
+                Some(Err(e)) => return self.push_notice(n, &e, true),
+                Some(Ok(m)) => m.filter(selectable),
+                None => None,
+            };
+            let Some(m) = stored else {
+                self.ns_mut(n).jumps.remove(i);
+                continue;
+            };
+            if self.select_message_at(n, &m.id, m.ts, false) {
+                self.ns_mut(n).jumps.remove(i);
+            }
+            // Selected, or it could not be (the notice says why): either way this press is done.
+            return;
         }
         self.push_notice(n, "No earlier place to jump back to.", false);
     }

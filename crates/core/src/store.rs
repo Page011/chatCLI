@@ -645,6 +645,43 @@ impl Store {
         Ok(out)
     }
 
+    /// Messages from `from` (included) up to `to` (excluded; `None` = up to the newest), both
+    /// `(ts, id)`: the oldest `limit` of them, oldest first. A jump to a search hit reads the hit
+    /// and what follows it, then the next stretch each time the user moves down towards the
+    /// messages the TUI already holds. `limit` is clamped to 1..=200.
+    pub fn messages_range(
+        &self,
+        network: Network,
+        chat_id: &str,
+        from: (i64, &str),
+        to: Option<(i64, &str)>,
+        limit: u32,
+    ) -> Result<Vec<ChatMessage>> {
+        let limit = limit.clamp(1, 200);
+        let (to_ts, to_id) = to.unzip();
+        let conn = self.lock()?;
+        let mut out = {
+            let mut stmt = conn
+                .prepare(&format!(
+                    "SELECT {MESSAGE_COLS} FROM messages
+                     WHERE network = ?1 AND chat_id = ?2 AND (ts > ?3 OR (ts = ?3 AND id >= ?4))
+                       AND (?5 IS NULL OR ts < ?5 OR (ts = ?5 AND id < ?6))
+                     ORDER BY ts, id LIMIT ?7"
+                ))
+                .map_err(db_err("read messages"))?;
+            let rows = stmt
+                .query_map(
+                    params![network.key(), chat_id, from.0, from.1, to_ts, to_id, limit],
+                    |r| message_from_row(r, network, chat_id),
+                )
+                .map_err(db_err("read messages"))?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(db_err("read messages"))?
+        };
+        hydrate(&conn, &mut out)?;
+        Ok(out)
+    }
+
     /// The oldest stored message (`(ts, id)` order). WhatsApp needs it to ask for older history.
     pub fn oldest_message(&self, network: Network, chat_id: &str) -> Result<Option<ChatMessage>> {
         let conn = self.lock()?;
@@ -1738,7 +1775,7 @@ mod tests {
     }
 
     #[test]
-    fn messages_before_pages_back_in_ts_id_order_and_clamps() {
+    fn messages_before_and_range_read_in_ts_id_order_and_clamp() {
         let s = Store::open_in_memory().unwrap();
         // Same ts on b and c: the id breaks the tie.
         let all = [
@@ -1763,6 +1800,30 @@ mod tests {
             1,
             "limit 0 clamps to 1"
         );
+        // The range: from (included) up to (excluded), the oldest first, in (ts, id) order.
+        let range = |from: (i64, &str), to: Option<(i64, &str)>, limit| {
+            ids(s
+                .messages_range(Network::Teams, "c", from, to, limit)
+                .unwrap())
+        };
+        assert_eq!(range((2, "b"), None, 10), ["b", "c", "d"], "to the newest");
+        assert_eq!(range((2, "b"), Some((3, "d")), 10), ["b", "c"]);
+        assert_eq!(
+            range((2, "c"), Some((3, "d")), 10),
+            ["c"],
+            "the id breaks the tie"
+        );
+        assert_eq!(
+            range((1, "a"), None, 2),
+            ["a", "b"],
+            "the oldest of the range"
+        );
+        assert_eq!(range((1, "a"), None, 0), ["a"], "limit 0 clamps to 1");
+        assert!(range((3, "d"), Some((3, "d")), 10).is_empty());
+        assert!(s
+            .messages_range(Network::Teams, "other", (0, ""), None, 10)
+            .unwrap()
+            .is_empty());
         let oldest = s.oldest_message(Network::Teams, "c").unwrap().unwrap();
         assert_eq!(oldest.id, "a");
         assert!(s.oldest_message(Network::Teams, "none").unwrap().is_none());

@@ -192,6 +192,8 @@ impl App {
             return Vec::new();
         };
         ns.older.insert(chat_id.clone(), Older::Loading);
+        ns.older_from
+            .insert(chat_id.clone(), (before_ts, before_id.clone()));
         // The user is at the top: scroll to the new top line, so `loading older...` is seen.
         let max = self.convo_lines(n).saturating_sub(self.convo_size(n).1);
         self.ns_mut(n).scroll = max;
@@ -219,6 +221,25 @@ impl App {
         at_start: bool,
     ) {
         messages.iter_mut().for_each(super::clean_message);
+        // The answer belongs to the request only while the held messages still start where it
+        // was asked from. Otherwise (a jump replaced the window meanwhile) it is stale, empty or
+        // not: an "at the start" would be about the old window. The next scroll asks again.
+        let asked = self.ns_mut(n).older_from.remove(&chat_id);
+        let now = self
+            .ns(n)
+            .messages
+            .get(&chat_id)
+            .and_then(|l| older::request_point(l));
+        let stale = asked.is_some() && now.is_some() && asked != now;
+        let fits = if stale {
+            None
+        } else {
+            self.older_page_fit(n, &chat_id, messages)
+        };
+        let Some(messages) = fits else {
+            self.ns_mut(n).older.insert(chat_id, Older::Idle);
+            return;
+        };
         let ns = self.ns_mut(n);
         ns.older.insert(
             chat_id.clone(),
@@ -523,8 +544,7 @@ impl App {
         });
     }
 
-    /// Enter on a hit: open its chat, like choosing it in the list. The conversation shows the
-    /// chat as the backend gives it (jumping to a far-back hit is out of scope).
+    /// Enter on a hit: open its chat with the hit selected (`select_message_at`).
     fn search_open_hit(&mut self) -> Out {
         let Some(hit) = self.search.as_ref().and_then(|s| s.chosen().cloned()) else {
             return Vec::new();
@@ -550,6 +570,12 @@ impl App {
             self.push_notice(n, "That chat is no longer in your list.", false);
             return Vec::new();
         };
+        // Already selecting in that chat: only the selection moves, and Ctrl+O comes back.
+        let ns = self.ns(n);
+        if ns.focus == Focus::Select && ns.open.as_deref() == Some(hit.chat_id.as_str()) {
+            self.select_message_at(n, &hit.message_id, hit.ts, true);
+            return Vec::new();
+        }
         let ns = self.ns_mut(n);
         ns.filter.clear();
         // A hidden chat has to be on the list to be selected.
@@ -558,7 +584,11 @@ impl App {
         ns.focus = Focus::List;
         self.fix_selection(n, true);
         self.show(n, hit.chat_id.clone());
-        self.commit(n)
+        let out = self.commit(n);
+        // Like Enter on the chat in the list, then the hit selected instead of the newest message.
+        // A hit the store no longer has leaves the message box, with a notice.
+        self.select_message_at(n, &hit.message_id, hit.ts, false);
+        out
     }
 
     // ---- events of this stage ----
@@ -1515,7 +1545,7 @@ mod tests {
     }
 
     #[test]
-    fn enter_on_a_hit_opens_its_chat_on_its_network() {
+    fn enter_on_a_hit_opens_its_chat_on_its_network_with_the_hit_selected() {
         let mut app = search_app();
         ctrl_f(&mut app);
         typed(&mut app, "budget");
@@ -1525,7 +1555,9 @@ mod tests {
         assert_eq!(app.active, Network::Teams);
         assert_eq!(app.active().selected.as_deref(), Some("b"));
         assert_eq!(app.active().open.as_deref(), Some("b"));
-        assert_eq!(app.active().focus, Focus::Composer);
+        // The hit is selected (it was read from the store: the chat held nothing yet).
+        assert_eq!(app.active().focus, Focus::Select);
+        assert_eq!(app.active().sel_msg.as_deref(), Some("b1"));
         assert_eq!(
             out,
             vec![(
@@ -1633,7 +1665,9 @@ mod tests {
         let out = app.handle_mouse(mouse_at(left, g.list.x + 2, g.list.y + 1));
         assert!(app.search().is_none());
         assert_eq!(app.active().open.as_deref(), Some("b"));
-        assert_eq!(app.active().focus, Focus::Composer);
+        // The hit is selected (it was read from the store: the chat held nothing yet).
+        assert_eq!(app.active().focus, Focus::Select);
+        assert_eq!(app.active().sel_msg.as_deref(), Some("b1"));
         assert_eq!(
             out,
             vec![(

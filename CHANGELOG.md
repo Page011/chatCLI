@@ -71,6 +71,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `Enter` on a search hit (`Ctrl+F`) opened its chat in the message box at the newest message. It now selects the message that was found, reading it and the messages around it from the local store when it is far back; the newer ones load as you move or scroll down. In the chat you were already in, `Ctrl+O` goes back to where you were (#77).
 - WhatsApp read and delivered marks are no longer stale after chatcli was closed or offline. A receipt that arrived before the message it was about (common while catching up on reconnect) was thrown away; it is now kept and applied when the message arrives (#83).
 - Entering a chat whose messages had not loaded yet (`Enter`, `l` or `Right` straight after landing on it, or a chat never opened before) left you in the message box. The newest message is now selected when the messages arrive, unless you pressed a key, clicked or pasted in the meantime.
 - An emoji that ends in an emoji-style selector (U+FE0F), such as ♻️ or ❤️, no longer pushes the rest of its row one column right or leaves stray characters behind when you switch chats or select a message. Ratatui is pinned to a git revision with the fix (ratatui#2721, ratatui#2686) until its next release.

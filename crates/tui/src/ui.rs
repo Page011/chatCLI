@@ -1420,6 +1420,9 @@ fn draw_sidebar(f: &mut Frame, app: &App, lay: &Layout) {
     }
 }
 
+/// The line under the last message of a window a jump far back loaded (`NetState::gaps`).
+pub(crate) const GAP_NOTE: &str = "newer messages load as you go down";
+
 /// Where one message sits in the wrapped conversation: lines `start..end` (its quote, body, tags
 /// and reactions, not the day separator above it).
 pub(crate) struct MsgSpan {
@@ -1646,6 +1649,9 @@ pub(crate) fn message_layout(
         .read
         .and_then(|up_to| msgs.iter().rev().find(|m| sent_by_me(m) && m.ts <= up_to))
         .map(|m| m.id.as_str());
+    let gap = chat_id
+        .and_then(|c| ns.gaps.get(c))
+        .map(|(_, id)| id.as_str());
     let mut spans: Vec<MsgSpan> = Vec::new();
     let mut last_day = None;
     let mut prev: Option<&ChatMessage> = None;
@@ -1943,6 +1949,10 @@ pub(crate) fn message_layout(
                 }
             }),
         });
+        // A jump far back left the newer messages after this one out: they load on the way down.
+        if gap == Some(m.id.as_str()) {
+            lines.push(Line::from(Span::styled(GAP_NOTE, t.hint)).alignment(Alignment::Center));
+        }
     }
     (lines, spans)
 }
