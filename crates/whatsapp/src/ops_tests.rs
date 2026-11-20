@@ -3342,6 +3342,91 @@ async fn a_first_receipt_counts_everything_stored_before_it_as_delivered() {
     assert!(got[0].2.is_some_and(|d| d >= 2000), "{got:?}");
 }
 
+/// #83: on a reconnect the offline queue hands receipts over at once but decrypts messages
+/// later, so a read can name a message sent from the phone before that message is stored.
+#[tokio::test]
+async fn a_receipt_that_beats_its_message_is_applied_when_the_message_is_stored() {
+    let (mut b, mut erx, _rx) = backend();
+    b.on_event(&receipt(ALEX, ALEX, &["p1"], ReceiptType::Delivered))
+        .await;
+    b.on_event(&receipt(ALEX, ALEX, &["p1"], ReceiptType::Read))
+        .await;
+    assert!(receipts(&drain(&mut erx)).is_empty());
+
+    b.on_message(&inbound(
+        ALEX,
+        OWN_JID,
+        "p1",
+        true,
+        1_700_000_000,
+        text("hi"),
+        "",
+    ))
+    .await;
+    let at = 1_700_000_000_000;
+    assert_eq!(receipts(&drain(&mut erx)), marks(ALEX, Some(at), Some(at)));
+    assert_eq!(
+        b.store.read_marks(NET, ALEX).unwrap(),
+        [("15550100001".to_string(), at)]
+    );
+    // Applied once: a redelivery of the message changes nothing.
+    b.on_message(&inbound(
+        ALEX,
+        OWN_JID,
+        "p1",
+        true,
+        1_700_000_000,
+        text("hi"),
+        "",
+    ))
+    .await;
+    assert!(receipts(&drain(&mut erx)).is_empty());
+}
+
+#[tokio::test]
+async fn a_receipt_naming_a_stored_and_a_missing_message_ends_on_the_newer() {
+    let (mut b, mut erx, _rx) = backend();
+    tracked(&b, ALEX);
+    // m1 is stored, p3 (newer) is still on its way.
+    b.on_event(&receipt(ALEX, ALEX, &["m1", "p3"], ReceiptType::Read))
+        .await;
+    assert_eq!(
+        receipts(&drain(&mut erx)),
+        marks(ALEX, Some(1000), Some(1000))
+    );
+    b.on_message(&inbound(ALEX, OWN_JID, "p3", true, 3, text("later"), ""))
+        .await;
+    assert_eq!(
+        receipts(&drain(&mut erx)),
+        marks(ALEX, Some(3000), Some(3000))
+    );
+}
+
+#[tokio::test]
+async fn a_parked_receipt_is_applied_when_a_history_chunk_brings_the_message() {
+    let (mut b, mut erx, _rx) = backend();
+    b.on_event(&receipt(ALEX, ALEX, &["h1"], ReceiptType::Read))
+        .await;
+    let mut hs = history_of("h1", "from the phone", 5);
+    let key = hs.conversations[0].messages[0]
+        .message
+        .as_option_mut()
+        .unwrap()
+        .key
+        .as_option_mut()
+        .unwrap();
+    key.from_me = Some(true);
+    apply_history(&b.store, &b.names, &hs).unwrap();
+    drain(&mut erx);
+    b.apply_parked_from_history();
+    let got = receipts(&drain(&mut erx));
+    assert_eq!(got.len(), 1, "{got:?}");
+    assert_eq!((got[0].0.as_str(), got[0].1), (ALEX, Some(5000)));
+    // Nothing left waiting: a second chunk applies nothing again.
+    b.apply_parked_from_history();
+    assert!(receipts(&drain(&mut erx)).is_empty());
+}
+
 #[tokio::test]
 async fn a_group_is_read_and_delivered_once_every_member_is_by_either_address() {
     let (mut b, mut erx, mut rx) = backend();

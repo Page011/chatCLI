@@ -332,6 +332,9 @@ pub(crate) struct Backend {
     typing_in: HashSet<(String, String)>,
     /// Groups whose members were fetched this run for read ticks.
     read_members_asked: HashSet<String>,
+    /// Receipts naming one of our messages before it was stored (the offline queue hands
+    /// receipts over at once but decrypts messages later), applied when it is (#83).
+    parked_receipts: receipts::Parked,
 }
 
 impl Backend {
@@ -365,6 +368,7 @@ impl Backend {
             typing_open: HashSet::new(),
             typing_in: HashSet::new(),
             read_members_asked: HashSet::new(),
+            parked_receipts: receipts::Parked::default(),
         }
     }
 
@@ -653,7 +657,7 @@ impl Backend {
                     client_id: s.client_id,
                     message: msg.clone(),
                 });
-                self.own_message_stored(&s.chat_id, msg.ts);
+                self.own_message_stored(&s.chat_id, &msg.id, msg.ts);
                 if let Ok(jid) = s.chat_id.parse::<Jid>() {
                     self.update_chat(&jid, &msg, false, "").await;
                 }
@@ -1278,6 +1282,7 @@ impl Backend {
                 if changed {
                     self.schedule_retitle();
                 }
+                self.apply_parked_from_history();
                 self.emit_chats();
                 self.after_history(&o, kind == ON_DEMAND_SYNC, session_id.as_deref());
             }
@@ -1673,7 +1678,7 @@ impl Backend {
         } else {
             self.emit(Out::Message(msg.clone()));
             if msg.from_me {
-                self.own_message_stored(&msg.chat_id, msg.ts);
+                self.own_message_stored(&msg.chat_id, &msg.id, msg.ts);
             }
         }
         self.update_chat(chat, &msg, !msg.from_me && !seen, push)
