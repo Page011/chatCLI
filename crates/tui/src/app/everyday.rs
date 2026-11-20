@@ -7,7 +7,7 @@
 
 use chatcli_core::model::{ChatFlag, ChatMessage, Command, Event, Network, Status};
 use chatcli_core::runtime::Toast;
-use chatcli_core::store::SearchHit;
+use chatcli_core::store::{SearchHit, Store};
 use ratatui::layout::Position;
 
 use super::{App, Focus, Out, Prompt};
@@ -530,6 +530,12 @@ impl App {
                 None
             }
         });
+    }
+
+    /// The search worker's own connection, to warm at start (`Store::warm_search`). None when it
+    /// has none: warming the UI thread's connection would hold its reads for a second.
+    pub fn search_warm_store(&self) -> Option<Store> {
+        self.search_reader.clone()
     }
 
     /// The query the worker should run next: the box's current text when it waits and no other

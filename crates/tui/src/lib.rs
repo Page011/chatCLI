@@ -278,6 +278,9 @@ fn show_toast(app: &mut App, ctx: &UiCtx, failed: &mut bool, toast: chatcli_core
     }
 }
 
+/// Seconds after start that the search index is read into the OS cache (`Store::warm_search`).
+const WARM_AFTER_SECS: u64 = 3;
+
 /// What a worker thread sends back to the loop.
 enum Internal {
     /// A thumbnail was decoded (or could not be).
@@ -459,6 +462,18 @@ pub async fn run(
     let mut app = App::with_ctx(Clock::system(), &ctx);
     // Search runs on a worker thread here, so typing never waits on the store.
     app.use_search_worker();
+    // The first search should not wait on the disk: read what it reads once, a moment after
+    // start (so it does not slow it down), into the OS cache.
+    // The wait is async, so quitting before it ends drops it rather than waiting for it.
+    if let Some(store) = app.search_warm_store() {
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(WARM_AFTER_SECS)).await;
+            let warmed = tokio::task::spawn_blocking(move || store.warm_search()).await;
+            if let Ok(Err(e)) = warmed {
+                log::error("tui", &format!("warming the search index: {e}"));
+            }
+        });
+    }
     let size = terminal
         .size()
         .map_err(|e| format!("Could not read the terminal size ({e}): restart chatcli."))?;

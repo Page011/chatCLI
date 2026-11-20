@@ -295,6 +295,24 @@ impl Store {
         Store::init(conn)
     }
 
+    /// Reads what a search reads (the full-text index, and the messages it joins), so the first
+    /// search of a run does not wait on the disk: the OS keeps the pages in its cache, which it
+    /// gives back under memory pressure. `substr` makes SQLite load each index block whole,
+    /// overflow pages too (`length` of a blob does not). On a 160 MB store that is an index of
+    /// 7.5 MB and the message rows; cold, the first one-letter search took 1.1 s instead of
+    /// 165 ms (debug build). It holds this connection while it reads: give it one of its own.
+    pub fn warm_search(&self) -> Result<()> {
+        let conn = self.lock()?;
+        conn.query_row(
+            "SELECT (SELECT count(*) FROM messages_fts_data WHERE substr(block, -1) IS NOT NULL),
+                    (SELECT count(*) FROM messages_fts_idx),
+                    (SELECT sum(length(text)) FROM messages)",
+            [],
+            |_| Ok(()),
+        )
+        .map_err(db_err("warm the search index"))
+    }
+
     /// A second, read-only connection to the same file, for a worker thread: a long read there
     /// never holds the lock this connection's reads wait on (WAL lets both read at once). An
     /// in-memory store has no file to open again: it shares this connection.
@@ -2008,6 +2026,7 @@ mod tests {
             .unwrap();
         let r = s.reader().unwrap();
         assert!(!Arc::ptr_eq(&s.conn, &r.conn));
+        r.warm_search().unwrap();
         // It reads while the other connection is held, and cannot write.
         let held = s.lock().unwrap();
         assert_eq!(r.search("harbour", SearchScope::All, 5).unwrap().len(), 1);

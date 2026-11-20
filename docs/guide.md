@@ -509,7 +509,7 @@ A desktop notification appears for a new incoming message when chatcli's window 
 
 ### Search
 
-`Ctrl+F` opens a search over every message stored on this PC, both networks, newest first. Type to search, `Up` / `Down` choose, `Enter` opens that chat with the message selected, `Esc` closes. The search runs in the background, so typing never waits: `Searching...` shows until the hits come. `chatcli search <text>` prints the hits. Only what is in `store.db` is searched: messages you have loaded or received, not the full history of a chat. Quotes, `*` and other odd input never raise an error.
+`Ctrl+F` opens a search over every message stored on this PC, both networks, newest first. Type to search, `Up` / `Down` choose, `Enter` opens that chat with the message selected, `Esc` closes. The search runs in the background, so typing never waits: `Searching...` shows until the hits come. A few seconds after chatcli starts it reads the search index once, so even the first search of the day does not wait on the disk. `chatcli search <text>` prints the hits. Only what is in `store.db` is searched: messages you have loaded or received, not the full history of a chat. Quotes, `*` and other odd input never raise an error.
 
 A typo is forgiven when nothing matches as typed: each word no message has is swapped for the nearest stored word with the same first letter (`budjet` finds *budget*, `tmorow` *tomorrow*), and the status row says `No exact match: 1 of 12 for "budget"`. Letters missing, doubled or swapped count less than a wrong one; words of one or two letters are never changed. `n` and `N` then step through the corrected words. `chatcli search` does the same.
 
