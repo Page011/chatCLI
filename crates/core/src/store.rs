@@ -181,6 +181,13 @@ pub struct SnippetPart {
     pub hit: bool,
 }
 
+/// One word `Store::correct_query` swapped: what was typed, and the stored word searched instead.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Correction {
+    pub from: String,
+    pub to: String,
+}
+
 /// Where `Store::search` looks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SearchScope<'a> {
@@ -286,6 +293,24 @@ impl Store {
     pub fn open(path: &Path) -> Result<Store> {
         let conn = Connection::open(path).map_err(db_err("open"))?;
         Store::init(conn)
+    }
+
+    /// Reads what a search reads (the full-text index, and the messages it joins), so the first
+    /// search of a run does not wait on the disk: the OS keeps the pages in its cache, which it
+    /// gives back under memory pressure. `substr` makes SQLite load each index block whole,
+    /// overflow pages too (`length` of a blob does not). On a 160 MB store that is an index of
+    /// 7.5 MB and the message rows; cold, the first one-letter search took 1.1 s instead of
+    /// 165 ms (debug build). It holds this connection while it reads: give it one of its own.
+    pub fn warm_search(&self) -> Result<()> {
+        let conn = self.lock()?;
+        conn.query_row(
+            "SELECT (SELECT count(*) FROM messages_fts_data WHERE substr(block, -1) IS NOT NULL),
+                    (SELECT count(*) FROM messages_fts_idx),
+                    (SELECT sum(length(text)) FROM messages)",
+            [],
+            |_| Ok(()),
+        )
+        .map_err(db_err("warm the search index"))
     }
 
     /// A second, read-only connection to the same file, for a worker thread: a long read there
@@ -1111,6 +1136,55 @@ impl Store {
         Ok(hits)
     }
 
+    /// Typo tolerance, for when `search` finds nothing: `query` with each word that no message in
+    /// `scope` has swapped for the nearest stored word (`fuzzy::closest`), and the swaps made.
+    /// The last word is the one being typed: it is kept when a stored word starts with it, and
+    /// otherwise swapped for the nearest start of one. `None` when no word could be swapped.
+    /// It reads FTS5's own vocabulary (no extra index), one first-letter range per word.
+    pub fn correct_query(
+        &self,
+        query: &str,
+        scope: SearchScope<'_>,
+    ) -> Result<Option<(String, Vec<Correction>)>> {
+        let words: Vec<&str> = query
+            .split_whitespace()
+            .filter(|w| w.chars().any(char::is_alphanumeric))
+            .collect();
+        let Some(last) = words.len().checked_sub(1) else {
+            return Ok(None);
+        };
+        let conn = self.lock()?;
+        conn.execute_batch(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS temp.messages_vocab
+             USING fts5vocab(main, 'messages_fts', 'row')",
+        )
+        .map_err(db_err("read the search words"))?;
+        let mut fixes = Vec::new();
+        let mut out = Vec::new();
+        for (i, raw) in words.iter().enumerate() {
+            let typing = i == last;
+            // Only a plain word: the index splits `don't` or `a.b` into pieces of its own.
+            let word = raw.to_lowercase();
+            let plain = word.chars().all(char::is_alphanumeric);
+            let fixed = if plain {
+                fix_word(&conn, &word, typing, &out, scope)?
+            } else {
+                None
+            };
+            match fixed {
+                Some(to) => {
+                    fixes.push(Correction {
+                        from: (*raw).to_string(),
+                        to: to.clone(),
+                    });
+                    out.push(to);
+                }
+                None => out.push((*raw).to_string()),
+            }
+        }
+        Ok((!fixes.is_empty()).then(|| (out.join(" "), fixes)))
+    }
+
     /// The match of `query` in one chat next to `from` (`(ts, id)`): the newest one before it
     /// (`older`), or the oldest one after it, as `(id, ts)`. `n` and `N` in message selection
     /// step through a search this way, past the hits the search box shows. Only sent messages,
@@ -1358,6 +1432,80 @@ impl Store {
         .map_err(db_err("write meta"))?;
         Ok(())
     }
+}
+
+/// Candidates `fix_word` tries in turn before giving up on a word.
+const FIX_TRIES: usize = 5;
+
+/// One word for `Store::correct_query`, lower-case: `None` when it stays (a message that can be
+/// shown has it, or, while `typing`, a word starting with it; or it is too short to correct), else
+/// the nearest stored word (or start of one, while typing) with the same first letter that a
+/// message that can be shown has, together with the words `before` it. FTS5's vocabulary also keeps the words of deleted messages, so
+/// each answer is checked against the messages themselves.
+fn fix_word(
+    conn: &Connection,
+    word: &str,
+    typing: bool,
+    before: &[String],
+    scope: SearchScope<'_>,
+) -> Result<Option<String>> {
+    let max = crate::fuzzy::allowed(word);
+    let Some(first) = word.chars().next().filter(|_| max > 0) else {
+        return Ok(None);
+    };
+    let read = db_err("read the search words");
+    // In the scope the search runs in (one chat for `/`): a word only other chats have is no
+    // answer there.
+    let (network, chat_id) = match scope {
+        SearchScope::All => (None, None),
+        SearchScope::Chat(n, id) => (Some(n), Some(id)),
+    };
+    // Checked together with the words before it, as the search will run them: a word that
+    // some message has, but none of the messages with those words, is no answer. `word` is
+    // letters and digits only (the caller checks), so quoting is all it needs.
+    let context: String = before
+        .iter()
+        .map(|w| format!("\"{}\" ", w.replace('"', "")))
+        .collect();
+    let shown = |w: &str| -> Result<bool> {
+        let expr = format!("{context}\"{w}\"{}", if typing { "*" } else { "" });
+        conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM messages_fts JOIN messages m ON m.rid = messages_fts.rowid
+                           WHERE messages_fts MATCH ?1 AND m.state = 'sent'
+                             AND (?2 IS NULL OR m.network = ?2) AND (?3 IS NULL OR m.chat_id = ?3))",
+            params![expr, network.map(Network::key), chat_id],
+            |r| r.get(0),
+        )
+        .map_err(&read)
+    };
+    if shown(word)? {
+        return Ok(None);
+    }
+    // Every stored word starting with `first`: those between it and it + the last character.
+    let first = first.to_string();
+    let mut stmt = conn
+        .prepare_cached("SELECT term, doc FROM temp.messages_vocab WHERE term >= ?1 AND term < ?2")
+        .map_err(&read)?;
+    let words = stmt
+        .query_map(params![first, format!("{first}\u{10FFFF}")], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+        })
+        .map_err(&read)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(&read)?;
+    let ranked = crate::fuzzy::ranked(
+        word,
+        typing,
+        max,
+        FIX_TRIES,
+        words.iter().map(|(w, d)| (w.as_str(), *d)),
+    );
+    for candidate in ranked {
+        if shown(&candidate)? {
+            return Ok(Some(candidate));
+        }
+    }
+    Ok(None)
 }
 
 /// User text -> FTS5 MATCH expression, or None for "no search". Splits on whitespace, drops
@@ -1720,6 +1868,153 @@ mod tests {
         }
     }
 
+    #[test]
+    fn correct_query_swaps_unknown_words_for_the_nearest_stored_ones() {
+        let s = Store::open_in_memory().unwrap();
+        s.upsert_chats(&[chat("c", Some(1))]).unwrap();
+        s.upsert_messages(&[
+            text_msg("m1", 1, "the budget for the quarterly meeting"),
+            text_msg("m2", 2, "budget approved, see the meeting notes"),
+            text_msg("m3", 3, "a budgie in the office"),
+        ])
+        .unwrap();
+        let fix = |q: &str| s.correct_query(q, SearchScope::All).unwrap();
+        // Known words, or a start of one while typing: nothing to do.
+        assert_eq!(fix("budget meeting"), None);
+        assert_eq!(fix("budget meet"), None);
+        // A typo in a finished word, and in the word being typed.
+        let (text, fixes) = fix("budjet meeting").unwrap();
+        assert_eq!(text, "budget meeting");
+        assert_eq!(
+            fixes,
+            [Correction {
+                from: "budjet".into(),
+                to: "budget".into()
+            }]
+        );
+        assert_eq!(
+            fix("budget meetn").unwrap().0,
+            "budget meetin",
+            "a letter missing"
+        );
+        assert_eq!(
+            fix("quartelry").unwrap().0,
+            "quarterly",
+            "two letters swapped"
+        );
+        // The commoner word wins between two equally near ("budget" is in two messages).
+        assert_eq!(
+            fix("budgef").unwrap().0,
+            "budget",
+            "typing: the nearest start"
+        );
+        assert_eq!(fix("budgef x").unwrap().0, "budget x");
+        // Too short, too far, or not a plain word: kept as typed.
+        assert_eq!(
+            fix("teh").unwrap().0,
+            "the",
+            "two letters swapped, while typing"
+        );
+        assert_eq!(fix("xyzzyx plugh"), None);
+        assert_eq!(fix("bud-jet"), None);
+        // A word is checked with the words before it: alone, "budgir" is "budgie", but no message
+        // has both "meeting" and "budgie", so "meeting budgir" takes the next nearest that one
+        // does, "budget".
+        assert_eq!(fix("budgir").unwrap().0, "budgie");
+        assert_eq!(fix("meeting budgir").unwrap().0, "meeting budget");
+        assert_eq!(fix(""), None);
+        // The corrected text finds what the typo did not.
+        assert!(s.search("budjet", SearchScope::All, 10).unwrap().is_empty());
+        assert_eq!(
+            s.search(&fix("budjet").unwrap().0, SearchScope::All, 10)
+                .unwrap()
+                .len(),
+            2
+        );
+    }
+
+    /// Review: a chat search took a correction that only other chats have, found nothing in its
+    /// chat, and never tried the next word, which this chat does have.
+    #[test]
+    fn a_correction_for_one_chat_is_a_word_that_chat_has() {
+        let s = Store::open_in_memory().unwrap();
+        s.upsert_chats(&[chat("c", Some(1)), chat("d", Some(1))])
+            .unwrap();
+        let mut others: Vec<ChatMessage> = (0..5)
+            .map(|i| text_msg(&format!("o{i}"), i, "the meeting is at noon"))
+            .collect();
+        others.iter_mut().for_each(|m| m.chat_id = "d".into());
+        others.push(text_msg("c1", 9, "the mating season"));
+        s.upsert_messages(&others).unwrap();
+        let fix = |scope| s.correct_query("meting", scope).unwrap().unwrap().0;
+        assert_eq!(
+            fix(SearchScope::All),
+            "meeting",
+            "the commoner word, everywhere"
+        );
+        assert_eq!(fix(SearchScope::Chat(Network::Teams, "c")), "mating");
+    }
+
+    /// Found on a real store: FTS5's vocabulary keeps the words of deleted messages, so a typo
+    /// only a deleted message had counted as known and was never corrected.
+    #[test]
+    fn a_word_only_a_deleted_message_has_is_still_corrected() {
+        let s = Store::open_in_memory().unwrap();
+        s.upsert_chats(&[chat("c", Some(1))]).unwrap();
+        let mut gone = text_msg("d1", 1, "thnaks a lot");
+        s.upsert_messages(&[gone.clone(), text_msg("m1", 2, "thanks for that")])
+            .unwrap();
+        gone.state = MessageState::Deleted;
+        s.upsert_messages(&[gone]).unwrap();
+        assert!(s.search("thnaks", SearchScope::All, 5).unwrap().is_empty());
+        assert_eq!(
+            s.correct_query("thnaks", SearchScope::All)
+                .unwrap()
+                .unwrap()
+                .0,
+            "thanks"
+        );
+        assert_eq!(
+            s.correct_query("thnaks x", SearchScope::All)
+                .unwrap()
+                .unwrap()
+                .0,
+            "thanks x"
+        );
+        // Search matches only sent messages, so a typo only a failed send of yours has is
+        // corrected too, never kept as a word that would then find nothing.
+        let mut failed = text_msg("f1", 3, "harbur trip");
+        failed.state = MessageState::Failed("offline".into());
+        s.upsert_messages(&[failed, text_msg("m2", 4, "harbour lights")])
+            .unwrap();
+        assert_eq!(
+            s.correct_query("harbur", SearchScope::All)
+                .unwrap()
+                .unwrap()
+                .0,
+            "harbour"
+        );
+    }
+
+    #[test]
+    fn correct_query_works_on_a_read_only_reader() {
+        let dir = temp_dir("fuzzy-reader");
+        let s = Store::open(&dir.join("store.db")).unwrap();
+        s.upsert_chats(&[chat("c", Some(1))]).unwrap();
+        s.upsert_messages(&[text_msg("m1", 1, "harbour lights")])
+            .unwrap();
+        let r = s.reader().unwrap();
+        assert_eq!(
+            r.correct_query("harbur", SearchScope::All)
+                .unwrap()
+                .unwrap()
+                .0,
+            "harbour"
+        );
+        drop((s, r));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Review: the search worker shared the UI thread's connection, so a long query held the lock
     /// its reads wait on. `reader` is a connection of its own (read-only), except in memory.
     #[test]
@@ -1731,6 +2026,7 @@ mod tests {
             .unwrap();
         let r = s.reader().unwrap();
         assert!(!Arc::ptr_eq(&s.conn, &r.conn));
+        r.warm_search().unwrap();
         // It reads while the other connection is held, and cannot write.
         let held = s.lock().unwrap();
         assert_eq!(r.search("harbour", SearchScope::All, 5).unwrap().len(), 1);

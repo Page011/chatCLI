@@ -54,7 +54,6 @@ use chatcli_core::media::MAX_PIXELS;
 use chatcli_core::model::{now_ms, Command, CommandTx, Event as BackendEvent, EventRx, Network};
 use chatcli_core::runtime::UiCtx;
 use chatcli_core::settings::{Settings, SettingsProblem};
-use chatcli_core::store::SearchHit;
 use chatcli_core::{log, Result};
 use crossterm::cursor::Show;
 use crossterm::event::{
@@ -279,6 +278,9 @@ fn show_toast(app: &mut App, ctx: &UiCtx, failed: &mut bool, toast: chatcli_core
     }
 }
 
+/// Seconds after start that the search index is read into the OS cache (`Store::warm_search`).
+const WARM_AFTER_SECS: u64 = 3;
+
 /// What a worker thread sends back to the loop.
 enum Internal {
     /// A thumbnail was decoded (or could not be).
@@ -291,7 +293,7 @@ enum Internal {
         std::result::Result<ratatui_image::sliced::SlicedProtocol, String>,
     ),
     /// A search query ran: its box, its number, and the hits or why it failed.
-    Search(u64, u64, std::result::Result<Vec<SearchHit>, String>),
+    Search(u64, u64, std::result::Result<search::Found, String>),
 }
 
 /// What the user reads when a worker thread dies before it answers: the chip or the clipboard
@@ -460,6 +462,18 @@ pub async fn run(
     let mut app = App::with_ctx(Clock::system(), &ctx);
     // Search runs on a worker thread here, so typing never waits on the store.
     app.use_search_worker();
+    // The first search should not wait on the disk: read what it reads once, a moment after
+    // start (so it does not slow it down), into the OS cache.
+    // The wait is async, so quitting before it ends drops it rather than waiting for it.
+    if let Some(store) = app.search_warm_store() {
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(WARM_AFTER_SECS)).await;
+            let warmed = tokio::task::spawn_blocking(move || store.warm_search()).await;
+            if let Ok(Err(e)) = warmed {
+                log::error("tui", &format!("warming the search index: {e}"));
+            }
+        });
+    }
     let size = terminal
         .size()
         .map_err(|e| format!("Could not read the terminal size ({e}): restart chatcli."))?;

@@ -7,7 +7,7 @@
 
 use chatcli_core::model::{ChatFlag, ChatMessage, Command, Event, Network, Status};
 use chatcli_core::runtime::Toast;
-use chatcli_core::store::SearchHit;
+use chatcli_core::store::{SearchHit, Store};
 use ratatui::layout::Position;
 
 use super::{App, Focus, Out, Prompt};
@@ -15,7 +15,7 @@ use crate::chats;
 use crate::keymap::{Action, Context};
 use crate::notify::{self, Admit, Arrived, Verdict};
 use crate::older::{self, Older};
-use crate::search::{Search, SearchJob};
+use crate::search::{Found, Search, SearchJob};
 use crate::text::{clean_line, clean_msg};
 use crate::theme::Theme;
 use crate::typing;
@@ -532,6 +532,12 @@ impl App {
         });
     }
 
+    /// The search worker's own connection, to warm at start (`Store::warm_search`). None when it
+    /// has none: warming the UI thread's connection would hold its reads for a second.
+    pub fn search_warm_store(&self) -> Option<Store> {
+        self.search_reader.clone()
+    }
+
     /// The query the worker should run next: the box's current text when it waits and no other
     /// query is running. One at a time, so fast typing never piles up reads on the store; a text
     /// typed meanwhile is asked for when the running one answers.
@@ -548,7 +554,7 @@ impl App {
     /// The worker's answer for query `seq` of box `id`. An answer for a text that has changed
     /// since, or for a box that closed, is dropped (the next `take_search` asks for the current
     /// text).
-    pub fn search_done(&mut self, id: u64, seq: u64, result: Result<Vec<SearchHit>, String>) {
+    pub fn search_done(&mut self, id: u64, seq: u64, result: Result<Found, String>) {
         self.search_running = false;
         let Some(s) = self.search.as_mut().filter(|s| s.id == id && s.seq == seq) else {
             return;
@@ -1746,6 +1752,47 @@ mod tests {
         assert_eq!(app.search().unwrap().query, "");
         assert!(app.search().unwrap().hits.is_empty());
         assert!(app.take_search().is_none());
+    }
+
+    /// A typo finds nothing as typed: the corrected text is searched, the box says so, and `n`
+    /// steps through the corrected text.
+    #[test]
+    fn a_typo_shows_the_hits_of_the_corrected_text() {
+        let mut app = search_app();
+        ctrl_f(&mut app);
+        typed(&mut app, "budjet");
+        let s = app.search().unwrap();
+        assert_eq!(s.hits.len(), 4, "budget in a, b, h and on WhatsApp");
+        assert_eq!(s.shown, "budget");
+        assert_eq!(
+            s.fixes,
+            [chatcli_core::store::Correction {
+                from: "budjet".into(),
+                to: "budget".into()
+            }]
+        );
+        // Typing on to the right word: an exact match, no correction.
+        for _ in 0..3 {
+            press(&mut app, KeyCode::Backspace);
+        }
+        typed(&mut app, "get");
+        let s = app.search().unwrap();
+        assert!(s.fixes.is_empty());
+        assert_eq!(s.hits.len(), 4);
+        // Something nothing is near: no hits, no correction.
+        typed(&mut app, " xqzvw");
+        assert!(app.search().unwrap().hits.is_empty());
+        assert!(app.search().unwrap().fixes.is_empty());
+        for _ in 0..6 {
+            press(&mut app, KeyCode::Backspace);
+        }
+        // Enter after a correction: n follows the corrected text.
+        for _ in 0..3 {
+            press(&mut app, KeyCode::Backspace);
+        }
+        typed(&mut app, "jet");
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(app.last_query.as_deref(), Some("budget"));
     }
 
     /// Review: every box numbered its queries from 0, so the answer for a closed box could be

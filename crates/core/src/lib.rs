@@ -13,6 +13,7 @@
 
 pub mod config;
 pub mod doctor;
+pub mod fuzzy;
 pub mod limits;
 pub mod lock;
 pub mod log;
