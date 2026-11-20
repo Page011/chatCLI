@@ -361,6 +361,9 @@ pub struct App {
     fmt: Fmt,
     /// The search box over the store, while it is open (issue 33).
     search: Option<Search>,
+    /// The text of the last search a hit was taken from (Enter): `n` and `N` step through its
+    /// matches in the open chat.
+    last_query: Option<String>,
     /// `[notifications]` and what toasts need (issue 24).
     notif: NotificationSettings,
     /// The terminal window has focus. False until a focus event says so.
@@ -557,6 +560,7 @@ impl App {
             layout: LayoutSettings::default(),
             fmt: Fmt::default(),
             search: None,
+            last_query: None,
             notif: NotificationSettings::default(),
             focused: false,
             started_ms: clock.now_ms,
@@ -1635,6 +1639,8 @@ impl App {
             Action::SelectMessages if !panel => return self.enter_select(n),
             Action::Search => self.open_search(),
             Action::SearchChat if !panel => self.open_chat_search(n),
+            Action::NextMatch if ctx == Context::Select => self.step_match(n, true),
+            Action::PrevMatch if ctx == Context::Select => self.step_match(n, false),
             Action::NextUnread if !panel => self.jump_unread(n, 1),
             Action::PrevUnread if !panel => self.jump_unread(n, -1),
             Action::MarkAllRead if !panel => self.ask_mark_all_read(n),

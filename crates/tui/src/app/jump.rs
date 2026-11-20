@@ -507,6 +507,7 @@ mod tests {
                 10 => "the needle is here".into(),
                 150 => "a haystack word".into(),
                 280 => "a missing pebble".into(),
+                _ if i % 100 == 5 => format!("marker {i}"),
                 _ => format!("line {i}"),
             },
             state: MessageState::Sent,
@@ -710,6 +711,62 @@ mod tests {
         assert_eq!(sel(&app), Some("m010"));
         key(&mut app, KeyCode::Char('o'), KeyModifiers::CONTROL);
         assert_eq!(sel(&app), Some(id(STORED - 1).as_str()));
+    }
+
+    fn notice(app: &App) -> Option<&str> {
+        app.current_notice().map(|n| n.text.as_str())
+    }
+
+    #[test]
+    fn n_and_shift_n_step_through_the_last_search_in_this_chat() {
+        // "marker" is in m005, m105 and m205 of chat a, and once in chat b between them.
+        let mut all = all();
+        let mut in_b = msg(150);
+        in_b.chat_id = "b".into();
+        in_b.id = "b1".into();
+        in_b.text = "marker in another chat".into();
+        all.push(in_b);
+        let mut app = jump_app_with(&all, all[STORED - HELD..STORED].to_vec());
+        selecting_newest(&mut app);
+        press(&mut app, KeyCode::Char('n'));
+        assert_eq!(
+            notice(&app),
+            Some("No search yet: press / to search this chat.")
+        );
+        assert_eq!(sel(&app), Some(id(STORED - 1).as_str()));
+        press(&mut app, KeyCode::Char('/'));
+        for c in "marker".chars() {
+            press(&mut app, KeyCode::Char(c));
+        }
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(sel(&app), Some("m205"), "the newest match");
+        // n goes older, past what is held, and only in this chat.
+        press(&mut app, KeyCode::Char('n'));
+        assert_eq!(sel(&app), Some("m105"));
+        press(&mut app, KeyCode::Char('n'));
+        assert_eq!(sel(&app), Some("m005"));
+        press(&mut app, KeyCode::Char('n'));
+        assert_eq!(sel(&app), Some("m005"), "nothing older: it stays");
+        assert_eq!(notice(&app), Some("No older message matches \"marker\"."));
+        // N goes newer.
+        press(&mut app, KeyCode::Char('N'));
+        assert_eq!(sel(&app), Some("m105"));
+        press(&mut app, KeyCode::Char('N'));
+        assert_eq!(sel(&app), Some("m205"));
+        press(&mut app, KeyCode::Char('N'));
+        assert_eq!(notice(&app), Some("No newer message matches \"marker\"."));
+        // Each step is a place Ctrl+O comes back to.
+        key(&mut app, KeyCode::Char('o'), KeyModifiers::CONTROL);
+        assert_eq!(sel(&app), Some("m105"));
+    }
+
+    #[test]
+    fn n_follows_a_ctrl_f_search_into_the_chat_it_opened() {
+        let mut app = jump_app();
+        search(&mut app, "marker");
+        assert_eq!(sel(&app), Some("m205"));
+        press(&mut app, KeyCode::Char('n'));
+        assert_eq!(sel(&app), Some("m105"));
     }
 
     #[test]

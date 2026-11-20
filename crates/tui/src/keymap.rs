@@ -190,6 +190,8 @@ actions! {
     ShowHidden "show_hidden" "show or hide the chats you hid",
     Search "search" "search every message stored on this PC, both networks",
     SearchChat "search_chat" "search the messages of the open chat; Enter selects the one found",
+    NextMatch "next_match" "select the next older message in this chat matching the last search",
+    PrevMatch "prev_match" "select the next newer message in this chat matching the last search",
     CommandBar "command_bar" "open the command bar: commands and chats",
     Settings "settings" "open the settings screen",
 }
@@ -594,6 +596,8 @@ const OWN: &[Row] = &[
     (Context::Select, "v", Action::ViewImage),
     (Context::Select, "y", Action::Copy),
     (Context::Select, "/", Action::SearchChat),
+    (Context::Select, "n", Action::NextMatch),
+    (Context::Select, "N", Action::PrevMatch),
     (Context::Select, "ctrl+o", Action::JumpBack),
     // The message box (its editing keys are in `common`).
     (Context::Composer, "enter", Action::Send),
@@ -1435,6 +1439,8 @@ mod tests {
             (Select, "d", Delete),
             (Select, "o", OpenMedia),
             (Select, "/", SearchChat),
+            (Select, "n", NextMatch),
+            (Select, "N", PrevMatch),
             (Confirm, "y", ConfirmYes),
             (Confirm, "n", ConfirmNo),
             (Confirm, "esc", Back),

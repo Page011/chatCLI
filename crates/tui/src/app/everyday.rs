@@ -12,7 +12,7 @@ use ratatui::layout::Position;
 
 use super::{App, Focus, Out, Prompt};
 use crate::chats;
-use crate::keymap::Action;
+use crate::keymap::{Action, Context};
 use crate::notify::{self, Admit, Arrived, Verdict};
 use crate::older::{self, Older};
 use crate::search::Search;
@@ -569,8 +569,46 @@ impl App {
         let Some(hit) = self.search.as_ref().and_then(|s| s.chosen().cloned()) else {
             return Vec::new();
         };
-        self.search = None;
+        if let Some(s) = self.search.take() {
+            self.last_query = Some(s.query.text().trim().to_string());
+        }
         self.open_hit(&hit)
+    }
+
+    /// `next_match` / `prev_match` (`n` / `N` in selection): the nearest older or newer message
+    /// of the open chat that the last search matches, selected like a hit, so Ctrl+O comes back.
+    /// The store is asked each time, so it goes past the hits the box showed and finds messages
+    /// that came in since.
+    pub(super) fn step_match(&mut self, n: Network, older: bool) {
+        let Some(query) = self.last_query.clone() else {
+            let key = self
+                .keys()
+                .hint(Context::Select, &[Action::SearchChat])
+                .unwrap_or_else(|| "search_chat".to_string());
+            let text = format!("No search yet: press {key} to search this chat.");
+            self.push_notice(n, &text, false);
+            return;
+        };
+        let (Some(chat), Some(from)) = (
+            self.ns(n).open.clone(),
+            self.selected_message(n).map(|m| (m.ts, m.id.clone())),
+        ) else {
+            return;
+        };
+        let Some(store) = self.store.as_ref() else {
+            return;
+        };
+        match store.next_match(&query, n, &chat, (from.0, &from.1), older) {
+            Ok(Some((id, ts))) => {
+                self.select_message_at(n, &id, ts, true);
+            }
+            Ok(None) => {
+                let side = if older { "older" } else { "newer" };
+                let text = format!("No {side} message matches \"{}\".", clean_line(&query));
+                self.push_notice(n, &text, false);
+            }
+            Err(e) => self.push_notice(n, &e, true),
+        }
     }
 
     fn open_hit(&mut self, hit: &SearchHit) -> Out {

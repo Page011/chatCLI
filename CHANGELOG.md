@@ -31,6 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - WhatsApp message status in a column left of your messages (#71): `✓` on your newest message the other person has read (in a group, everyone has), then `●` on each later one that reached their phone and `○` on each that has not yet. A message still sending (Teams too) shows `◷` there instead of `[sending]`. The marks can be changed in Settings, Appearance (`[theme] mark_sending`, `mark_sent`, `mark_delivered`, `mark_read`). Not in your chat with yourself. Teams cannot show this: Microsoft Graph does not say what other people have read.
 - Local full-text search across both networks (`Ctrl+F`, `chatcli search <text>`).
 - Search the open chat: `/` in message selection (or `:searchchat`) opens the search box over that chat only, and `Enter` selects the message found; `Ctrl+O` comes back. Rebind it as `search_chat` (#78).
+- `n` and `N` in message selection select the next older and newer message in the open chat that the last search (`/` or `Ctrl+F`) matches, past the hits the box listed. `Ctrl+O` comes back. Rebind them as `next_match` and `prev_match`.
 - WhatsApp typing indicator, and your own typing (on by default; `[whatsapp] send_typing = false` turns it off).
 - WhatsApp pictures download by themselves when you open a chat (or a new one arrives in it): thumbnails show under the message as with `v`. `[whatsapp] download_images = false` turns it off.
 - `chatcli doctor [--online] [--json]` checks the setup and prints fixes.

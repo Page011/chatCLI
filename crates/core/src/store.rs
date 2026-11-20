@@ -1093,6 +1093,46 @@ impl Store {
         Ok(hits)
     }
 
+    /// The match of `query` in one chat next to `from` (`(ts, id)`): the newest one before it
+    /// (`older`), or the oldest one after it, as `(id, ts)`. `n` and `N` in message selection
+    /// step through a search this way, past the hits the search box shows. Only sent messages,
+    /// the ones selection can stop on, so a failed send never blocks the way; otherwise the rules
+    /// of `search`: an empty query matches nothing, an unreadable one is an error sentence.
+    pub fn next_match(
+        &self,
+        query: &str,
+        network: Network,
+        chat_id: &str,
+        from: (i64, &str),
+        older: bool,
+    ) -> Result<Option<(String, i64)>> {
+        let Some(expr) = fts_query(query) else {
+            return Ok(None);
+        };
+        let (side, order) = if older {
+            ("(m.ts < ?4 OR (m.ts = ?4 AND m.id < ?5))", "DESC")
+        } else {
+            ("(m.ts > ?4 OR (m.ts = ?4 AND m.id > ?5))", "ASC")
+        };
+        let unreadable =
+            |_: rusqlite::Error| "Search could not read that query: try plain words.".to_string();
+        let conn = self.lock()?;
+        let mut stmt = conn
+            .prepare_cached(&format!(
+                "SELECT m.id, m.ts
+             FROM messages_fts JOIN messages m ON m.rid = messages_fts.rowid
+             WHERE messages_fts MATCH ?1 AND m.network = ?2 AND m.chat_id = ?3
+               AND m.state = 'sent' AND {side}
+             ORDER BY m.ts {order}, m.id {order} LIMIT 1"
+            ))
+            .map_err(unreadable)?;
+        stmt.query_row(params![expr, network.key(), chat_id, from.0, from.1], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .optional()
+        .map_err(unreadable)
+    }
+
     /// Incoming senders of a chat with how many messages each wrote (most first). Lets a caller
     /// recover a contact's name from the labels already stored on their messages.
     pub fn sender_counts(&self, network: Network, chat_id: &str) -> Result<Vec<(String, u64)>> {
@@ -2491,6 +2531,35 @@ mod tests {
         assert_eq!(in_chat(Network::Teams, "d"), ["d1"]);
         assert_eq!(in_chat(Network::WhatsApp, "c"), ["w1"]);
         assert!(in_chat(Network::Teams, "none").is_empty());
+        // Stepping from a message: the nearest match on either side, in this chat only.
+        s.upsert_messages(&[
+            text_msg("t4", 15, "pineapple again"),
+            text_msg("t5", 15, "and pineapple once more"),
+        ])
+        .unwrap();
+        let step = |from: (i64, &str), older| {
+            s.next_match("pineapple", Network::Teams, "c", from, older)
+                .unwrap()
+        };
+        assert_eq!(step((40, "z"), true), Some(("t5".to_string(), 15)));
+        assert_eq!(
+            step((15, "t5"), true),
+            Some(("t4".to_string(), 15)),
+            "same second: by id"
+        );
+        // A failed send that matches is stepped over (selection cannot stop on it).
+        let mut failed = msg("c", "f1", 12, MessageState::Failed("offline".into()));
+        failed.text = "pineapple that never left".into();
+        s.upsert_messages(&[failed]).unwrap();
+        assert_eq!(step((15, "t4"), true), Some(("t1".to_string(), 10)));
+        assert_eq!(step((10, "t1"), true), None, "no older match");
+        assert_eq!(step((10, "t1"), false), Some(("t4".to_string(), 15)));
+        assert_eq!(step((15, "t5"), false), None, "d1 is in another chat");
+        assert_eq!(
+            s.next_match("", Network::Teams, "c", (0, ""), false)
+                .unwrap(),
+            None
+        );
         // Review: a failed send that matches was a hit Enter could not select. Only sent ones.
         let mut failed = text_msg("f1", 60, "pineapple that never left");
         failed.state = MessageState::Failed("offline".into());
