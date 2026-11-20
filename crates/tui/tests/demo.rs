@@ -5,7 +5,7 @@ use std::time::Duration;
 use chatcli_core::media::MediaCache;
 use chatcli_core::model::{Command, CommandTx, Event, EventRx, Network, Status};
 use chatcli_core::settings::Settings;
-use chatcli_core::store::Store;
+use chatcli_core::store::{SearchScope, Store};
 use chatcli_tui::demo;
 use std::collections::HashMap;
 
@@ -665,7 +665,7 @@ async fn demo_seeds_the_store_so_search_works_before_any_chat_is_opened() {
     let media = MediaCache::open(&dir, &Settings::default().media).unwrap();
     let store = Store::open_in_memory().unwrap();
     let _backends = demo::spawn(store.clone(), media);
-    let hits = store.search("latest draft", None, 20).unwrap();
+    let hits = store.search("latest draft", SearchScope::All, 20).unwrap();
     assert!(
         hits.iter().any(|h| h.network == Network::Teams)
             && hits.iter().any(|h| h.network == Network::WhatsApp),

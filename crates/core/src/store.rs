@@ -181,6 +181,15 @@ pub struct SnippetPart {
     pub hit: bool,
 }
 
+/// Where `Store::search` looks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SearchScope<'a> {
+    /// Every chat of both networks.
+    All,
+    /// One chat: `/` in message selection.
+    Chat(Network, &'a str),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchHit {
     pub network: Network,
@@ -190,6 +199,11 @@ pub struct SearchHit {
     pub ts: i64,
     pub sender: String,
     pub snippet: Vec<SnippetPart>,
+}
+
+/// What `search` and `next_match` say when FTS5 cannot read the query: one sentence, never a panic.
+fn unreadable(_: rusqlite::Error) -> String {
+    "Search could not read that query: try plain words.".to_string()
 }
 
 fn db_err(context: &str) -> impl Fn(rusqlite::Error) -> String + '_ {
@@ -272,6 +286,21 @@ impl Store {
     pub fn open(path: &Path) -> Result<Store> {
         let conn = Connection::open(path).map_err(db_err("open"))?;
         Store::init(conn)
+    }
+
+    /// A second, read-only connection to the same file, for a worker thread: a long read there
+    /// never holds the lock this connection's reads wait on (WAL lets both read at once). An
+    /// in-memory store has no file to open again: it shares this connection.
+    pub fn reader(&self) -> Result<Store> {
+        let path = self
+            .lock()?
+            .path()
+            .filter(|p| !p.is_empty())
+            .map(std::path::PathBuf::from);
+        match path {
+            Some(p) => Store::open_read_only(&p),
+            None => Ok(self.clone()),
+        }
     }
 
     /// Opens an existing store for reading only (`doctor`, `search`): never creates, never
@@ -645,6 +674,43 @@ impl Store {
         Ok(out)
     }
 
+    /// Messages from `from` (included) up to `to` (excluded; `None` = up to the newest), both
+    /// `(ts, id)`: the oldest `limit` of them, oldest first. A jump to a search hit reads the hit
+    /// and what follows it, then the next stretch each time the user moves down towards the
+    /// messages the TUI already holds. `limit` is clamped to 1..=200.
+    pub fn messages_range(
+        &self,
+        network: Network,
+        chat_id: &str,
+        from: (i64, &str),
+        to: Option<(i64, &str)>,
+        limit: u32,
+    ) -> Result<Vec<ChatMessage>> {
+        let limit = limit.clamp(1, 200);
+        let (to_ts, to_id) = to.unzip();
+        let conn = self.lock()?;
+        let mut out = {
+            let mut stmt = conn
+                .prepare(&format!(
+                    "SELECT {MESSAGE_COLS} FROM messages
+                     WHERE network = ?1 AND chat_id = ?2 AND (ts > ?3 OR (ts = ?3 AND id >= ?4))
+                       AND (?5 IS NULL OR ts < ?5 OR (ts = ?5 AND id < ?6))
+                     ORDER BY ts, id LIMIT ?7"
+                ))
+                .map_err(db_err("read messages"))?;
+            let rows = stmt
+                .query_map(
+                    params![network.key(), chat_id, from.0, from.1, to_ts, to_id, limit],
+                    |r| message_from_row(r, network, chat_id),
+                )
+                .map_err(db_err("read messages"))?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(db_err("read messages"))?
+        };
+        hydrate(&conn, &mut out)?;
+        Ok(out)
+    }
+
     /// The oldest stored message (`(ts, id)` order). WhatsApp needs it to ask for older history.
     pub fn oldest_message(&self, network: Network, chat_id: &str) -> Result<Option<ChatMessage>> {
         let conn = self.lock()?;
@@ -976,20 +1042,24 @@ impl Store {
             .map_err(db_err("read recent emoji"))
     }
 
-    /// Full-text search over message text, newest first. `network` None searches both.
+    /// Full-text search over message text, newest first, in every chat or in one.
     /// `limit` is clamped to 1..=200. An empty or punctuation-only query gives no hits.
-    /// Deleted messages never match. A query FTS5 cannot read is an error sentence, never a panic.
+    /// Only sent messages match: not deleted ones, and not your own failed or pending sends,
+    /// which selection cannot stop on. A query FTS5 cannot read is an error sentence, never a
+    /// panic.
     pub fn search(
         &self,
         query: &str,
-        network: Option<Network>,
+        scope: SearchScope<'_>,
         limit: u32,
     ) -> Result<Vec<SearchHit>> {
         let Some(expr) = fts_query(query) else {
             return Ok(Vec::new());
         };
-        let unreadable =
-            |_: rusqlite::Error| "Search could not read that query: try plain words.".to_string();
+        let (network, chat_id) = match scope {
+            SearchScope::All => (None, None),
+            SearchScope::Chat(n, id) => (Some(n), Some(id)),
+        };
         let conn = self.lock()?;
         let mut stmt = conn
             .prepare_cached(
@@ -998,13 +1068,19 @@ impl Store {
                  FROM messages_fts JOIN messages m ON m.rid = messages_fts.rowid
                  LEFT JOIN chats c ON c.network = m.network AND c.id = m.chat_id
                  WHERE messages_fts MATCH ?1 AND (?2 IS NULL OR m.network = ?2)
-                   AND m.state != 'deleted'
-                 ORDER BY m.ts DESC LIMIT ?3",
+                   AND (?3 IS NULL OR m.chat_id = ?3)
+                   AND m.state = 'sent'
+                 ORDER BY m.ts DESC LIMIT ?4",
             )
             .map_err(unreadable)?;
         let rows = stmt
             .query_map(
-                params![expr, network.map(Network::key), limit.clamp(1, 200)],
+                params![
+                    expr,
+                    network.map(Network::key),
+                    chat_id,
+                    limit.clamp(1, 200)
+                ],
                 |r| {
                     let net: String = r.get(0)?;
                     let snippet: String = r.get(6)?;
@@ -1033,6 +1109,44 @@ impl Store {
             }
         }
         Ok(hits)
+    }
+
+    /// The match of `query` in one chat next to `from` (`(ts, id)`): the newest one before it
+    /// (`older`), or the oldest one after it, as `(id, ts)`. `n` and `N` in message selection
+    /// step through a search this way, past the hits the search box shows. Only sent messages,
+    /// the ones selection can stop on, so a failed send never blocks the way; otherwise the rules
+    /// of `search`: an empty query matches nothing, an unreadable one is an error sentence.
+    pub fn next_match(
+        &self,
+        query: &str,
+        network: Network,
+        chat_id: &str,
+        from: (i64, &str),
+        older: bool,
+    ) -> Result<Option<(String, i64)>> {
+        let Some(expr) = fts_query(query) else {
+            return Ok(None);
+        };
+        let (side, order) = if older {
+            ("(m.ts < ?4 OR (m.ts = ?4 AND m.id < ?5))", "DESC")
+        } else {
+            ("(m.ts > ?4 OR (m.ts = ?4 AND m.id > ?5))", "ASC")
+        };
+        let conn = self.lock()?;
+        let mut stmt = conn
+            .prepare_cached(&format!(
+                "SELECT m.id, m.ts
+             FROM messages_fts JOIN messages m ON m.rid = messages_fts.rowid
+             WHERE messages_fts MATCH ?1 AND m.network = ?2 AND m.chat_id = ?3
+               AND m.state = 'sent' AND {side}
+             ORDER BY m.ts {order}, m.id {order} LIMIT 1"
+            ))
+            .map_err(unreadable)?;
+        stmt.query_row(params![expr, network.key(), chat_id, from.0, from.1], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .optional()
+        .map_err(unreadable)
     }
 
     /// Incoming senders of a chat with how many messages each wrote (most first). Lets a caller
@@ -1606,6 +1720,29 @@ mod tests {
         }
     }
 
+    /// Review: the search worker shared the UI thread's connection, so a long query held the lock
+    /// its reads wait on. `reader` is a connection of its own (read-only), except in memory.
+    #[test]
+    fn reader_is_its_own_read_only_connection_to_the_same_file() {
+        let dir = temp_dir("reader");
+        let s = Store::open(&dir.join("store.db")).unwrap();
+        s.upsert_chats(&[chat("c", Some(1))]).unwrap();
+        s.upsert_messages(&[text_msg("m1", 1, "harbour lights")])
+            .unwrap();
+        let r = s.reader().unwrap();
+        assert!(!Arc::ptr_eq(&s.conn, &r.conn));
+        // It reads while the other connection is held, and cannot write.
+        let held = s.lock().unwrap();
+        assert_eq!(r.search("harbour", SearchScope::All, 5).unwrap().len(), 1);
+        drop(held);
+        assert!(r.upsert_messages(&[text_msg("m2", 2, "x")]).is_err());
+        drop((s, r));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let mem = Store::open_in_memory().unwrap();
+        assert!(Arc::ptr_eq(&mem.conn, &mem.reader().unwrap().conn));
+    }
+
     fn temp_dir(tag: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("chatcli-store-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -1738,7 +1875,7 @@ mod tests {
     }
 
     #[test]
-    fn messages_before_pages_back_in_ts_id_order_and_clamps() {
+    fn messages_before_and_range_read_in_ts_id_order_and_clamp() {
         let s = Store::open_in_memory().unwrap();
         // Same ts on b and c: the id breaks the tie.
         let all = [
@@ -1763,6 +1900,30 @@ mod tests {
             1,
             "limit 0 clamps to 1"
         );
+        // The range: from (included) up to (excluded), the oldest first, in (ts, id) order.
+        let range = |from: (i64, &str), to: Option<(i64, &str)>, limit| {
+            ids(s
+                .messages_range(Network::Teams, "c", from, to, limit)
+                .unwrap())
+        };
+        assert_eq!(range((2, "b"), None, 10), ["b", "c", "d"], "to the newest");
+        assert_eq!(range((2, "b"), Some((3, "d")), 10), ["b", "c"]);
+        assert_eq!(
+            range((2, "c"), Some((3, "d")), 10),
+            ["c"],
+            "the id breaks the tie"
+        );
+        assert_eq!(
+            range((1, "a"), None, 2),
+            ["a", "b"],
+            "the oldest of the range"
+        );
+        assert_eq!(range((1, "a"), None, 0), ["a"], "limit 0 clamps to 1");
+        assert!(range((3, "d"), Some((3, "d")), 10).is_empty());
+        assert!(s
+            .messages_range(Network::Teams, "other", (0, ""), None, 10)
+            .unwrap()
+            .is_empty());
         let oldest = s.oldest_message(Network::Teams, "c").unwrap().unwrap();
         assert_eq!(oldest.id, "a");
         assert!(s.oldest_message(Network::Teams, "none").unwrap().is_none());
@@ -2192,12 +2353,12 @@ mod tests {
             .all(|m| m.sender_id.is_empty() && m.attachments.is_empty()));
         assert_eq!(s.meta("k").unwrap().as_deref(), Some("v"));
         assert_eq!(s.names(Network::WhatsApp).unwrap().len(), 1);
-        let hits = s.search("pineapple", None, 10).unwrap();
+        let hits = s.search("pineapple", SearchScope::All, 10).unwrap();
         assert_eq!(hits.len(), 1, "the rebuild indexed the old text");
         assert_eq!(hits[0].message_id, "m1");
         assert_eq!(hits[0].chat_title, "Old chat");
         assert!(
-            s.search("gone", None, 10).unwrap().is_empty(),
+            s.search("gone", SearchScope::All, 10).unwrap().is_empty(),
             "deleted rows never match"
         );
         drop(s);
@@ -2223,7 +2384,10 @@ mod tests {
         // Once chatcli has upgraded it, the read-only handle reads and cannot write.
         drop(Store::open(&path).unwrap());
         let s = Store::open_read_only(&path).unwrap();
-        assert_eq!(s.search("pineapple", None, 10).unwrap().len(), 1);
+        assert_eq!(
+            s.search("pineapple", SearchScope::All, 10).unwrap().len(),
+            1
+        );
         assert_eq!(s.meta("k").unwrap().as_deref(), Some("v"));
         assert!(s.upsert_chats(&[chat("zz", Some(1))]).is_err());
         let _ = std::fs::remove_dir_all(&dir);
@@ -2319,22 +2483,31 @@ mod tests {
         s.upsert_chats(&[chat("c", Some(1))]).unwrap();
         s.upsert_messages(&[text_msg("m1", 1, "lighthouse keeper")])
             .unwrap();
-        assert_eq!(s.search("lighthouse", None, 10).unwrap().len(), 1);
+        assert_eq!(
+            s.search("lighthouse", SearchScope::All, 10).unwrap().len(),
+            1
+        );
         s.upsert_messages(&[text_msg("m1", 1, "harbour master")])
             .unwrap();
-        assert!(s.search("lighthouse", None, 10).unwrap().is_empty());
-        assert_eq!(s.search("harbour", None, 10).unwrap().len(), 1);
+        assert!(s
+            .search("lighthouse", SearchScope::All, 10)
+            .unwrap()
+            .is_empty());
+        assert_eq!(s.search("harbour", SearchScope::All, 10).unwrap().len(), 1);
         // Delete = state Deleted (text emptied) on upsert...
         let mut gone = text_msg("m1", 1, "");
         gone.state = MessageState::Deleted;
         s.upsert_messages(&[gone]).unwrap();
-        assert!(s.search("harbour", None, 10).unwrap().is_empty());
+        assert!(s
+            .search("harbour", SearchScope::All, 10)
+            .unwrap()
+            .is_empty());
         // ...and a real row delete (chat removed) removes it from the index too.
         s.upsert_messages(&[text_msg("m2", 2, "winter garden")])
             .unwrap();
-        assert_eq!(s.search("garden", None, 10).unwrap().len(), 1);
+        assert_eq!(s.search("garden", SearchScope::All, 10).unwrap().len(), 1);
         s.replace_chats(Network::Teams, &[]).unwrap();
-        assert!(s.search("garden", None, 10).unwrap().is_empty());
+        assert!(s.search("garden", SearchScope::All, 10).unwrap().is_empty());
         let conn = s.lock().unwrap();
         conn.execute(
             "INSERT INTO messages_fts(messages_fts) VALUES ('integrity-check')",
@@ -2355,7 +2528,7 @@ mod tests {
             wa,
         ])
         .unwrap();
-        let hits = s.search("pinea", None, 10).unwrap();
+        let hits = s.search("pinea", SearchScope::All, 10).unwrap();
         let order: Vec<_> = hits
             .iter()
             .map(|h| (h.network, h.message_id.as_str()))
@@ -2365,9 +2538,11 @@ mod tests {
             [(Network::WhatsApp, "w1"), (Network::Teams, "t1")],
             "prefix match, newest first, both networks"
         );
-        let only_teams = s.search("pineapple", Some(Network::Teams), 10).unwrap();
-        assert_eq!(only_teams.len(), 1);
-        let parts = &only_teams[0].snippet;
+        let in_c = s
+            .search("pineapple", SearchScope::Chat(Network::Teams, "c"), 10)
+            .unwrap();
+        assert_eq!(in_c.len(), 1);
+        let parts = &in_c[0].snippet;
         assert!(parts
             .iter()
             .any(|p| p.hit && p.text.to_lowercase() == "pineapple"));
@@ -2375,15 +2550,77 @@ mod tests {
             .iter()
             .all(|p| !p.text.contains('\x02') && !p.text.contains('\x03')));
         assert_eq!(
-            s.search("pineapple", None, 1).unwrap().len(),
+            s.search("pineapple", SearchScope::All, 1).unwrap().len(),
             1,
             "limit applies"
         );
-        assert_eq!(only_teams[0].chat_title, "chat c");
+        assert_eq!(in_c[0].chat_title, "chat c");
+        // One chat: the same chat id on the other network and other chats stay out.
+        let mut other = text_msg("d1", 50, "pineapple elsewhere");
+        other.chat_id = "d".into();
+        s.upsert_messages(&[other]).unwrap();
+        let in_chat = |net, chat| {
+            s.search("pineapple", SearchScope::Chat(net, chat), 10)
+                .unwrap()
+                .into_iter()
+                .map(|h| h.message_id)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(in_chat(Network::Teams, "c"), ["t1"]);
+        assert_eq!(in_chat(Network::Teams, "d"), ["d1"]);
+        assert_eq!(in_chat(Network::WhatsApp, "c"), ["w1"]);
+        assert!(in_chat(Network::Teams, "none").is_empty());
+        // Stepping from a message: the nearest match on either side, in this chat only.
+        s.upsert_messages(&[
+            text_msg("t4", 15, "pineapple again"),
+            text_msg("t5", 15, "and pineapple once more"),
+        ])
+        .unwrap();
+        let step = |from: (i64, &str), older| {
+            s.next_match("pineapple", Network::Teams, "c", from, older)
+                .unwrap()
+        };
+        assert_eq!(step((40, "z"), true), Some(("t5".to_string(), 15)));
+        assert_eq!(
+            step((15, "t5"), true),
+            Some(("t4".to_string(), 15)),
+            "same second: by id"
+        );
+        // A failed send that matches is stepped over (selection cannot stop on it).
+        let mut failed = msg("c", "f1", 12, MessageState::Failed("offline".into()));
+        failed.text = "pineapple that never left".into();
+        s.upsert_messages(&[failed]).unwrap();
+        assert_eq!(step((15, "t4"), true), Some(("t1".to_string(), 10)));
+        assert_eq!(step((10, "t1"), true), None, "no older match");
+        assert_eq!(step((10, "t1"), false), Some(("t4".to_string(), 15)));
+        assert_eq!(step((15, "t5"), false), None, "d1 is in another chat");
+        assert_eq!(
+            s.next_match("", Network::Teams, "c", (0, ""), false)
+                .unwrap(),
+            None
+        );
+        // Review: a failed send that matches was a hit Enter could not select. Only sent ones.
+        let mut failed = text_msg("f1", 60, "pineapple that never left");
+        failed.state = MessageState::Failed("offline".into());
+        s.upsert_messages(&[failed]).unwrap();
+        let ids: Vec<String> = s
+            .search("pineapple", SearchScope::Chat(Network::Teams, "c"), 10)
+            .unwrap()
+            .into_iter()
+            .map(|h| h.message_id)
+            .collect();
+        assert!(
+            !ids.contains(&"f1".to_string()),
+            "the failed send is no hit: {ids:?}"
+        );
+        assert!(
+            ids.contains(&"t1".to_string()),
+            "the sent ones are: {ids:?}"
+        );
         // Diacritics fold: "cafe" finds "café".
         s.upsert_messages(&[text_msg("t3", 40, "meet at the café")])
             .unwrap();
-        assert_eq!(s.search("cafe", None, 10).unwrap().len(), 1);
+        assert_eq!(s.search("cafe", SearchScope::All, 10).unwrap().len(), 1);
     }
 
     #[test]
@@ -2394,10 +2631,13 @@ mod tests {
         for q in [
             "\"", "*", "NEAR(", "\"\"", "   ", "a\"b", "-x", "AND", "OR NOT", "(", "^x", "a:b",
         ] {
-            assert!(s.search(q, None, 10).is_ok(), "query {q:?} must not error");
+            assert!(
+                s.search(q, SearchScope::All, 10).is_ok(),
+                "query {q:?} must not error"
+            );
         }
-        assert!(s.search("", None, 10).unwrap().is_empty());
-        assert!(s.search("-x", None, 10).unwrap().len() <= 1);
+        assert!(s.search("", SearchScope::All, 10).unwrap().is_empty());
+        assert!(s.search("-x", SearchScope::All, 10).unwrap().len() <= 1);
     }
 
     #[test]
@@ -2453,7 +2693,7 @@ mod tests {
             ("prefix", "numb"),
         ] {
             let started = std::time::Instant::now();
-            let hits = s.search(q, None, 50).unwrap();
+            let hits = s.search(q, SearchScope::All, 50).unwrap();
             println!(
                 "search {label:>16}: {:>6.1} ms, {} hits (limit 50), {rows} rows",
                 started.elapsed().as_secs_f64() * 1000.0,

@@ -1,0 +1,45 @@
+ chatcli  Teams 101 LIVE   WhatsApp CONNECTING                                           Ctrl+C quit
+╔ Search Alex Example ═════════════════════════════════════════════════════════════════════════════╗
+║/budget                                                                                           ║
+║Alex Example           Sun      The budget notes: the summary page needs a shorter introduction.  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+║1 of 1 hits                                                                                       ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
+Type to search  Up/Down choose  Enter go to message  Esc close
+--- styled runs (everything else is default style) ---
+row 0 cols 0-8: fg=Reset bg=Reset BOLD
+row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
+row 0 cols 27-34: fg=Reset bg=Reset BOLD
+row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
+row 0 cols 89-99: fg=Reset bg=Reset DIM
+row 1 cols 1-21: fg=Reset bg=Reset BOLD
+row 2 cols 1-1: fg=Reset bg=Reset BOLD
+row 3 cols 1-23: fg=Reset bg=Reset BOLD | REVERSED
+row 3 cols 24-31: fg=DarkGray bg=Reset BOLD | REVERSED
+row 3 cols 32-36: fg=Reset bg=Reset BOLD | REVERSED
+row 3 cols 37-42: fg=Reset bg=Reset BOLD | UNDERLINED | REVERSED
+row 3 cols 43-98: fg=Reset bg=Reset BOLD | REVERSED
+row 27 cols 1-11: fg=Reset bg=Reset DIM
+row 29 cols 0-61: fg=Reset bg=Reset DIM

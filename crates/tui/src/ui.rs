@@ -495,7 +495,7 @@ fn hints(app: &App) -> Vec<HintItem> {
             &[
                 (&[], "Type to search"),
                 (&[Up, Down], "choose"),
-                (&[Accept], "open chat"),
+                (&[Accept], "go to message"),
                 (&[Back], "close"),
             ],
         );
@@ -687,6 +687,7 @@ fn select_items(app: &App) -> Vec<HintItem> {
         (&[Delete][..], "delete", ns.caps.delete && own),
         (&[Back][..], "back", true),
         (&[CommandBar][..], "commands", true),
+        (&[SearchChat][..], "search", true),
         (&[Compose][..], "type", true),
         (&[Help][..], "help", true),
         (&[Copy][..], "copy", true),
@@ -1420,6 +1421,9 @@ fn draw_sidebar(f: &mut Frame, app: &App, lay: &Layout) {
     }
 }
 
+/// The line under the last message of a window a jump far back loaded (`NetState::gaps`).
+pub(crate) const GAP_NOTE: &str = "newer messages load as you go down";
+
 /// Where one message sits in the wrapped conversation: lines `start..end` (its quote, body, tags
 /// and reactions, not the day separator above it).
 pub(crate) struct MsgSpan {
@@ -1646,6 +1650,9 @@ pub(crate) fn message_layout(
         .read
         .and_then(|up_to| msgs.iter().rev().find(|m| sent_by_me(m) && m.ts <= up_to))
         .map(|m| m.id.as_str());
+    let gap = chat_id
+        .and_then(|c| ns.gaps.get(c))
+        .map(|(_, id)| id.as_str());
     let mut spans: Vec<MsgSpan> = Vec::new();
     let mut last_day = None;
     let mut prev: Option<&ChatMessage> = None;
@@ -1943,6 +1950,10 @@ pub(crate) fn message_layout(
                 }
             }),
         });
+        // A jump far back left the newer messages after this one out: they load on the way down.
+        if gap == Some(m.id.as_str()) {
+            lines.push(Line::from(Span::styled(GAP_NOTE, t.hint)).alignment(Alignment::Center));
+        }
     }
     (lines, spans)
 }
@@ -3180,8 +3191,17 @@ fn draw_search(f: &mut Frame, app: &App, body: Rect) {
     let Some(g) = search_geometry(body) else {
         return overlay::too_small(f, t, body, "search");
     };
-    overlay::page(f, t, body, g.outer, "Search");
-    overlay::query(f, t, g.query, "/", &s.query, "type to search every chat");
+    // One chat (`search_chat`): its name is the title, and each row names the sender instead of
+    // the network and the chat.
+    let (title, placeholder) = match &s.scope {
+        Some(c) => (
+            format!("Search {}", clean_line(&c.title)),
+            "type to search this chat",
+        ),
+        None => ("Search".to_string(), "type to search every chat"),
+    };
+    overlay::page(f, t, body, g.outer, &title);
+    overlay::query(f, t, g.query, "/", &s.query, placeholder);
     let look = app.look();
     let w = g.list.width as usize;
     // Narrow: the network is one letter and the time goes, so the matched text keeps the room.
@@ -3189,21 +3209,28 @@ fn draw_search(f: &mut Frame, app: &App, body: Rect) {
     let title_w = (w / 4).clamp(if compact { 6 } else { 8 }, 22);
     for (k, hit) in s.hits.iter().skip(s.top).take(g.rows).enumerate() {
         let selected = s.top + k == s.sel;
-        let net_style = match hit.network {
-            Network::Teams => t.network_teams,
-            Network::WhatsApp => t.network_whatsapp,
-        };
-        let net_label = if compact {
-            hit.network.label().chars().take(1).collect()
+        let mut spans = Vec::new();
+        if s.scope.is_none() {
+            let net_style = match hit.network {
+                Network::Teams => t.network_teams,
+                Network::WhatsApp => t.network_whatsapp,
+            };
+            let net_label = if compact {
+                hit.network.label().chars().take(1).collect()
+            } else {
+                fit(hit.network.label(), 8)
+            };
+            spans.extend([Span::styled(net_label, net_style), Span::raw(" ")]);
+        }
+        let who = if s.scope.is_some() {
+            &hit.sender
         } else {
-            fit(hit.network.label(), 8)
+            &hit.chat_title
         };
-        let mut spans = vec![
-            Span::styled(net_label, net_style),
+        spans.extend([
+            Span::styled(fit(&clean_line(who), title_w), bold()),
             Span::raw(" "),
-            Span::styled(fit(&clean_line(&hit.chat_title), title_w), bold()),
-            Span::raw(" "),
-        ];
+        ]);
         if !compact {
             spans.push(Span::styled(
                 fit(
@@ -3231,10 +3258,12 @@ fn draw_search(f: &mut Frame, app: &App, body: Rect) {
         overlay::row(f, t, row, clip_spans(spans, w), selected);
     }
     let typed = !s.query.text().trim().is_empty();
-    if typed && s.error.is_none() && s.hits.is_empty() {
+    if typed && !s.pending && s.error.is_none() && s.hits.is_empty() {
         overlay::note(f, t, g.list, "No messages match");
     }
     let (status, style) = match (&s.error, !typed, s.hits.len()) {
+        // The hits shown are the last text's until the worker answers.
+        _ if s.pending => ("Searching...".to_string(), t.hint),
         (Some(e), _, _) => (e.clone(), t.error),
         (None, true, _) => ("Type to search".to_string(), t.hint),
         (None, false, 0) => ("0 hits".to_string(), t.hint),

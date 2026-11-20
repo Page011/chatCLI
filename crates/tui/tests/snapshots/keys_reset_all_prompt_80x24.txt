@@ -1,16 +1,16 @@
  chatcli  Teams 103 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ┌ Settings ──────┐╔ Keys - Message selection ══════════════════════════════════╗
-│Appearance      │║Top                 Home                                    ║
-│Layout          │║Bottom              End                                     ║
-│Notifications   │║Screen middle       M                                       ║
-│Media           │║Reply               r                                       ║
-│Teams           │║React               e                                       ║
-│WhatsApp        │║Edit                c                                       ║
-│Keys            │║Delete              x, d                                    ║
-│About           │║Open link           u                                       ║
-│                │║Open media          o                                       ║
-│                │║View image          v                                       ║
-│                │║Copy                y                                       ║
+│Appearance      │║Reply               r                                       ║
+│Layout          │║React               e                                       ║
+│Notifications   │║Edit                c                                       ║
+│Media           │║Delete              x, d                                    ║
+│Teams           │║Open link           u                                       ║
+│WhatsApp        │║Open media          o                                       ║
+│Keys            │║View image          v                                       ║
+│About           │║Copy                y                                       ║
+│                │║Search chat         /                                       ║
+│                │║Next match          n                                       ║
+│                │║Prev match          N                                       ║
 │                │║Jump back           Ctrl+O                                  ║
 │                │║Confirm (link, delete, mark read)                           ║
 │                │║Confirm yes         y                                       ║

@@ -4,9 +4,9 @@
 ║Commands                                                                      ║
 ║:settings        theme, layout, keys and more                                 ║
 ║:search          search every stored message                                  ║
+║:searchchat      SEARCHCHAT - open a chat first                               ║
 ║Chats                                                                         ║
 ║Release Planning for the Autumn Quarter Kickoff                               ║
-║                                                                              ║
 ║                                                                              ║
 ║                                                                              ║
 ║                                                                              ║
@@ -36,5 +36,7 @@ row 4 cols 18-45: fg=Reset bg=Reset BOLD | DIM | REVERSED
 row 4 cols 46-78: fg=Reset bg=Reset BOLD | REVERSED
 row 5 cols 1-16: fg=Reset bg=Reset BOLD
 row 5 cols 18-44: fg=Reset bg=Reset DIM
-row 6 cols 1-5: fg=Reset bg=Reset BOLD
+row 6 cols 1-16: fg=DarkGray bg=Reset NONE
+row 6 cols 18-47: fg=DarkGray bg=Reset NONE
+row 7 cols 1-5: fg=Reset bg=Reset BOLD
 row 23 cols 0-51: fg=Reset bg=Reset DIM

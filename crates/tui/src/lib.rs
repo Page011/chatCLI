@@ -54,6 +54,7 @@ use chatcli_core::media::MAX_PIXELS;
 use chatcli_core::model::{now_ms, Command, CommandTx, Event as BackendEvent, EventRx, Network};
 use chatcli_core::runtime::UiCtx;
 use chatcli_core::settings::{Settings, SettingsProblem};
+use chatcli_core::store::SearchHit;
 use chatcli_core::{log, Result};
 use crossterm::cursor::Show;
 use crossterm::event::{
@@ -289,6 +290,8 @@ enum Internal {
         gfx::GfxKey,
         std::result::Result<ratatui_image::sliced::SlicedProtocol, String>,
     ),
+    /// A search query ran: its box, its number, and the hits or why it failed.
+    Search(u64, u64, std::result::Result<Vec<SearchHit>, String>),
 }
 
 /// What the user reads when a worker thread dies before it answers: the chip or the clipboard
@@ -455,6 +458,8 @@ pub async fn run(
         Terminal::new(CrosstermBackend::new(io::stdout()))
             .map_err(|e| format!("Terminal setup failed ({e}): restart chatcli."))?;
     let mut app = App::with_ctx(Clock::system(), &ctx);
+    // Search runs on a worker thread here, so typing never waits on the store.
+    app.use_search_worker();
     let size = terminal
         .size()
         .map_err(|e| format!("Could not read the terminal size ({e}): restart chatcli."))?;
@@ -593,6 +598,7 @@ pub async fn run(
                 match msg {
                     Internal::Thumb(job, r) => app.thumb_ready(&job, r),
                     Internal::Clipboard(net, chat, r) => app.clipboard_done(net, &chat, r),
+                    Internal::Search(id, seq, r) => app.search_done(id, seq, r),
                     Internal::Encoded(key, r) => {
                         if let Some(g) = graphics.as_mut() {
                             g.store(key, r);
@@ -661,6 +667,16 @@ pub async fn run(
             let r = copy_text(&mut clipboard, &text);
             app.copy_done(net, r);
             dirty = true;
+        }
+        // The search box's next query, one at a time (`App::take_search`).
+        if let Some(job) = app.take_search() {
+            let (id, seq) = (job.id, job.seq);
+            spawn_work(
+                internal_tx.clone(),
+                move || job.run(),
+                || Err("The search stopped: type again to retry.".to_string()),
+                move |r| Internal::Search(id, seq, r),
+            );
         }
         if let Some((net, chat)) = app.take_clipboard_request() {
             spawn_work(

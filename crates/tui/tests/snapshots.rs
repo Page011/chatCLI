@@ -2744,6 +2744,39 @@ fn search_box_on_small_screens() {
     check("search_hits_tiny", 30, 8, &got);
 }
 
+/// With the worker the box says when a query is running, and never "no match" meanwhile.
+#[test]
+fn search_box_searching() {
+    let mut app = search_app();
+    app.use_search_worker();
+    ctrl_f(&mut app);
+    type_str(&mut app, "budget");
+    let got = render(&mut app, 80, 24);
+    assert!(got.contains("Searching..."), "{got}");
+    assert!(!got.contains("No messages match"), "{got}");
+    check("search_searching", 80, 24, &got);
+}
+
+/// `/` in message selection: the same box over the open chat. Its name is the title, and the
+/// rows name the sender instead of the network and the chat ("budget" is in three chats).
+#[test]
+fn search_in_one_chat_from_selection() {
+    let build = || {
+        let mut app = search_app();
+        ctrl_f(&mut app);
+        type_str(&mut app, "summary");
+        press(&mut app, KeyCode::Enter);
+        press(&mut app, KeyCode::Char('/'));
+        app
+    };
+    both_sizes("search_chat_empty", build);
+    both_sizes("search_chat_hits", || {
+        let mut app = build();
+        type_str(&mut app, "budget");
+        app
+    });
+}
+
 #[test]
 fn search_enter_opens_the_chat_of_the_hit() {
     let mut app = search_app();
@@ -2997,7 +3030,8 @@ fn command_bar_no_match() {
 fn command_bar_scrolls_with_the_selection() {
     let mut app = bar_app("");
     app.resize(40, 12);
-    for _ in 0..13 {
+    // Down once per command after the first (15 commands): the last one is chosen.
+    for _ in 0..14 {
         press(&mut app, KeyCode::Down);
     }
     let got = render(&mut app, 40, 12);

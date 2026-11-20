@@ -64,7 +64,7 @@ Teams works without a relay; press `r` to refresh chats. For automatic live upda
 | `Esc` | Back out: message box, selection, chat list |
 | `Enter` | Send message (in the message box) |
 | `Ctrl+J` | New line |
-| `/` | Filter chats |
+| `/` | Filter chats (in a selected chat: search it) |
 | `:` | Commands |
 | `Ctrl+O` | Attach a file |
 | `Ctrl+F` | Search saved messages |

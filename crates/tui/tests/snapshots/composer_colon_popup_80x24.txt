@@ -1,13 +1,13 @@
  chatcli  Teams 101 LIVE   WhatsApp CONNECTING                       Ctrl+C quit
 ┌ Chats ───────────────────┐┌ Alex Example ────────────────────────────────────┐
-│     Alex Example    09:15││  Alex Example 09:10                              │
-│     Alex Example: is the…││  is the build done? 🚀 今日はどうですか          │
-│99+  Project Team    08:02││                                                  │
-│     Sam Sample: thanks   ││  You 09:15                                       │
-│  1  Sam Sample        Sun││  yes, shipped                                    │
-│     You: see you tomorrow││┌ Commands ──────────────────────────────────────┐│
-│     Release Planning… Fri│││:settings       theme, layout, keys and more    ││
-│     Jordan Placeholder: …│││:search         search every stored message     ││
+│     Alex Example    09:15││  is the build done? 🚀 今日はどうですか          │
+│     Alex Example: is the…││                                                  │
+│99+  Project Team    08:02││  You 09:15                                       │
+│     Sam Sample: thanks   ││  yes, shipped                                    │
+│  1  Sam Sample        Sun││┌ Commands ──────────────────────────────────────┐│
+│     You: see you tomorrow│││:settings       theme, layout, keys and more    ││
+│     Release Planning… Fri│││:search         search every stored message     ││
+│     Jordan Placeholder: …│││:searchchat     search the open chat            ││
 │     田中太郎 (T… 05/11/26│││🦭  :seal:                                      ││
 │     了解しました         │││💺  :seat:                                      ││
 │     Jordan Plac… 09/10/26│││7️⃣  :seven:                                     ││
@@ -29,24 +29,23 @@ row 0 cols 27-34: fg=Reset bg=Reset BOLD
 row 0 cols 36-45: fg=Reset bg=Reset BOLD | DIM
 row 0 cols 69-79: fg=Reset bg=Reset DIM
 row 2 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
-row 2 cols 31-42: fg=Yellow bg=Reset BOLD
-row 2 cols 44-48: fg=DarkGray bg=Reset NONE
 row 3 cols 1-26: fg=Reset bg=Reset BOLD | UNDERLINED
 row 4 cols 1-4: fg=Reset bg=Reset BOLD
 row 4 cols 6-20: fg=Reset bg=Reset BOLD
 row 4 cols 21-26: fg=DarkGray bg=Reset NONE
+row 4 cols 31-33: fg=Cyan bg=Reset BOLD
+row 4 cols 35-39: fg=DarkGray bg=Reset NONE
 row 5 cols 1-23: fg=DarkGray bg=Reset NONE
-row 5 cols 31-33: fg=Cyan bg=Reset BOLD
-row 5 cols 35-39: fg=DarkGray bg=Reset NONE
 row 6 cols 1-4: fg=Reset bg=Reset BOLD
 row 6 cols 6-22: fg=Reset bg=Reset BOLD
 row 6 cols 23-26: fg=DarkGray bg=Reset NONE
 row 7 cols 1-26: fg=DarkGray bg=Reset NONE
+row 7 cols 30-77: fg=Reset bg=Reset BOLD | REVERSED
 row 8 cols 1-4: fg=Reset bg=Reset BOLD
 row 8 cols 23-26: fg=DarkGray bg=Reset NONE
-row 8 cols 30-77: fg=Reset bg=Reset BOLD | REVERSED
+row 8 cols 46-72: fg=DarkGray bg=Reset NONE
 row 9 cols 1-26: fg=DarkGray bg=Reset NONE
-row 9 cols 46-72: fg=DarkGray bg=Reset NONE
+row 9 cols 46-65: fg=DarkGray bg=Reset NONE
 row 10 cols 1-4: fg=Reset bg=Reset BOLD
 row 10 cols 18-26: fg=DarkGray bg=Reset NONE
 row 10 cols 34-39: fg=DarkGray bg=Reset NONE
