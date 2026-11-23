@@ -23,7 +23,7 @@ futures-util = "0.3"
 # the clipboard picture). Teams and WhatsApp use it only in tests, to build real picture files.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 keyring = { version = "3", features = ["windows-native"] }
-qrcode = { version = "0.14", default-features = false }
+qrcode = { version = "0.15", default-features = false }
 rand = "0.8"
 ratatui = "0.30"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots", "rustls-tls-webpki-roots", "json"] }
