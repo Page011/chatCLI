@@ -316,7 +316,7 @@ Message selection (`Enter` on a chat, or `Esc` from the message box). The footer
 | `H` / `M` / `L` | The first / middle / last message on screen |
 | `/` | [Search](#search) this chat: `Enter` selects the message found (`Ctrl+O` comes back) |
 | `n` / `N` | The next older / newer message in this chat that your last search matches (from `/` or `Ctrl+F`) |
-| `Enter` | On a reply: select the message it quotes, however far back (`Ctrl+O` comes back) |
+| `Enter` | On a reply: select the message it quotes, however far back (`Ctrl+O` comes back, note this only works for locally stored messages) |
 | `Ctrl+O` | Back to the message selected before the last big jump in this chat (`G`, `g`, `H`, `M`, `L`, a search hit in it, a quoted message); again for the one before |
 | `i` | To the message box |
 | `Esc`, `h` or `Left` | Back to the chat list |
