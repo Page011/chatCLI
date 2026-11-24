@@ -678,6 +678,9 @@ fn select_items(app: &App) -> Vec<HintItem> {
         (&[OpenLink], "link", has_link),
     ];
     let mut items = head.to_vec();
+    if m.is_some_and(|m| m.reply_to.as_ref().is_some_and(|q| !q.id.is_empty())) {
+        items.push((&[JumpToQuoted], "quoted", true));
+    }
     if !atts.is_empty() {
         items.push((&[OpenMedia], "open", can_open));
         items.push((&[ViewImage], "view", can_view));

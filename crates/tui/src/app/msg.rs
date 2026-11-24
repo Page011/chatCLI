@@ -438,6 +438,44 @@ impl App {
         self.push_notice(n, "No earlier place to jump back to.", false);
     }
 
+    /// `jump_to_quoted` (Enter while selecting): selects the message the selected reply quotes,
+    /// reading it and the messages around it from the store when it is not held
+    /// (`select_message_at`). The reply goes on the `jump_back` list, so Ctrl+O returns to it.
+    pub(super) fn jump_to_quoted(&mut self, n: Network) {
+        let Some(open) = self.ns(n).open.clone() else {
+            return;
+        };
+        let Some(id) = self
+            .selected_message(n)
+            .and_then(|m| m.reply_to.as_ref())
+            .map(|q| q.id.clone())
+            .filter(|id| !id.is_empty())
+        else {
+            return self.push_notice(n, "The selected message is not a reply.", false);
+        };
+        let held_ts = self
+            .ns(n)
+            .messages
+            .get(&open)
+            .and_then(|l| l.iter().find(|m| m.id == id))
+            .map(|m| m.ts);
+        let ts = match held_ts {
+            Some(ts) => ts,
+            None => match self.store.as_ref().map(|s| s.message(n, &open, &id)) {
+                Some(Err(e)) => return self.push_notice(n, &e, true),
+                Some(Ok(Some(m))) => m.ts,
+                Some(Ok(None)) | None => {
+                    return self.push_notice(
+                        n,
+                        "The quoted message is not stored on this PC.",
+                        false,
+                    )
+                }
+            },
+        };
+        self.select_message_at(n, &id, ts, true);
+    }
+
     /// Scrolls the message pane just enough to show the highlighted message (its first lines
     /// when it is taller than the pane).
     pub(super) fn ensure_sel_visible(&mut self, n: Network) {

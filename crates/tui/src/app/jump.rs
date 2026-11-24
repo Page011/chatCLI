@@ -1180,4 +1180,61 @@ mod tests {
         press(&mut app, KeyCode::Down);
         assert_eq!(sel(&app), Some("m060"));
     }
+
+    /// The store and held messages of `jump_app`, the newest quoting `quoted`.
+    fn reply_app(quoted: &str) -> App {
+        let mut all: Vec<ChatMessage> = (0..STORED).map(msg).collect();
+        all[STORED - 1].reply_to = Some(chatcli_core::model::QuotedRef {
+            id: quoted.into(),
+            sender: "Alex Example".into(),
+            sender_id: String::new(),
+            preview: "quoted".into(),
+        });
+        let held = all[STORED - HELD..].to_vec();
+        jump_app_with(&all, held)
+    }
+
+    #[test]
+    fn enter_on_a_reply_selects_the_held_message_it_quotes_and_ctrl_o_returns() {
+        let mut app = reply_app(&id(STORED - 20));
+        selecting_newest(&mut app);
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(sel(&app), Some(id(STORED - 20).as_str()));
+        assert_eq!(gap(&app), None);
+        key(&mut app, KeyCode::Char('o'), KeyModifiers::CONTROL);
+        assert_eq!(sel(&app), Some(id(STORED - 1).as_str()));
+    }
+
+    #[test]
+    fn enter_on_a_reply_reads_a_far_quoted_message_from_the_store() {
+        let mut app = reply_app("m010");
+        selecting_newest(&mut app);
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(sel(&app), Some("m010"));
+        assert!(held(&app).contains(&"m010".to_string()));
+        assert!(gap(&app).is_some());
+        key(&mut app, KeyCode::Char('o'), KeyModifiers::CONTROL);
+        assert_eq!(sel(&app), Some(id(STORED - 1).as_str()));
+    }
+
+    #[test]
+    fn enter_on_a_reply_whose_quote_is_not_stored_stays_with_a_notice() {
+        let mut app = reply_app("gone");
+        selecting_newest(&mut app);
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(sel(&app), Some(id(STORED - 1).as_str()));
+        assert_eq!(
+            notice(&app),
+            Some("The quoted message is not stored on this PC.")
+        );
+    }
+
+    #[test]
+    fn enter_on_a_message_that_is_not_a_reply_stays_with_a_notice() {
+        let mut app = jump_app();
+        selecting_newest(&mut app);
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(sel(&app), Some(id(STORED - 1).as_str()));
+        assert_eq!(notice(&app), Some("The selected message is not a reply."));
+    }
 }
