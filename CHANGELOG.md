@@ -32,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Local full-text search across both networks (`Ctrl+F`, `chatcli search <text>`).
 - Search the open chat: `/` in message selection (or `:searchchat`) opens the search box over that chat only, and `Enter` selects the message found; `Ctrl+O` comes back. Rebind it as `search_chat` (#78).
 - `n` and `N` in message selection select the next older and newer message in the open chat that the last search (`/` or `Ctrl+F`) matches, past the hits the box listed. `Ctrl+O` comes back. Rebind them as `next_match` and `prev_match`.
+- `Enter` on a reply in message selection selects the message it quotes, reading it from the local store when it is far back; `Ctrl+O` comes back. Rebind it as `jump_to_quoted`.
 - Search forgives typos: when nothing matches as typed, the nearest stored words are searched instead (`budjet` finds "budget"), and the box says so. `chatcli search` does the same.
 - WhatsApp typing indicator, and your own typing (on by default; `[whatsapp] send_typing = false` turns it off).
 - WhatsApp pictures download by themselves when you open a chat (or a new one arrives in it): thumbnails show under the message as with `v`. `[whatsapp] download_images = false` turns it off.

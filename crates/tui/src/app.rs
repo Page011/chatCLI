@@ -1649,6 +1649,7 @@ impl App {
             Action::OpenMedia if ctx == Context::Select => return self.open_media(n),
             Action::Copy if ctx == Context::Select => self.copy_selected(n),
             Action::JumpBack if ctx == Context::Select => self.jump_back(n),
+            Action::JumpToQuoted if ctx == Context::Select => self.jump_to_quoted(n),
             Action::ViewImage if ctx == Context::Select => return self.view_image(n),
             Action::SelectMessages if !panel => return self.enter_select(n),
             Action::Search => self.open_search(),

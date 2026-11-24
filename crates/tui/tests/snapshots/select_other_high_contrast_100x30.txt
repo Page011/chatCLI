@@ -27,7 +27,7 @@
 │                            │┌ Message ───────────────────────────────────────────────────────────┐
 │                            ││i to type                                                           │
 └────────────────────────────┘└────────────────────────────────────────────────────────────────────┘
-Up/Down move  r reply  e react  u link  c edit  x delete  Esc back  : commands  / search  i type
+Up/Down move  r reply  e react  u link  Enter quoted  c edit  x delete  Esc back  : commands
 --- styled runs (everything else is default style) ---
 row 0 cols 0-8: fg=Reset bg=Reset BOLD
 row 0 cols 9-24: fg=Reset bg=Reset BOLD | REVERSED
@@ -60,7 +60,6 @@ row 22 cols 33-44: fg=Yellow bg=Reset BOLD
 row 29 cols 0-11: fg=Reset bg=Reset BOLD
 row 29 cols 14-20: fg=Reset bg=Reset BOLD
 row 29 cols 23-29: fg=Reset bg=Reset BOLD
-row 29 cols 58-65: fg=Reset bg=Reset BOLD
-row 29 cols 68-77: fg=Reset bg=Reset BOLD
-row 29 cols 80-87: fg=Reset bg=Reset BOLD
-row 29 cols 90-95: fg=Reset bg=Reset BOLD
+row 29 cols 40-51: fg=Reset bg=Reset BOLD
+row 29 cols 72-79: fg=Reset bg=Reset BOLD
+row 29 cols 82-91: fg=Reset bg=Reset BOLD
