@@ -582,7 +582,7 @@ dependencies = [
 name = "chatcli-teams"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "chatcli-core",
  "chrono",
  "futures-util",
@@ -601,7 +601,7 @@ name = "chatcli-tui"
 version = "0.1.0"
 dependencies = [
  "arboard",
- "base64 0.22.1",
+ "base64 0.23.1",
  "chatcli-core",
  "chrono",
  "crossterm",
@@ -622,7 +622,7 @@ dependencies = [
  "anyhow",
  "async-channel",
  "async-trait",
- "base64 0.22.1",
+ "base64 0.23.1",
  "bytes",
  "chatcli-core",
  "image",

@@ -15,7 +15,7 @@ chatcli-teams = { path = "crates/teams" }
 chatcli-whatsapp = { path = "crates/whatsapp" }
 chatcli-tui = { path = "crates/tui" }
 
-base64 = "0.22"
+base64 = "0.23"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 crossterm = { version = "0.29", features = ["event-stream"] }
 futures-util = "0.3"
